@@ -1,0 +1,51 @@
+### MVP Backend - Teste de Rotas
+### Use com REST Client (VS Code Extension) ou Postman
+
+### 1. Health Check
+GET http://localhost:3001/health
+
+### 2. Status do Backend
+GET http://localhost:3001/
+
+### 3. Upload de Post (substitua o caminho do arquivo)
+POST http://localhost:3001/api/upload-post
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="clienteId"
+
+cliente123
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="titulo"
+
+Meu Primeiro Post
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="descricao"
+
+Este é um post de teste
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="file"; filename="test.jpg"
+Content-Type: image/jpeg
+
+< ./test-image.jpg
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+### 4. Buscar Posts de um Cliente
+GET http://localhost:3001/api/posts/cliente123
+
+### 5. Processar Post
+POST http://localhost:3001/api/process-post
+Content-Type: application/json
+
+{
+  "postId": 1,
+  "status": "processado",
+  "metadata": {
+    "processedAt": "2024-01-01T00:00:00.000Z",
+    "tags": ["teste", "sucesso"]
+  }
+}
+
+### 6. Buscar Posts Processados
+GET http://localhost:3001/api/posts/cliente123
+

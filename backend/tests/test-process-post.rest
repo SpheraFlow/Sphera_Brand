@@ -1,0 +1,105 @@
+### ============================================
+### MVP Backend - Teste Completo Upload + IA
+### ============================================
+### INSTRUÇÕES:
+### 1. Certifique-se que o servidor está rodando (npm run dev)
+### 2. IMPORTANTE: Substitua "C:/caminho/para/sua/imagem.jpg" abaixo por um arquivo REAL
+### 3. Clique em "Send Request" no PASSO 1
+### 4. Aguarde a resposta
+### 5. Clique em "Send Request" no PASSO 2
+### ============================================
+
+### Configuração de variáveis
+@baseUrl = http://localhost:3001
+@clienteId = 123e4567-e89b-12d3-a456-426614174000
+
+###############################################
+### PASSO 1: Upload de Post com Imagem
+###############################################
+### ANTES DE EXECUTAR: Substitua o caminho do arquivo abaixo!
+### Exemplo Windows: C:/Users/Balta/Desktop/SPHERA FLOW\MARE/MVP_SYSTEM/backend/tests/teste1.png
+### Exemplo formato aceito: jpg, jpeg, png, gif, webp
+
+# @name uploadPost
+POST {{baseUrl}}/api/upload-post
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="clienteId"
+
+{{clienteId}}
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="titulo"
+
+Post de Teste - Análise IA
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="descricao"
+
+Este post será processado pelo Google Gemini para análise de social media
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="file"; filename="test-image.jpg"
+Content-Type: image/jpeg
+
+< C:/caminho/para/sua/imagem.jpg
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+###############################################
+### PASSO 2: Processar Post com Google Gemini
+###############################################
+### Esta requisição usa automaticamente o postId da requisição anterior
+### Aguarde o PASSO 1 completar antes de executar este!
+
+# @name processPost
+POST {{baseUrl}}/api/process-post
+Content-Type: application/json
+
+{
+  "postId": "{{uploadPost.response.body.postId}}"
+}
+
+###############################################
+### TESTES ADICIONAIS
+###############################################
+
+### 3. Buscar todos os posts do cliente
+# @name getPosts
+GET {{baseUrl}}/api/posts/{{clienteId}}
+
+###
+
+### 4. Health Check
+GET {{baseUrl}}/health
+
+###
+
+### 5. Teste de erro: postId inválido
+POST {{baseUrl}}/api/process-post
+Content-Type: application/json
+
+{
+  "postId": "00000000-0000-0000-0000-000000000000"
+}
+
+###
+
+### 6. Teste de erro: sem postId
+POST {{baseUrl}}/api/process-post
+Content-Type: application/json
+
+{}
+
+###############################################
+### RESULTADO ESPERADO (PASSO 2)
+###############################################
+
+### SUCESSO (200):
+### {
+###   "success": true,
+###   "postId": "550e8400-e29b-41d4-a716-446655440000",
+###   "processedId": "660f9511-f39c-52e5-b827-557766551111",
+###   "analysis": "Esta peça de social media apresenta...
+###                Estilo Visual: ...
+###                Tom da Marca: ...
+###                Público-Alvo: ..."
+### }
+

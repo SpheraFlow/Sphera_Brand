@@ -1,0 +1,7 @@
+COMO USAR ESTA PASTA:
+
+1. Exporte seu layout do Photoshop (sem os textos variáveis) como PNG ou JPG.
+2. Tamanho recomendado: 1920x1080 pixels.
+3. Salve o arquivo nesta pasta com um nome simples, ex: 'template-metas.png'.
+4. No arquivo 'src/components/PresentationGenerator.tsx', altere o background para:
+   backgroundImage: "url('/templates/template-metas.png')"

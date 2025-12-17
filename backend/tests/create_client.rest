@@ -1,0 +1,17 @@
+### Criar Cliente de Teste
+POST http://localhost:3001/api/clients
+Content-Type: application/json
+
+{
+  "nome": "Agência Teste"
+}
+
+###
+
+### Listar Todos os Clientes
+GET http://localhost:3001/api/clients
+
+###
+
+### Buscar Cliente por ID (substitua pelo ID retornado acima)
+GET http://localhost:3001/api/clients/SEU-UUID-AQUI

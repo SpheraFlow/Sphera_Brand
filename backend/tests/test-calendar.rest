@@ -1,0 +1,194 @@
+### ============================================
+### Testes - Módulo Calendar Generator
+### ============================================
+
+@baseUrl = http://localhost:3001
+@clienteId = 123e4567-e89b-12d3-a456-426614174000
+
+###############################################
+### FLUXO COMPLETO: Upload → Analyze → Calendar
+###############################################
+
+### PASSO 1: Upload de Post
+# @name uploadPost
+POST {{baseUrl}}/api/upload-post
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="clienteId"
+
+{{clienteId}}
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="titulo"
+
+Post para Calendário Editorial
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="descricao"
+
+Post para extração de branding e geração de calendário
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="file"; filename="calendar-test.jpg"
+Content-Type: image/jpeg
+
+< C:/Users/Balta/Desktop/SPHERA FLOW/MARE/MVP_SYSTEM/backend/tests/teste1.png
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+###
+
+### PASSO 2: Analisar Branding
+# @name analyzeBranding
+POST {{baseUrl}}/api/analyze-branding
+Content-Type: application/json
+
+{
+  "clienteId": "{{clienteId}}",
+  "postId": "{{uploadPost.response.body.postId}}"
+}
+
+###
+
+### PASSO 3: Gerar Calendário Editorial - 7 dias
+# @name generateCalendar7
+POST {{baseUrl}}/api/generate-calendar
+Content-Type: application/json
+
+{
+  "clienteId": "{{clienteId}}",
+  "periodo": 7,
+  "briefing": "Focar em conteúdo educacional e dicas práticas para a semana"
+}
+
+###############################################
+### TESTES INDIVIDUAIS
+###############################################
+
+### Calendário Mensal (30 dias)
+POST {{baseUrl}}/api/generate-calendar
+Content-Type: application/json
+
+{
+  "clienteId": "{{clienteId}}",
+  "periodo": 30,
+  "briefing": "Planejamento mensal balanceado: 50% educacional, 30% promocional, 20% inspiracional"
+}
+
+###
+
+### Calendário Semanal Sem Briefing
+POST {{baseUrl}}/api/generate-calendar
+Content-Type: application/json
+
+{
+  "clienteId": "{{clienteId}}",
+  "periodo": 7
+}
+
+###
+
+### Calendário Quinzenal com Campanha
+POST {{baseUrl}}/api/generate-calendar
+Content-Type: application/json
+
+{
+  "clienteId": "{{clienteId}}",
+  "periodo": 15,
+  "briefing": "Campanha de Black Friday. Aumentar frequência de posts promocionais mas manter valor educacional. Tom urgente mas não agressivo."
+}
+
+###
+
+### Calendário Trimestral
+POST {{baseUrl}}/api/generate-calendar
+Content-Type: application/json
+
+{
+  "clienteId": "{{clienteId}}",
+  "periodo": 90,
+  "briefing": "Planejamento Q1 2025. Objetivos: aumentar engajamento em 30%, gerar 100 leads, fortalecer autoridade no segmento."
+}
+
+###############################################
+### TESTES DE ERRO
+###############################################
+
+### Erro: clienteId faltando
+POST {{baseUrl}}/api/generate-calendar
+Content-Type: application/json
+
+{
+  "periodo": 7
+}
+
+###
+
+### Erro: periodo faltando
+POST {{baseUrl}}/api/generate-calendar
+Content-Type: application/json
+
+{
+  "clienteId": "{{clienteId}}"
+}
+
+###
+
+### Erro: periodo inválido (muito alto)
+POST {{baseUrl}}/api/generate-calendar
+Content-Type: application/json
+
+{
+  "clienteId": "{{clienteId}}",
+  "periodo": 100
+}
+
+###
+
+### Erro: periodo inválido (zero)
+POST {{baseUrl}}/api/generate-calendar
+Content-Type: application/json
+
+{
+  "clienteId": "{{clienteId}}",
+  "periodo": 0
+}
+
+###
+
+### Erro: branding não existe
+POST {{baseUrl}}/api/generate-calendar
+Content-Type: application/json
+
+{
+  "clienteId": "00000000-0000-0000-0000-000000000000",
+  "periodo": 7
+}
+
+###############################################
+### RESULTADO ESPERADO
+###############################################
+
+### SUCESSO (200):
+### {
+###   "success": true,
+###   "clienteId": "uuid",
+###   "periodo": 7,
+###   "total_dias": 7,
+###   "dias": [
+###     {
+###       "dia": 1,
+###       "tema": "Dica de Produtividade",
+###       "formato": "Carrossel",
+###       "instrucoes_visuais": "Paleta azul e laranja...",
+###       "copy_inicial": "🚀 5 hacks de produtividade...",
+###       "objetivo": "Educar e engajar",
+###       "cta": "Salve este post!",
+###       "palavras_chave": ["produtividade", "dicas", "sucesso"]
+###     },
+###     { ... mais 6 dias }
+###   ],
+###   "metadata": {
+###     "branding_utilizado": {...},
+###     "historico": {...},
+###     "briefing": "..."
+###   }
+### }
+

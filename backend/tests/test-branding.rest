@@ -1,0 +1,125 @@
+### ============================================
+### Testes - Módulo Branding Intelligence
+### ============================================
+
+@baseUrl = http://localhost:3001
+@clienteId = 123e4567-e89b-12d3-a456-426614174000
+
+###############################################
+### PASSO 1: Upload de Post
+###############################################
+
+# @name uploadPost
+POST {{baseUrl}}/api/upload-post
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="clienteId"
+
+{{clienteId}}
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="titulo"
+
+Post para Análise de Branding
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="descricao"
+
+Post de teste para extração de DNA de branding
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="file"; filename="branding-test.jpg"
+Content-Type: image/jpeg
+
+< C:/Users/Balta/Desktop/SPHERA FLOW/MARE/MVP_SYSTEM/backend/tests/teste1.png
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
+###############################################
+### PASSO 2: Analisar Branding
+###############################################
+
+# @name analyzeBranding
+POST {{baseUrl}}/api/analyze-branding
+Content-Type: application/json
+
+{
+  "clienteId": "{{clienteId}}",
+  "postId": "{{uploadPost.response.body.postId}}"
+}
+
+###############################################
+### PASSO 3: Consultar Branding Consolidado
+###############################################
+
+# @name getBranding
+GET {{baseUrl}}/api/branding/{{clienteId}}
+
+###############################################
+### TESTES ADICIONAIS
+###############################################
+
+### Teste de erro: clienteId faltando
+POST {{baseUrl}}/api/analyze-branding
+Content-Type: application/json
+
+{
+  "postId": "550e8400-e29b-41d4-a716-446655440000"
+}
+
+###
+
+### Teste de erro: postId faltando
+POST {{baseUrl}}/api/analyze-branding
+Content-Type: application/json
+
+{
+  "clienteId": "{{clienteId}}"
+}
+
+###
+
+### Teste de erro: post não existe
+POST {{baseUrl}}/api/analyze-branding
+Content-Type: application/json
+
+{
+  "clienteId": "{{clienteId}}",
+  "postId": "00000000-0000-0000-0000-000000000000"
+}
+
+###
+
+### Teste de erro: branding não existe
+GET {{baseUrl}}/api/branding/00000000-0000-0000-0000-000000000000
+
+###############################################
+### RESULTADO ESPERADO
+###############################################
+
+### ANALYZE-BRANDING (200):
+### {
+###   "success": true,
+###   "brandingId": "uuid",
+###   "clienteId": "uuid",
+###   "postId": "uuid",
+###   "insights": {
+###     "visual_style": { "description": "...", "extracted_at": "..." },
+###     "tone_of_voice": { "description": "...", "extracted_at": "..." },
+###     "audience": { "description": "...", "extracted_at": "..." },
+###     "keywords": ["palavra1", "palavra2"]
+###   },
+###   "rawAnalysis": "Análise completa do Gemini..."
+### }
+
+### GET BRANDING (200):
+### {
+###   "success": true,
+###   "clienteId": "uuid",
+###   "branding": {
+###     "id": "uuid",
+###     "visual_style": {...},
+###     "tone_of_voice": {...},
+###     "audience": {...},
+###     "keywords": [...],
+###     "updated_at": "timestamp"
+###   }
+### }
+

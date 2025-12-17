@@ -1,0 +1,9 @@
+### Criar Cliente Piloto
+POST http://localhost:3001/api/clients
+Content-Type: application/json
+
+{
+  "nome": "Cliente Piloto"
+}
+
+

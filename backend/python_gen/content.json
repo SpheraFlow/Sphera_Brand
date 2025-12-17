@@ -1,0 +1,30 @@
+{
+  "defesa": {
+    "titulo": "PLANEJA\nMENTO",
+    "subtitulo": "CAMPANHA MENSAL",
+    "texto": "Clique em \"Preencher com IA\" para gerar uma defesa estratégica baseada no seu calendário."
+  },
+  "grid": {
+    "titulo": "METAS\nDO MÊS",
+    "mes": "MÊS VIGENTE",
+    "texto_longo": "Descrição das metas..."
+  },
+  "slogan": {
+    "frase": "SUA FRASE\nIMPACTANTE AQUI.",
+    "legenda": "Conceito criativo"
+  },
+  "desafios": {
+    "titulo": "NOVOS\nDESAFIOS",
+    "texto": "• Desafio 1\n• Desafio 2\n• Desafio 3",
+    "itens": [
+      "Desafio 1",
+      "Desafio 2",
+      "Desafio 3"
+    ]
+  },
+  "planner": {
+    "titulo": "VISÃO\nTRIMESTRAL",
+    "mes": "MÊS 1 | MÊS 2 | MÊS 3",
+    "nome_cliente": "Nome do Cliente"
+  }
+}

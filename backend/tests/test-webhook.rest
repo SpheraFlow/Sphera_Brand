@@ -1,0 +1,181 @@
+### ============================================
+### Teste - Webhook n8n Ingest Posts
+### ============================================
+
+@baseUrl = http://localhost:3001
+@apiKey = secret_key_n8n_webhook_2024
+@clienteId = 123e4567-e89b-12d3-a456-426614174000
+
+###############################################
+### TESTE 1: Ingestão de Posts com Sucesso
+###############################################
+
+# @name ingestPosts
+POST {{baseUrl}}/api/webhooks/ingest-posts
+Content-Type: application/json
+x-api-key: {{apiKey}}
+
+{
+  "clienteId": "{{clienteId}}",
+  "posts": [
+    {
+      "url": "https://picsum.photos/800/600",
+      "legenda": "Post importado do Instagram via n8n",
+      "data": "2025-12-01T12:00:00.000Z",
+      "id_externo": "instagram_test_001"
+    },
+    {
+      "url": "https://picsum.photos/800/800",
+      "legenda": "Segundo post de teste",
+      "data": "2025-12-01T15:30:00.000Z",
+      "id_externo": "instagram_test_002"
+    }
+  ]
+}
+
+###############################################
+### TESTE 2: Lote Maior (5 posts)
+###############################################
+
+POST {{baseUrl}}/api/webhooks/ingest-posts
+Content-Type: application/json
+x-api-key: {{apiKey}}
+
+{
+  "clienteId": "{{clienteId}}",
+  "posts": [
+    {
+      "url": "https://picsum.photos/800/600?random=1",
+      "legenda": "Post 1",
+      "data": "2025-12-01T10:00:00.000Z",
+      "id_externo": "ig_1"
+    },
+    {
+      "url": "https://picsum.photos/800/600?random=2",
+      "legenda": "Post 2",
+      "data": "2025-12-01T11:00:00.000Z",
+      "id_externo": "ig_2"
+    },
+    {
+      "url": "https://picsum.photos/800/600?random=3",
+      "legenda": "Post 3",
+      "data": "2025-12-01T12:00:00.000Z",
+      "id_externo": "ig_3"
+    },
+    {
+      "url": "https://picsum.photos/800/600?random=4",
+      "legenda": "Post 4",
+      "data": "2025-12-01T13:00:00.000Z",
+      "id_externo": "ig_4"
+    },
+    {
+      "url": "https://picsum.photos/800/600?random=5",
+      "legenda": "Post 5",
+      "data": "2025-12-01T14:00:00.000Z",
+      "id_externo": "ig_5"
+    }
+  ]
+}
+
+###############################################
+### TESTES DE ERRO
+###############################################
+
+### Erro: Sem API Key
+POST {{baseUrl}}/api/webhooks/ingest-posts
+Content-Type: application/json
+
+{
+  "clienteId": "{{clienteId}}",
+  "posts": [
+    {
+      "url": "https://picsum.photos/800/600",
+      "legenda": "Teste sem autenticação"
+    }
+  ]
+}
+
+###
+
+### Erro: API Key Inválida
+POST {{baseUrl}}/api/webhooks/ingest-posts
+Content-Type: application/json
+x-api-key: chave_errada_123
+
+{
+  "clienteId": "{{clienteId}}",
+  "posts": [
+    {
+      "url": "https://picsum.photos/800/600",
+      "legenda": "Teste com chave errada"
+    }
+  ]
+}
+
+###
+
+### Erro: clienteId faltando
+POST {{baseUrl}}/api/webhooks/ingest-posts
+Content-Type: application/json
+x-api-key: {{apiKey}}
+
+{
+  "posts": [
+    {
+      "url": "https://picsum.photos/800/600",
+      "legenda": "Sem clienteId"
+    }
+  ]
+}
+
+###
+
+### Erro: posts vazio
+POST {{baseUrl}}/api/webhooks/ingest-posts
+Content-Type: application/json
+x-api-key: {{apiKey}}
+
+{
+  "clienteId": "{{clienteId}}",
+  "posts": []
+}
+
+###
+
+### Erro: cliente não existe
+POST {{baseUrl}}/api/webhooks/ingest-posts
+Content-Type: application/json
+x-api-key: {{apiKey}}
+
+{
+  "clienteId": "00000000-0000-0000-0000-000000000000",
+  "posts": [
+    {
+      "url": "https://picsum.photos/800/600",
+      "legenda": "Cliente inexistente"
+    }
+  ]
+}
+
+###############################################
+### RESULTADO ESPERADO
+###############################################
+
+### SUCESSO (200):
+### {
+###   "success": true,
+###   "imported": 5,
+###   "total": 5
+### }
+
+### COM ERROS PARCIAIS (200):
+### {
+###   "success": true,
+###   "imported": 3,
+###   "total": 5,
+###   "errors": [
+###     "Post sem URL: {...}",
+###     "Erro no post ig_4: Timeout"
+###   ]
+### }
+

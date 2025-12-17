@@ -1,0 +1,43 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "MVP Backend with Node.js, TypeScript and Express",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "migrate": "ts-node db/migrate.ts",
+    "migrate:branding": "ts-node db/migrate_branding_fix.ts",
+    "migrate:calendarios": "ts-node db/migrate_calendarios_fix.ts",
+    "migrate:contexto": "ts-node db/migrate_contexto_temporal.ts",
+    "seed:datas": "psql $POSTGRES_DB < db/seeds/datas_comemorativas.sql",
+    "migrate:all": "npm run migrate:branding && npm run migrate:calendarios && npm run migrate:contexto",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "axios": "^1.13.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.2.0",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.16.3",
+    "puppeteer": "^24.31.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.5",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.11.10",
+    "nodemon": "^3.1.11",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}
