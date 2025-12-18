@@ -500,7 +500,7 @@ export default function SlideEditorModal({
                         <button
                           onClick={() => updateBlockProperty('shadow', true)}
                           className={`flex-1 px-3 py-2 rounded text-xs ${
-                            selectedBlock.shadow !== false ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
+                            selectedBlock?.shadow !== false ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
                           }`}
                         >
                           ON
@@ -508,7 +508,7 @@ export default function SlideEditorModal({
                         <button
                           onClick={() => updateBlockProperty('shadow', false)}
                           className={`flex-1 px-3 py-2 rounded text-xs ${
-                            selectedBlock.shadow === false ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
+                            selectedBlock?.shadow === false ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
                           }`}
                         >
                           OFF
