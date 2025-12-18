@@ -116,8 +116,8 @@ export default function CalendarPage() {
 
   const loadPromptChains = async () => {
     try {
-      const response = await api.get(`/knowledge/prompt-chains/${clientId}`);
-      setPromptChains(response.data.chains || []);
+      const response = await api.get(`/prompt-chains/${clientId}`);
+      setPromptChains(response.data.data || []);
     } catch (error) {
       console.error('Erro ao carregar prompt chains:', error);
     }
