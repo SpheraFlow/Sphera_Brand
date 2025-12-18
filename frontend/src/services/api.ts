@@ -1,10 +1,8 @@
 import axios from 'axios';
 
-// CONEXÃO DIRETA: Usar URL absoluta para bypass do proxy do Vite
-const baseURL = 'http://localhost:3001/api';
+const baseURL = (import.meta as any).env?.VITE_API_BASE_URL || '/api';
 
-console.log('🔧 API Base URL configurada (Conexão Direta):', baseURL);
-console.log('🔧 Environment:', process.env.NODE_ENV);
+console.log('🔧 API Base URL configurada:', baseURL);
 
 const api = axios.create({
   baseURL,

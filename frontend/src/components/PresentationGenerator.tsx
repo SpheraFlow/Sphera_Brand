@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 import { useParams } from 'react-router-dom';
 import VisualSlideEditor from './VisualSlideEditor';
 import SlideEditorModal from './SlideEditorModal';
@@ -80,7 +80,7 @@ export default function PresentationGenerator() {
     if (!clientId) return alert("Cliente não identificado");
     try {
       setAiLoading(true);
-      const res = await axios.post('http://localhost:3001/api/presentation/generate-content', { clienteId: clientId });
+      const res = await api.post('/presentation/generate-content', { clienteId: clientId });
       
       if (res.data.success && res.data.content) {
         const c = res.data.content;
@@ -135,7 +135,8 @@ export default function PresentationGenerator() {
         planner
       };
 
-      const response = await axios.post('http://localhost:3001/api/presentation/generate', payload);
+      const response = await api.post('/presentation/generate', payload);
+      
 
       if (response.data.success) {
         setGeneratedImages(response.data.images);
@@ -164,7 +165,7 @@ export default function PresentationGenerator() {
         titulo: `Apresentação ${new Date().toLocaleString()}`
       };
       
-      const res = await axios.post('http://localhost:3001/api/presentation/save', payload);
+      const res = await api.post('/presentation/save', payload);
       
       if (res.data.success) {
         alert('✅ Apresentação salva no histórico!');
@@ -181,7 +182,7 @@ export default function PresentationGenerator() {
   const fetchHistory = async () => {
     if (!clientId) return;
     try {
-      const res = await axios.get(`http://localhost:3001/api/presentation/history/${clientId}`);
+      const res = await api.get(`/presentation/history/${clientId}`);
       if (res.data.success) {
         setHistory(res.data.history);
         setShowHistory(true);
@@ -193,7 +194,7 @@ export default function PresentationGenerator() {
 
   const handleDownload = async (imgUrl: string, filename: string) => {
     try {
-      const response = await fetch(`http://localhost:3001${imgUrl}`);
+      const response = await fetch(imgUrl);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -246,7 +247,7 @@ export default function PresentationGenerator() {
         realIndex = 4;
     }
 
-    const templateImage = `http://localhost:3001/templates/template_${templateName}.png`;
+    const templateImage = `/templates/template_${templateName}.png`;
 
     setEditingSlide({
       image: templateImage,
@@ -277,7 +278,7 @@ export default function PresentationGenerator() {
         planner: editingSlide.index === 4 ? updatedData : planner
       };
 
-      const response = await axios.post('http://localhost:3001/api/presentation/generate', payload);
+      const response = await api.post('/presentation/generate', payload);
 
       if (response.data.success) {
         setGeneratedImages(response.data.images);
@@ -377,7 +378,7 @@ export default function PresentationGenerator() {
                     {item.arquivos.map((img: string, idx: number) => (
                       <img 
                         key={idx} 
-                        src={`http://localhost:3001${img}`} 
+                        src={img} 
                         className="h-20 w-auto rounded border border-gray-600" 
                         alt="Thumbnail" 
                       />
@@ -391,21 +392,9 @@ export default function PresentationGenerator() {
       )}
 
       {visualMode ? (
-        /* Modo Visual - Editor de Arrastar e Soltar */
         <VisualSlideEditor
-          templateImage={`http://localhost:3001/templates/template_${activeTab === 'defesa' ? 'defesa_da_campanha' : activeTab === 'grid' ? 'metas' : activeTab === 'desafios' ? 'novos_desafios' : activeTab === 'planner' ? 'planner_trimestral' : 'slogan'}.png`}
-          initialBlocks={[
-            {
-              id: 'titulo',
-              content: activeTab === 'defesa' ? defesa.titulo : activeTab === 'grid' ? grid.titulo : activeTab === 'slogan' ? slogan.frase : activeTab === 'desafios' ? (desafios.titulo || 'NOVOS DESAFIOS') : (planner.titulo || 'PLANNER'),
-              x: 100,
-              y: 400,
-              fontSize: 65,
-              color: '#0095FF',
-              fontFamily: 'Poppins',
-              maxWidth: 600
-            }
-          ]}
+          templateImage={`/templates/template_${activeTab === 'defesa' ? 'defesa_da_campanha' : activeTab === 'grid' ? 'metas' : activeTab === 'desafios' ? 'novos_desafios' : activeTab === 'planner' ? 'planner_trimestral' : 'slogan'}.png`}
+          initialBlocks={[]}
           onSave={(blocks) => {
             console.log('Layout salvo:', blocks);
             alert('💾 Coordenadas exportadas! Verifique o console (F12)');
@@ -559,7 +548,7 @@ export default function PresentationGenerator() {
                 <div key={idx} className="group relative rounded-lg overflow-hidden border border-gray-700 shadow-xl bg-gray-800">
                   <div className="aspect-video relative">
                     <img 
-                      src={`http://localhost:3001${imgUrl}`} 
+                      src={imgUrl} 
                       alt="Slide gerado" 
                       className="w-full h-full object-cover" 
                     />

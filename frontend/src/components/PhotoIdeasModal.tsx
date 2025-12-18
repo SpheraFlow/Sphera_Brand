@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 
 interface PhotoIdea {
   tipo: string;
@@ -26,7 +26,7 @@ export default function PhotoIdeasModal({ isOpen, onClose, clienteId, mes, brief
   const generatePhotoIdeas = async () => {
     setIsGenerating(true);
     try {
-      const response = await axios.post('http://localhost:3001/api/photos/generate-photo-ideas', {
+      const response = await api.post('/photos/generate-photo-ideas', {
         clienteId,
         mes,
         briefing: customBriefing,

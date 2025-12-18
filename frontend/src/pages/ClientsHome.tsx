@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../services/api';
 
 interface Cliente {
   id: string;
@@ -41,7 +41,7 @@ export default function ClientsHome() {
   const loadClientes = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('http://localhost:3001/api/clients');
+      const response = await api.get('/clients');
       const lista = response.data.clientes || [];
       setClientes(lista);
 
@@ -60,7 +60,7 @@ export default function ClientsHome() {
     formData.append('file', file);
 
     try {
-      const res = await axios.post('http://localhost:3001/api/client-logos/upload', formData, {
+      const res = await api.post('/client-logos/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
@@ -70,7 +70,7 @@ export default function ClientsHome() {
         return;
       }
 
-      const updated = { ...logoOverrides, [clientId]: `http://localhost:3001${url}` };
+      const updated = { ...logoOverrides, [clientId]: url };
       setLogoOverrides(updated);
       try {
         localStorage.setItem('clientLogos', JSON.stringify(updated));
@@ -89,7 +89,7 @@ export default function ClientsHome() {
     await Promise.all(
       lista.map(async (cliente) => {
         try {
-          const res = await axios.get(`http://localhost:3001/api/calendars/${cliente.id}`);
+          const res = await api.get(`/calendars/${cliente.id}`);
           const calendar = res.data.calendar;
           const posts = calendar?.posts || [];
 
@@ -185,7 +185,7 @@ export default function ClientsHome() {
 
     try {
       console.log('Criando cliente:', newClientName);
-      const response = await axios.post('http://localhost:3001/api/clients', {
+      const response = await api.post('/clients', {
         nome: newClientName,
       });
       console.log('Cliente criado com sucesso:', response.data);
@@ -217,7 +217,7 @@ export default function ClientsHome() {
     if (!confirmDelete) return;
 
     try {
-      await axios.delete(`http://localhost:3001/api/clients/${clientId}`);
+      await api.delete(`/clients/${clientId}`);
       await loadClientes();
     } catch (error: any) {
       console.error('Erro ao excluir cliente:', error);

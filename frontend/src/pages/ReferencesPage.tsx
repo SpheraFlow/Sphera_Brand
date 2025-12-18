@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import api from '../services/api';
 
 interface LinkItem {
   id: string;
@@ -46,15 +46,15 @@ export default function ReferencesPage() {
       setLoading(true);
       
       // Carregar Notas
-      const notesRes = await axios.get(`http://localhost:3001/api/knowledge/doc/${clientId}/general_references`);
+      const notesRes = await api.get(`/knowledge/doc/${clientId}/general_references`);
       setNotes(notesRes.data.content || '');
 
       // Carregar Links
-      const linksRes = await axios.get(`http://localhost:3001/api/knowledge/doc/${clientId}/important_links`);
+      const linksRes = await api.get(`/knowledge/doc/${clientId}/important_links`);
       setLinks(Array.isArray(linksRes.data.content) ? linksRes.data.content : []);
 
       // Carregar Galeria
-      const galleryRes = await axios.get(`http://localhost:3001/api/knowledge/doc/${clientId}/asset_gallery`);
+      const galleryRes = await api.get(`/knowledge/doc/${clientId}/asset_gallery`);
       setGallery(Array.isArray(galleryRes.data.content) ? galleryRes.data.content : []);
 
     } catch (error) {
@@ -67,7 +67,7 @@ export default function ReferencesPage() {
   // --- NOTAS ---
   const saveNotes = async () => {
     try {
-      await axios.put(`http://localhost:3001/api/knowledge/doc/${clientId}/general_references`, { content: tempNotes });
+      await api.put(`/knowledge/doc/${clientId}/general_references`, { content: tempNotes });
       setNotes(tempNotes);
       setIsEditingNotes(false);
     } catch (error) {
@@ -82,7 +82,7 @@ export default function ReferencesPage() {
     const updatedLinks = [...links, newItem];
     
     try {
-      await axios.put(`http://localhost:3001/api/knowledge/doc/${clientId}/important_links`, { content: updatedLinks });
+      await api.put(`/knowledge/doc/${clientId}/important_links`, { content: updatedLinks });
       setLinks(updatedLinks);
       setNewLink({ title: '', url: '', category: 'Geral' });
       setShowLinkModal(false);
@@ -94,7 +94,7 @@ export default function ReferencesPage() {
   const removeLink = async (id: string) => {
     const updatedLinks = links.filter(l => l.id !== id);
     try {
-      await axios.put(`http://localhost:3001/api/knowledge/doc/${clientId}/important_links`, { content: updatedLinks });
+      await api.put(`/knowledge/doc/${clientId}/important_links`, { content: updatedLinks });
       setLinks(updatedLinks);
     } catch (error) {
       alert('Erro ao remover link');
@@ -112,7 +112,7 @@ export default function ReferencesPage() {
       formData.append('file', file);
 
       // Upload do arquivo
-      const uploadRes = await axios.post('http://localhost:3001/api/knowledge/assets', formData, {
+      const uploadRes = await api.post('/knowledge/assets', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
@@ -125,7 +125,7 @@ export default function ReferencesPage() {
 
       // Atualizar lista no banco
       const updatedGallery = [...gallery, newAsset];
-      await axios.put(`http://localhost:3001/api/knowledge/doc/${clientId}/asset_gallery`, { content: updatedGallery });
+      await api.put(`/knowledge/doc/${clientId}/asset_gallery`, { content: updatedGallery });
       
       setGallery(updatedGallery);
     } catch (error) {
@@ -139,7 +139,7 @@ export default function ReferencesPage() {
   const removeAsset = async (id: string) => {
     const updatedGallery = gallery.filter(g => g.id !== id);
     try {
-      await axios.put(`http://localhost:3001/api/knowledge/doc/${clientId}/asset_gallery`, { content: updatedGallery });
+      await api.put(`/knowledge/doc/${clientId}/asset_gallery`, { content: updatedGallery });
       setGallery(updatedGallery);
     } catch (error) {
       alert('Erro ao remover arquivo');
@@ -300,7 +300,7 @@ export default function ReferencesPage() {
                     <div className="aspect-square bg-gray-900 flex items-center justify-center relative">
                       {item.mimetype.startsWith('image/') ? (
                         <img 
-                          src={`http://localhost:3001${item.url}`} 
+                          src={item.url} 
                           alt={item.filename} 
                           className="w-full h-full object-cover"
                         />
@@ -311,7 +311,7 @@ export default function ReferencesPage() {
                       {/* Overlay */}
                       <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                          <a 
-                          href={`http://localhost:3001${item.url}`} 
+                          href={item.url} 
                           target="_blank" 
                           rel="noopener noreferrer"
                           className="p-2 bg-white/10 hover:bg-white/20 rounded-full text-white"

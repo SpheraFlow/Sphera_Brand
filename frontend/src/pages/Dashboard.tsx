@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import axios from 'axios';
+import api from '../services/api';
 import PresentationGenerator from '../components/PresentationGenerator';
 
 interface ClientInfo {
@@ -66,13 +66,13 @@ export default function Dashboard() {
       setLoadingOverview(true);
 
       // 1) Dados do cliente
-      const clientRes = await axios.get(`http://localhost:3001/api/clients/${id}`);
+      const clientRes = await api.get(`/clients/${id}`);
       const c = clientRes.data.cliente as ClientInfo;
       setClientInfo(c);
 
       // 2) Calendário mais recente
       try {
-        const calRes = await axios.get(`http://localhost:3001/api/calendars/${id}`);
+        const calRes = await api.get(`/calendars/${id}`);
         const calendar = calRes.data.calendar;
         const posts: CalendarPost[] = calendar?.posts || [];
 
@@ -163,14 +163,14 @@ export default function Dashboard() {
       // 3) Overview de conhecimento (prompts, regras, docs, chains)
       try {
         const [promptsRes, rulesRes] = await Promise.all([
-          axios.get(`http://localhost:3001/api/knowledge/prompts/${id}`),
-          axios.get(`http://localhost:3001/api/knowledge/rules/${id}`),
+          api.get(`/knowledge/prompts/${id}`),
+          api.get(`/knowledge/rules/${id}`),
         ]);
 
         // brand_docs não tem GET dedicado; usamos o endpoint de debug como aproximação leve
         let docsCount = 0;
         try {
-          const debugRes = await axios.get('http://localhost:3001/api/knowledge/debug');
+          const debugRes = await api.get('/knowledge/debug');
           docsCount = debugRes.data?.branding_count ?? 0;
         } catch {
           docsCount = 0;
@@ -179,7 +179,7 @@ export default function Dashboard() {
         // Chains para este cliente
         let chainsCount = 0;
         try {
-          const chainsRes = await axios.get(`http://localhost:3001/api/prompt-chains/${id}`);
+          const chainsRes = await api.get(`/prompt-chains/${id}`);
           chainsCount = chainsRes.data?.data?.length ?? 0;
         } catch {
           chainsCount = 0;
@@ -227,7 +227,7 @@ export default function Dashboard() {
 
       console.log('Enviando post para processamento...');
       // Usando a rota correta baseada na funcionalidade
-      const response = await axios.post('http://localhost:3001/api/process-post', formData, {
+      const response = await api.post('/process-post', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },

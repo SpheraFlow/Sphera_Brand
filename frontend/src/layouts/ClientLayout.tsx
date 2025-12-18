@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Outlet, useParams, Link, useLocation, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import api from '../services/api';
 
 interface Cliente {
   id: string;
@@ -25,7 +25,7 @@ export default function ClientLayout() {
   const loadCliente = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`http://localhost:3001/api/clients/${clientId}`);
+      const response = await api.get(`/clients/${clientId}`);
       setCliente(response.data.cliente);
     } catch (error) {
       console.error('Erro ao carregar cliente:', error);

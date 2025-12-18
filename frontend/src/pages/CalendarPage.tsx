@@ -5,6 +5,7 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import ContentMixSelector from '../components/ContentMixSelector';
 import PhotoIdeasModal from '../components/PhotoIdeasModal';
 import TokenUsageDisplay from '../components/TokenUsageDisplay';
+import api from '../services/api';
 import {
   format,
   startOfMonth,
@@ -116,7 +117,7 @@ export default function CalendarPage() {
 
   const loadPromptChains = async () => {
     try {
-      const response = await axios.get(`http://localhost:3001/api/knowledge/prompt-chains/${clientId}`);
+      const response = await api.get(`/knowledge/prompt-chains/${clientId}`);
       setPromptChains(response.data.chains || []);
     } catch (error) {
       console.error('Erro ao carregar prompt chains:', error);
@@ -138,7 +139,7 @@ export default function CalendarPage() {
       // Resetar estados específicos do mês
       setMonthReferences('');
 
-      const response = await axios.get(`http://localhost:3001/api/calendars/${clientId}?month=${encodeURIComponent(monthStr)}`);
+      const response = await api.get(`/calendars/${clientId}?month=${encodeURIComponent(monthStr)}`);
 
       const calendarData = response.data.calendar;
       
@@ -216,7 +217,7 @@ export default function CalendarPage() {
     try {
       setIsRegeneratingPost(true);
 
-      const response = await axios.post('http://localhost:3001/api/calendars/regenerate-post', {
+      const response = await api.post('/calendars/regenerate-post', {
         calendarId: calendar.id,
         postIndex: selectedPost.index,
         newFormato: editFormato,
@@ -261,7 +262,7 @@ export default function CalendarPage() {
       setIsDeleting(true);
 
       const monthStr = format(currentMonth, 'MMMM yyyy', { locale: ptBR });
-      await axios.delete(`http://localhost:3001/api/calendars/${clientId}/${monthStr}`);
+      await api.delete(`/calendars/${clientId}/${monthStr}`);
 
       alert('✅ Calendário excluído com sucesso!');
       loadCalendar(); // Recarregar (vai mostrar estado vazio)
@@ -286,7 +287,7 @@ export default function CalendarPage() {
 
     try {
       setIsGenerating(true);
-      const response = await axios.post('http://localhost:3001/api/generate-calendar', {
+      const response = await api.post('/generate-calendar', {
         clienteId: clientId,
         briefing,
         mes: format(currentMonth, 'MMMM yyyy', { locale: ptBR }),
@@ -325,7 +326,7 @@ export default function CalendarPage() {
 
     try {
       setIsSaving(true);
-      await axios.put(`http://localhost:3001/api/calendars/${calendar.id}`, {
+      await api.put(`/calendars/${calendar.id}`, {
         posts: updatedPosts
       });
       console.log('✅ Calendário salvo');
@@ -420,9 +421,7 @@ export default function CalendarPage() {
     try {
       setIsDeletingPost(true);
 
-      await axios.delete(
-        `http://localhost:3001/api/calendars/post/${calendar.id}/${selectedPost.index}`
-      );
+      await api.delete(`/calendars/post/${calendar.id}/${selectedPost.index}`);
 
       const updatedPosts = calendar.posts.filter((_, i) => i !== selectedPost.index);
       setCalendar({ ...calendar, posts: updatedPosts });
@@ -705,8 +704,8 @@ export default function CalendarPage() {
               <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
                 {monthImages.map((url, i) => (
                   <div key={i} className="flex-shrink-0 w-24 h-24 rounded-lg overflow-hidden border border-gray-700 bg-gray-900 cursor-pointer hover:border-purple-500 transition-colors">
-                    <a href={`http://localhost:3001${url}`} target="_blank" rel="noopener noreferrer">
-                      <img src={`http://localhost:3001${url}`} alt={`Ref ${i}`} className="w-full h-full object-cover" />
+                    <a href={url} target="_blank" rel="noopener noreferrer">
+                      <img src={url} alt={`Ref ${i}`} className="w-full h-full object-cover" />
                     </a>
                   </div>
                 ))}
@@ -941,7 +940,7 @@ export default function CalendarPage() {
                             for (let i = 0; i < files.length; i++) {
                               const formData = new FormData();
                               formData.append('file', files[i]);
-                              const res = await axios.post('http://localhost:3001/api/knowledge/assets', formData, {
+                              const res = await api.post('/knowledge/assets', formData, {
                                 headers: { 'Content-Type': 'multipart/form-data' }
                               });
                               newImages.push(res.data.url);
@@ -961,7 +960,7 @@ export default function CalendarPage() {
                       {monthImages.map((imgUrl, idx) => (
                         <div key={idx} className="relative group aspect-square bg-gray-900 rounded-lg overflow-hidden border border-gray-700">
                           <img 
-                            src={`http://localhost:3001${imgUrl}`} 
+                            src={imgUrl} 
                             alt={`Ref ${idx}`} 
                             className="w-full h-full object-cover"
                           />
@@ -997,7 +996,7 @@ export default function CalendarPage() {
                 <button
                   onClick={async () => {
                     try {
-                      await axios.put(`http://localhost:3001/api/calendars/${calendar.id}/metadata`, {
+                      await api.put(`/calendars/${calendar.id}/metadata`, {
                         month_references: monthReferences,
                         month_images: monthImages
                       });

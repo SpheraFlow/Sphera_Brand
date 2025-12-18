@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import api from '../services/api';
 
 interface TokenUsageProps {
   clienteId: string;
@@ -32,7 +32,7 @@ export default function TokenUsageDisplay({ clienteId }: TokenUsageProps) {
   const loadTokenUsage = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`http://localhost:3001/api/token-usage/${clienteId}`);
+      const response = await api.get(`/token-usage/${clienteId}`);
       if (response.data.success) {
         setUsage(response.data.data);
       }

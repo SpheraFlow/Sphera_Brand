@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import api from '../services/api';
 
 interface Prompt {
   id: string;
@@ -82,7 +82,7 @@ export default function KnowledgeBase() {
   const loadChains = async () => {
     if (!clientId) return;
     try {
-      const response = await axios.get(`http://localhost:3001/api/prompt-chains/${clientId}`);
+      const response = await api.get(`/prompt-chains/${clientId}`);
       setChains(response.data.data || []);
     } catch (error) {
       console.error('Erro ao carregar prompt chains:', error);
@@ -91,7 +91,7 @@ export default function KnowledgeBase() {
 
   const loadPrompts = async () => {
     try {
-      const response = await axios.get(`http://localhost:3001/api/knowledge/prompts/${clientId}`);
+      const response = await api.get(`/knowledge/prompts/${clientId}`);
       setPrompts(response.data.prompts || []);
     } catch (error) {
       console.error('Erro ao carregar prompts:', error);
@@ -100,7 +100,7 @@ export default function KnowledgeBase() {
 
   const loadRules = async () => {
     try {
-      const response = await axios.get(`http://localhost:3001/api/knowledge/rules/${clientId}`);
+      const response = await api.get(`/knowledge/rules/${clientId}`);
       setRules(response.data.rules || []);
     } catch (error) {
       console.error('Erro ao carregar regras:', error);
@@ -114,7 +114,7 @@ export default function KnowledgeBase() {
     }
 
     try {
-      await axios.post('http://localhost:3001/api/knowledge/prompts', {
+      await api.post('/knowledge/prompts', {
         clienteId: clientId,
         titulo: newPromptTitulo,
         conteudo: newPromptConteudo,
@@ -137,7 +137,7 @@ export default function KnowledgeBase() {
     if (!confirm('Deseja realmente excluir este prompt?')) return;
 
     try {
-      await axios.delete(`http://localhost:3001/api/knowledge/prompts/${promptId}`);
+      await api.delete(`/knowledge/prompts/${promptId}`);
       showMessage('Prompt excluído com sucesso!', 'success');
       loadPrompts();
     } catch (error) {
@@ -154,7 +154,7 @@ export default function KnowledgeBase() {
 
     try {
       console.log('Adicionando regra:', { clientId, regra: newRule, categoria: newRuleCategoria });
-      await axios.post('http://localhost:3001/api/knowledge/rules', {
+      await api.post('/knowledge/rules', {
         clienteId: clientId,
         regra: newRule,
         categoria: newRuleCategoria,
@@ -175,7 +175,7 @@ export default function KnowledgeBase() {
     if (!confirm('Deseja realmente excluir esta regra?')) return;
 
     try {
-      await axios.delete(`http://localhost:3001/api/knowledge/rules/${ruleId}`);
+      await api.delete(`/knowledge/rules/${ruleId}`);
       showMessage('Regra excluída com sucesso!', 'success');
       loadRules();
     } catch (error) {
@@ -272,7 +272,7 @@ export default function KnowledgeBase() {
     }));
 
     try {
-      await axios.post('http://localhost:3001/api/prompt-chains', {
+      await api.post('/prompt-chains', {
         name: newChainName.trim(),
         description: newChainDescription.trim() || null,
         client_id: newChainIsGlobal ? null : newChainClientId,
@@ -298,7 +298,7 @@ export default function KnowledgeBase() {
     if (!confirm('Deseja realmente excluir esta Prompt Chain?')) return;
 
     try {
-      await axios.delete(`http://localhost:3001/api/prompt-chains/${chainId}`);
+      await api.delete(`/prompt-chains/${chainId}`);
       showMessage('Prompt Chain excluída com sucesso!', 'success');
       loadChains();
     } catch (error) {
