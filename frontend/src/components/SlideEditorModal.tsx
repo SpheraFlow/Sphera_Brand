@@ -49,6 +49,13 @@ export default function SlideEditorModal({
 
     const getLayout = (id: string) => layoutById.get(id);
 
+    const isLegacyPlannerLayout = (id: string, oldX: number, oldY: number) => {
+      if (!isPlannerSlide) return false;
+      const l = getLayout(id);
+      if (!l) return false;
+      return Math.round(l.x ?? -1) === oldX && Math.round(l.y ?? -1) === oldY;
+    };
+
     if (!isPlannerSlide && slideData.titulo) {
       const l = getLayout('titulo');
       initialBlocks.push({
@@ -181,7 +188,7 @@ export default function SlideEditorModal({
 
     // Planner: mes, nome_cliente e caixa da logo
     if (isPlannerSlide) {
-      const mesLayout = getLayout('mes');
+      const mesLayout = isLegacyPlannerLayout('mes', 100, 520) ? undefined : getLayout('mes');
       initialBlocks.push({
         id: 'mes',
         content: slideData.mes || '',
@@ -198,7 +205,7 @@ export default function SlideEditorModal({
         shadow: mesLayout?.shadow ?? true
       });
 
-      const nameLayout = getLayout('nome_cliente');
+      const nameLayout = isLegacyPlannerLayout('nome_cliente', 100, 950) ? undefined : getLayout('nome_cliente');
       initialBlocks.push({
         id: 'nome_cliente',
         content: slideData.nome_cliente || '',
@@ -215,7 +222,7 @@ export default function SlideEditorModal({
         shadow: nameLayout?.shadow ?? true
       });
 
-      const logoLayout = getLayout('logo');
+      const logoLayout = isLegacyPlannerLayout('logo', 120, 390) ? undefined : getLayout('logo');
       initialBlocks.push({
         id: 'logo',
         content: '',
@@ -310,6 +317,8 @@ export default function SlideEditorModal({
   };
 
   const handleDoubleClick = (id: string, content: string) => {
+    const b = blocks.find((x) => x.id === id);
+    if (b?.kind === 'logo') return;
     setIsEditing(id);
     setEditContent(content);
   };
@@ -497,7 +506,20 @@ export default function SlideEditorModal({
                         />
                       )}
 
-                      {isEditing === block.id ? (
+                      {block.kind === 'logo' ? (
+                        (slideData?.logo_url ? (
+                          <img
+                            src={slideData.logo_url}
+                            alt="Logo"
+                            className="w-full h-full object-contain pointer-events-none"
+                            draggable={false}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-xs text-gray-300 pointer-events-none">
+                            Logo
+                          </div>
+                        ))
+                      ) : isEditing === block.id ? (
                         <div className="bg-gray-900/95 p-3 rounded border-2 border-blue-500" onClick={(e) => e.stopPropagation()}>
                           <textarea
                             value={editContent}

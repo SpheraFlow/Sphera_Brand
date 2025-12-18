@@ -29,10 +29,10 @@ interface DesafiosData {
 }
 
 interface PlannerData {
-  titulo?: string; // Mantendo compatibilidade opcional
   mes: string;
   nome_cliente: string;
   logo_path?: string;
+  logo_url?: string;
 }
 
 export default function PresentationGenerator() {
@@ -57,6 +57,14 @@ export default function PresentationGenerator() {
       }
     }
     return window.location.origin;
+  };
+
+  const withCacheBust = (url: string) => {
+    const u = url || '';
+    if (!u) return u;
+    const hasQuery = u.includes('?');
+    const sep = hasQuery ? '&' : '?';
+    return `${u}${sep}t=${Date.now()}`;
   };
 
   const resolveAssetUrl = (url: string) => {
@@ -102,10 +110,21 @@ export default function PresentationGenerator() {
   });
 
   const [planner, setPlanner] = useState<PlannerData>({
-    titulo: 'VISÃO\nTRIMESTRAL',
     mes: 'MÊS 1 | MÊS 2 | MÊS 3',
     nome_cliente: 'Nome do Cliente'
   });
+
+  const getClientLogoOverrideUrl = () => {
+    if (!clientId) return undefined;
+    try {
+      const stored = localStorage.getItem('clientLogos');
+      if (!stored) return undefined;
+      const parsed = JSON.parse(stored) as Record<string, string>;
+      return parsed?.[clientId];
+    } catch {
+      return undefined;
+    }
+  };
 
   const clamp = (value: string, max: number) => value.slice(0, max);
 
@@ -132,7 +151,6 @@ export default function PresentationGenerator() {
         
         if (c.planner) {
             setPlanner({
-                titulo: 'PLANNER\nTRIMESTRAL',
                 ...c.planner
             });
         }
@@ -160,13 +178,18 @@ export default function PresentationGenerator() {
       setLoading(true);
       setGeneratedImages([]);
 
+      const logoUrl = getClientLogoOverrideUrl();
+
       const payload = {
         clienteId: clientId,
         defesa,
         grid,
         slogan,
         desafios,
-        planner
+        planner: {
+          ...planner,
+          ...(logoUrl ? { logo_url: logoUrl } : {})
+        }
       };
 
       const response = await api.post('/presentation/generate', payload);
@@ -174,7 +197,7 @@ export default function PresentationGenerator() {
 
       if (response.data.success) {
         const urls = (response.data.images || []).map((u: string) => resolveAssetUrl(u));
-        setGeneratedImages(urls);
+        setGeneratedImages(urls.map(withCacheBust));
         setTempFiles(response.data.tempFiles || []);
       } else {
         alert('Erro ao gerar lâminas');
@@ -302,7 +325,11 @@ export default function PresentationGenerator() {
     } else if (filename.includes('planner')) {
         templateName = 'planner_trimestral';
         slideName = 'Planner';
-        data = planner;
+        const logoUrl = getClientLogoOverrideUrl();
+        data = {
+          ...planner,
+          ...(logoUrl ? { logo_url: logoUrl } : {})
+        };
         realIndex = 4;
     }
 
@@ -329,19 +356,24 @@ export default function PresentationGenerator() {
       }
       
       // Regenerar apenas esta lâmina
+      const logoUrl = getClientLogoOverrideUrl();
       const payload = {
         clienteId: clientId,
         defesa: editingSlide.index === 0 ? updatedData : defesa,
         grid: editingSlide.index === 1 ? updatedData : grid,
         slogan: editingSlide.index === 2 ? updatedData : slogan,
         desafios: editingSlide.index === 3 ? updatedData : desafios,
-        planner: editingSlide.index === 4 ? updatedData : planner
+        planner: {
+          ...(editingSlide.index === 4 ? updatedData : planner),
+          ...(logoUrl ? { logo_url: logoUrl } : {})
+        }
       };
 
       const response = await api.post('/presentation/generate', payload);
 
       if (response.data.success) {
-        setGeneratedImages(response.data.images);
+        const urls = (response.data.images || []).map((u: string) => resolveAssetUrl(u));
+        setGeneratedImages(urls.map(withCacheBust));
         alert('✅ Lâmina regenerada com sucesso!');
         setEditingSlide(null);
       }
@@ -424,7 +456,8 @@ export default function PresentationGenerator() {
                     </div>
                     <button 
                       onClick={() => {
-                        setGeneratedImages(item.arquivos);
+                        const urls = (Array.isArray(item.arquivos) ? item.arquivos : []).map((u: string) => resolveAssetUrl(u));
+                        setGeneratedImages(urls.map(withCacheBust));
                         setVisualMode(false);
                         setShowHistory(false);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -438,9 +471,13 @@ export default function PresentationGenerator() {
                     {(Array.isArray(item.arquivos) ? item.arquivos : []).map((img: string, idx: number) => (
                       <img 
                         key={idx} 
-                        src={img} 
+                        src={resolveAssetUrl(img)} 
                         className="h-20 w-auto rounded border border-gray-600" 
                         alt="Thumbnail" 
+                        onError={(e) => {
+                          console.error('Erro ao carregar thumbnail:', img);
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        }}
                       />
                     ))}
                   </div>
@@ -586,14 +623,8 @@ export default function PresentationGenerator() {
             )}
 
             {activeTab === 'planner' && (
-                <div className="space-y-4 animate-fadeIn">
+                <div className="space-y-3">
                 <h3 className="text-sm font-semibold text-blue-400">Planner Trimestral</h3>
-                <input
-                    value={planner.titulo}
-                    onChange={e => setPlanner({...planner, titulo: e.target.value})}
-                    className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white"
-                    placeholder="Título"
-                />
                 <input
                     value={planner.mes}
                     onChange={e => setPlanner({...planner, mes: e.target.value})}
@@ -634,9 +665,13 @@ export default function PresentationGenerator() {
                 <div key={idx} className="group relative rounded-lg overflow-hidden border border-gray-700 shadow-xl bg-gray-800">
                   <div className="aspect-video relative">
                     <img 
-                      src={imgUrl} 
+                      src={resolveAssetUrl(imgUrl)} 
                       alt="Slide gerado" 
                       className="w-full h-full object-cover" 
+                      onError={(e) => {
+                        console.error('Erro ao carregar preview:', imgUrl);
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
                     />
                   </div>
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-3 backdrop-blur-sm">

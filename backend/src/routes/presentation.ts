@@ -175,9 +175,11 @@ Retorne APENAS este JSON preenchido:
         
         const content = JSON.parse(jsonStr);
 
-        // Injetar logoPath no planner se existir
-        if (content.planner && logoPath) {
-            content.planner.logo_path = logoPath;
+        // Injetar logoPath no planner se existir (prioriza logo vinda do frontend, se houver)
+        if (content.planner) {
+            const fromPayload = resolveClientLogoPathFromUrl(content.planner.logo_url);
+            const finalLogoPath = fromPayload || logoPath;
+            if (finalLogoPath) content.planner.logo_path = finalLogoPath;
         }
 
         // Garantir nome do cliente vindo do cadastro
@@ -218,6 +220,12 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
     try {
         const data = req.body;
 
+        // Resolver logo do planner vinda do frontend (se existir)
+        if (data?.planner?.logo_url) {
+            const fromPayload = resolveClientLogoPathFromUrl(data.planner.logo_url);
+            if (fromPayload) data.planner.logo_path = fromPayload;
+        }
+
         // Injetar nome do cliente e logo no planner, se clienteId vier no payload
         const clienteId = data?.clienteId;
         if (clienteId) {
@@ -240,7 +248,7 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
                 if (data.planner && clientName) {
                     data.planner.nome_cliente = clientName;
                 }
-                if (data.planner && logoPath) {
+                if (data.planner && logoPath && !data.planner.logo_path) {
                     data.planner.logo_path = logoPath;
                 }
             } catch (e) {
