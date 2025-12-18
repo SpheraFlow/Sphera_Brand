@@ -76,6 +76,8 @@ export default function PresentationGenerator() {
     nome_cliente: 'Nome do Cliente'
   });
 
+  const clamp = (value: string, max: number) => value.slice(0, max);
+
   const handleAiFill = async () => {
     if (!clientId) return alert("Cliente não identificado");
     try {
@@ -128,6 +130,7 @@ export default function PresentationGenerator() {
       setGeneratedImages([]);
 
       const payload = {
+        clienteId: clientId,
         defesa,
         grid,
         slogan,
@@ -271,6 +274,7 @@ export default function PresentationGenerator() {
       
       // Regenerar apenas esta lâmina
       const payload = {
+        clienteId: clientId,
         defesa: editingSlide.index === 0 ? updatedData : defesa,
         grid: editingSlide.index === 1 ? updatedData : grid,
         slogan: editingSlide.index === 2 ? updatedData : slogan,
@@ -439,7 +443,7 @@ export default function PresentationGenerator() {
                 />
                 <textarea
                     value={defesa.texto}
-                    onChange={e => setDefesa({...defesa, texto: e.target.value})}
+                    onChange={e => setDefesa({...defesa, texto: clamp(e.target.value, 850)})}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white h-32"
                     placeholder="Texto de defesa..."
                 />
@@ -463,7 +467,7 @@ export default function PresentationGenerator() {
                 />
                 <textarea
                     value={grid.texto_longo}
-                    onChange={e => setGrid({...grid, texto_longo: e.target.value})}
+                    onChange={e => setGrid({...grid, texto_longo: clamp(e.target.value, 850)})}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white h-32"
                     placeholder="Descrição das metas..."
                 />
@@ -498,10 +502,26 @@ export default function PresentationGenerator() {
                 <textarea
                     value={desafios.texto}
                     onChange={e => {
-                        const val = e.target.value;
-                        // Atualizar itens baseado no texto (remove bullets)
-                        const items = val.split('\n').map(l => l.replace(/^•\s*/, '').trim()).filter(Boolean);
-                        setDesafios({...desafios, texto: val, itens: items});
+                        const raw = e.target.value;
+                        const cleaned = raw
+                          .split('\n')
+                          .map((l) => l.replace(/^•\s*/, ''))
+                          .map((l) => l.trim());
+
+                        const items = cleaned
+                          .filter((l) => l.length > 0)
+                          .slice(0, 9)
+                          .map((l) => clamp(l, 55));
+
+                        // Completar com vazios até 9
+                        while (items.length < 9) items.push('');
+
+                        const texto = items
+                          .filter((t) => t.trim().length > 0)
+                          .map((t) => `• ${t}`)
+                          .join('\n');
+
+                        setDesafios({ ...desafios, texto, itens: items });
                     }}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white h-40"
                     placeholder="Liste os desafios..."

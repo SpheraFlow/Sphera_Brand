@@ -143,6 +143,10 @@ app.use("/api/token-usage", tokenUsageRouter);
 const presentationOutputPath = path.resolve(__dirname, "../python_gen/output");
 app.use("/presentation-output", express.static(presentationOutputPath));
 
+// Servir fontes usadas pelo gerador (para o editor do frontend)
+const presentationFontsPath = path.resolve(__dirname, "../python_gen/fonts");
+app.use("/presentation-fonts", express.static(presentationFontsPath));
+
 // Servir apresentações salvas (Permanentes)
 const presentationsStoragePath = path.resolve(__dirname, "../storage/presentations");
 app.use("/storage/presentations", express.static(presentationsStoragePath));

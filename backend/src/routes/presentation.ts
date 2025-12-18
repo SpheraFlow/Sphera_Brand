@@ -67,6 +67,13 @@ router.post('/generate-content', async (req: Request, res: Response) => {
         
         const branding = brandingData;
 
+        // 2.1 Buscar nome do cliente (para o planner)
+        const clientResult = await db.query(
+            "SELECT nome FROM clientes WHERE id = $1",
+            [clienteId]
+        );
+        const clientName = clientResult.rows?.[0]?.nome || '';
+
         // 3. Montar Prompt para IA
         const prompt = `Você é um assistente de marketing. Analise os dados e retorne APENAS JSON válido, sem texto adicional.
 
@@ -76,15 +83,21 @@ ${JSON.stringify(calendar, null, 2)}
 BRANDING:
 ${JSON.stringify(branding, null, 2)}
 
+REGRAS IMPORTANTES:
+- "defesa.texto_longo" deve ter no máximo 850 caracteres (contando espaços e quebras de linha)
+- "grid.texto_longo" deve ter no máximo 850 caracteres (contando espaços e quebras de linha)
+- "desafios.itens" deve conter exatamente 9 itens
+- cada item em "desafios.itens" deve ter no máximo 55 caracteres (contando espaços e quebras de linha)
+
 Retorne APENAS este JSON preenchido:
 {
   "defesa": {
     "subtitulo": "Frase do slogan",
-    "texto_longo": "Estratégia em 3 parágrafos"
+    "texto_longo": "Estratégia em 3 parágrafos (ATÉ 850 caracteres, contando espaços e quebras de linha)"
   },
   "grid": {
     "mes": "MÊS EM MAIÚSCULAS",
-    "texto_longo": "Metas em 2 parágrafos"
+    "texto_longo": "Metas em 2 parágrafos (ATÉ 850 caracteres, contando espaços e quebras de linha)"
   },
   "slogan": {
     "frase": "Máximo 5 palavras"
@@ -94,7 +107,7 @@ Retorne APENAS este JSON preenchido:
   },
   "planner": {
     "mes": "MÊS1 | MÊS2 | MÊS3",
-    "nome_cliente": "Nome"
+    "nome_cliente": "${clientName || 'Nome do Cliente'}"
   }
 }`;
 
@@ -151,6 +164,11 @@ Retorne APENAS este JSON preenchido:
             content.planner.logo_path = logoPath;
         }
 
+        // Garantir nome do cliente vindo do cadastro
+        if (content.planner && clientName) {
+            content.planner.nome_cliente = clientName;
+        }
+
         return res.json({ success: true, content });
 
     } catch (error: any) {
@@ -183,6 +201,42 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
     console.log("🎨 [PRESENTATION] Solicitada geração de lâminas");
     try {
         const data = req.body;
+
+        // Injetar nome do cliente e logo no planner, se clienteId vier no payload
+        const clienteId = data?.clienteId;
+        if (clienteId) {
+            try {
+                const clientResult = await db.query(
+                    "SELECT nome FROM clientes WHERE id = $1",
+                    [clienteId]
+                );
+                const clientName = clientResult.rows?.[0]?.nome;
+
+                const brandResult = await db.query(
+                    "SELECT logo_url FROM branding WHERE cliente_id = $1 ORDER BY updated_at DESC LIMIT 1",
+                    [clienteId]
+                );
+                const logoUrl = brandResult.rows?.[0]?.logo_url;
+
+                let logoPath: string | null = null;
+                if (logoUrl && typeof logoUrl === 'string') {
+                    const relativePath = logoUrl.replace('/static/client-logos/', '');
+                    const absolutePath = path.resolve(__dirname, '../../storage/client-logos', relativePath);
+                    if (fs.existsSync(absolutePath)) {
+                        logoPath = absolutePath;
+                    }
+                }
+
+                if (data.planner && clientName) {
+                    data.planner.nome_cliente = clientName;
+                }
+                if (data.planner && logoPath) {
+                    data.planner.logo_path = logoPath;
+                }
+            } catch (e) {
+                console.warn('⚠️ [PRESENTATION] Falha ao enriquecer planner com dados do cliente:', e);
+            }
+        }
         
         // 1. Salvar JSON
         fs.writeFileSync(CONTENT_FILE, JSON.stringify(data, null, 2), { encoding: 'utf-8' });

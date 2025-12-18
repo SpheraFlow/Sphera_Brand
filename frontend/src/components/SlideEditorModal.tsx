@@ -5,10 +5,14 @@ interface TextBlock {
   content: string;
   x: number;
   y: number;
+  width: number;
+  height: number;
   fontSize: number;
   color: string;
   fontWeight: 'normal' | 'bold';
   align: 'left' | 'center' | 'right';
+  fontFamily: 'PoppinsBold' | 'Lato';
+  kind?: 'text' | 'logo';
 }
 
 interface SlideEditorModalProps {
@@ -31,69 +35,179 @@ export default function SlideEditorModal({
   const [blocks, setBlocks] = useState<TextBlock[]>(() => {
     // Inicializar blocos baseado no tipo de slide
     const initialBlocks: TextBlock[] = [];
-    
+
+    const layoutList = Array.isArray(slideData?.layout) ? slideData.layout : [];
+    const layoutById = new Map<string, any>();
+    layoutList.forEach((l: any) => {
+      if (l && typeof l === 'object' && l.id) layoutById.set(l.id, l);
+    });
+
+    const getLayout = (id: string) => layoutById.get(id);
+
     if (slideData.titulo) {
+      const l = getLayout('titulo');
       initialBlocks.push({
         id: 'titulo',
         content: slideData.titulo,
-        x: 100,
-        y: 400,
-        fontSize: 65,
-        color: '#0095FF',
-        fontWeight: 'bold',
-        align: 'left'
+        x: l?.x ?? 100,
+        y: l?.y ?? 400,
+        width: l?.width ?? 700,
+        height: l?.height ?? 160,
+        fontSize: l?.fontSize ?? 65,
+        color: l?.color ?? '#0095FF',
+        fontWeight: l?.fontWeight ?? 'bold',
+        align: l?.align ?? 'left',
+        fontFamily: l?.fontFamily ?? 'PoppinsBold'
       });
     }
     
     if (slideData.subtitulo) {
+      const l = getLayout('subtitulo');
       initialBlocks.push({
         id: 'subtitulo',
         content: slideData.subtitulo,
-        x: 100,
-        y: 600,
-        fontSize: 28,
-        color: '#FFFFFF',
-        fontWeight: 'normal',
-        align: 'left'
+        x: l?.x ?? 100,
+        y: l?.y ?? 600,
+        width: l?.width ?? 700,
+        height: l?.height ?? 90,
+        fontSize: l?.fontSize ?? 28,
+        color: l?.color ?? '#FFFFFF',
+        fontWeight: l?.fontWeight ?? 'normal',
+        align: l?.align ?? 'left',
+        fontFamily: l?.fontFamily ?? 'Lato'
       });
     }
     
     if (slideData.texto || slideData.texto_longo) {
+      const l = getLayout('texto');
       initialBlocks.push({
         id: 'texto',
         content: slideData.texto || slideData.texto_longo,
-        x: 1050,
-        y: 200,
-        fontSize: 26,
-        color: '#FFFFFF',
-        fontWeight: 'normal',
-        align: 'left'
+        x: l?.x ?? 1050,
+        y: l?.y ?? 200,
+        width: l?.width ?? 750,
+        height: l?.height ?? 650,
+        fontSize: l?.fontSize ?? 26,
+        color: l?.color ?? '#FFFFFF',
+        fontWeight: l?.fontWeight ?? 'normal',
+        align: l?.align ?? 'left',
+        fontFamily: l?.fontFamily ?? 'Lato'
       });
     }
     
     if (slideData.frase) {
+      const l = getLayout('frase');
       initialBlocks.push({
         id: 'frase',
         content: slideData.frase,
-        x: 960,
-        y: 450,
-        fontSize: 75,
-        color: '#0095FF',
-        fontWeight: 'bold',
-        align: 'center'
+        x: l?.x ?? 960,
+        y: l?.y ?? 450,
+        width: l?.width ?? 1200,
+        height: l?.height ?? 260,
+        fontSize: l?.fontSize ?? 75,
+        color: l?.color ?? '#0095FF',
+        fontWeight: l?.fontWeight ?? 'bold',
+        align: l?.align ?? 'center',
+        fontFamily: l?.fontFamily ?? 'PoppinsBold'
       });
     }
     
     if (slideData.legenda) {
+      const l = getLayout('legenda');
       initialBlocks.push({
         id: 'legenda',
         content: slideData.legenda,
-        x: 960,
-        y: 650,
-        fontSize: 22,
+        x: l?.x ?? 960,
+        y: l?.y ?? 650,
+        width: l?.width ?? 900,
+        height: l?.height ?? 120,
+        fontSize: l?.fontSize ?? 22,
+        color: l?.color ?? '#FFFFFF',
+        fontWeight: l?.fontWeight ?? 'normal',
+        align: l?.align ?? 'center',
+        fontFamily: l?.fontFamily ?? 'Lato'
+      });
+    }
+
+    // Desafios: 9 itens em grid 3x3
+    if (Array.isArray(slideData.itens)) {
+      const items: string[] = slideData.itens;
+      const startX = 1150;
+      const startY = 300;
+      const stepX = 280;
+      const stepY = 280;
+
+      for (let i = 0; i < 9; i++) {
+        const row = Math.floor(i / 3);
+        const col = i % 3;
+        const id = `item-${i}`;
+        const l = getLayout(id);
+
+        initialBlocks.push({
+          id,
+          content: items[i] || '',
+          x: l?.x ?? startX + (col * stepX),
+          y: l?.y ?? startY + (row * stepY),
+          width: l?.width ?? 280,
+          height: l?.height ?? 280,
+          fontSize: l?.fontSize ?? 20,
+          color: l?.color ?? '#FFFFFF',
+          fontWeight: l?.fontWeight ?? 'normal',
+          align: l?.align ?? 'center',
+          fontFamily: l?.fontFamily ?? 'Lato',
+          kind: 'text'
+        });
+      }
+    }
+
+    // Planner: mes, nome_cliente e caixa da logo
+    if (slideData.nome_cliente !== undefined || slideData.logo_path !== undefined) {
+      const mesLayout = getLayout('mes');
+      initialBlocks.push({
+        id: 'mes',
+        content: slideData.mes || '',
+        x: mesLayout?.x ?? 100,
+        y: mesLayout?.y ?? 520,
+        width: mesLayout?.width ?? 700,
+        height: mesLayout?.height ?? 90,
+        fontSize: mesLayout?.fontSize ?? 32,
+        color: mesLayout?.color ?? '#FFFFFF',
+        fontWeight: mesLayout?.fontWeight ?? 'normal',
+        align: mesLayout?.align ?? 'left',
+        fontFamily: mesLayout?.fontFamily ?? 'Lato',
+        kind: 'text'
+      });
+
+      const nameLayout = getLayout('nome_cliente');
+      initialBlocks.push({
+        id: 'nome_cliente',
+        content: slideData.nome_cliente || '',
+        x: nameLayout?.x ?? 100,
+        y: nameLayout?.y ?? 950,
+        width: nameLayout?.width ?? 700,
+        height: nameLayout?.height ?? 80,
+        fontSize: nameLayout?.fontSize ?? 24,
+        color: nameLayout?.color ?? '#FFFFFF',
+        fontWeight: nameLayout?.fontWeight ?? 'normal',
+        align: nameLayout?.align ?? 'left',
+        fontFamily: nameLayout?.fontFamily ?? 'Lato',
+        kind: 'text'
+      });
+
+      const logoLayout = getLayout('logo');
+      initialBlocks.push({
+        id: 'logo',
+        content: '',
+        x: logoLayout?.x ?? 120,
+        y: logoLayout?.y ?? 390,
+        width: logoLayout?.width ?? 300,
+        height: logoLayout?.height ?? 300,
+        fontSize: 12,
         color: '#FFFFFF',
         fontWeight: 'normal',
-        align: 'center'
+        align: 'center',
+        fontFamily: 'Lato',
+        kind: 'logo'
       });
     }
     
@@ -103,6 +217,8 @@ export default function SlideEditorModal({
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null);
+  const [resizingId, setResizingId] = useState<string | null>(null);
+  const [resizeStart, setResizeStart] = useState<{ x: number; y: number } | null>(null);
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -116,30 +232,60 @@ export default function SlideEditorModal({
     setDragStart({ x: e.clientX, y: e.clientY });
   };
 
+  const handleResizeMouseDown = (id: string, e: ReactMouseEvent) => {
+    e.stopPropagation();
+    setSelectedBlockId(id);
+    setResizingId(id);
+    setResizeStart({ x: e.clientX, y: e.clientY });
+  };
+
   const handleMouseMove = (e: ReactMouseEvent) => {
-    if (!draggingId || !dragStart || !canvasRef.current) return;
+    if ((!draggingId && !resizingId) || (!dragStart && !resizeStart) || !canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
     const scaleX = 1920 / rect.width;
     const scaleY = 1080 / rect.height;
 
-    const deltaX = (e.clientX - dragStart.x) * scaleX;
-    const deltaY = (e.clientY - dragStart.y) * scaleY;
+    if (draggingId && dragStart) {
+      const deltaX = (e.clientX - dragStart.x) * scaleX;
+      const deltaY = (e.clientY - dragStart.y) * scaleY;
 
-    setBlocks((prev) =>
-      prev.map((block) =>
-        block.id === draggingId
-          ? { ...block, x: Math.max(0, block.x + deltaX), y: Math.max(0, block.y + deltaY) }
-          : block
-      )
-    );
+      setBlocks((prev) =>
+        prev.map((block) =>
+          block.id === draggingId
+            ? { ...block, x: Math.max(0, block.x + deltaX), y: Math.max(0, block.y + deltaY) }
+            : block
+        )
+      );
 
-    setDragStart({ x: e.clientX, y: e.clientY });
+      setDragStart({ x: e.clientX, y: e.clientY });
+    }
+
+    if (resizingId && resizeStart) {
+      const deltaX = (e.clientX - resizeStart.x) * scaleX;
+      const deltaY = (e.clientY - resizeStart.y) * scaleY;
+
+      setBlocks((prev) =>
+        prev.map((block) =>
+          block.id === resizingId
+            ? {
+                ...block,
+                width: Math.max(20, block.width + deltaX),
+                height: Math.max(20, block.height + deltaY)
+              }
+            : block
+        )
+      );
+
+      setResizeStart({ x: e.clientX, y: e.clientY });
+    }
   };
 
   const handleMouseUp = () => {
     setDraggingId(null);
     setDragStart(null);
+    setResizingId(null);
+    setResizeStart(null);
   };
 
   const handleDoubleClick = (id: string, content: string) => {
@@ -173,6 +319,21 @@ export default function SlideEditorModal({
   const handleSaveLayout = () => {
     // Atualizar slideData com novos textos
     const updatedSlideData = { ...slideData };
+
+    // Persistir layout para o Python respeitar posição/tamanho/fonte
+    updatedSlideData.layout = blocks.map((b) => ({
+      id: b.id,
+      x: b.x,
+      y: b.y,
+      width: b.width,
+      height: b.height,
+      fontSize: b.fontSize,
+      color: b.color,
+      fontWeight: b.fontWeight,
+      align: b.align,
+      fontFamily: b.fontFamily,
+      kind: b.kind || 'text'
+    }));
     
     blocks.forEach((block) => {
       if (block.id === 'titulo') updatedSlideData.titulo = block.content;
@@ -180,7 +341,26 @@ export default function SlideEditorModal({
       if (block.id === 'texto') updatedSlideData.texto_longo = block.content;
       if (block.id === 'frase') updatedSlideData.frase = block.content;
       if (block.id === 'legenda') updatedSlideData.legenda = block.content;
+      if (block.id === 'mes') updatedSlideData.mes = block.content;
+      if (block.id === 'nome_cliente') updatedSlideData.nome_cliente = block.content;
     });
+
+    // Desafios: reconstruir itens
+    const itemBlocks = blocks
+      .filter((b) => b.id.startsWith('item-'))
+      .sort((a, b) => {
+        const ai = parseInt(a.id.replace('item-', ''), 10);
+        const bi = parseInt(b.id.replace('item-', ''), 10);
+        return ai - bi;
+      });
+    if (itemBlocks.length > 0) {
+      updatedSlideData.itens = itemBlocks.map((b) => b.content || '');
+      updatedSlideData.texto = itemBlocks
+        .map((b) => (b.content || '').trim())
+        .filter(Boolean)
+        .map((t) => `• ${t}`)
+        .join('\n');
+    }
     
     onSave(blocks, updatedSlideData);
   };
@@ -243,14 +423,17 @@ export default function SlideEditorModal({
                         position: 'absolute',
                         left: `${(block.x / 1920) * 100}%`,
                         top: `${(block.y / 1080) * 100}%`,
+                        width: `${(block.width / 1920) * 100}%`,
+                        height: `${(block.height / 1080) * 100}%`,
                         fontSize: `${(block.fontSize / 1080) * 100}vh`,
                         color: block.color,
                         fontWeight: block.fontWeight,
                         textAlign: block.align,
+                        fontFamily: block.fontFamily,
                         cursor: draggingId === block.id ? 'grabbing' : 'grab',
                         userSelect: 'none',
                         whiteSpace: 'pre-wrap',
-                        maxWidth: '80%',
+                        overflow: 'hidden',
                         textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
                         border: selectedBlockId === block.id ? '2px dashed #0095FF' : '2px dashed transparent',
                         padding: '8px',
@@ -258,6 +441,22 @@ export default function SlideEditorModal({
                       }}
                       className="hover:bg-blue-500/10"
                     >
+                      {selectedBlockId === block.id && (
+                        <div
+                          onMouseDown={(e) => handleResizeMouseDown(block.id, e)}
+                          style={{
+                            position: 'absolute',
+                            right: 0,
+                            bottom: 0,
+                            width: 14,
+                            height: 14,
+                            background: '#0095FF',
+                            cursor: 'nwse-resize',
+                            borderTopLeftRadius: 2
+                          }}
+                        />
+                      )}
+
                       {isEditing === block.id ? (
                         <div className="bg-gray-900/95 p-3 rounded border-2 border-blue-500" onClick={(e) => e.stopPropagation()}>
                           <textarea
@@ -327,6 +526,39 @@ export default function SlideEditorModal({
                         className="w-full"
                       />
                       <span className="text-xs text-white">{selectedBlock.fontSize}px</span>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Fonte</label>
+                      <select
+                        value={selectedBlock.fontFamily}
+                        onChange={(e) => updateBlockProperty('fontFamily', e.target.value)}
+                        className="w-full bg-gray-700 text-white rounded px-2 py-2 text-xs"
+                      >
+                        <option value="PoppinsBold">Poppins Bold</option>
+                        <option value="Lato">Lato</option>
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs text-gray-400 block mb-1">Largura</label>
+                        <input
+                          type="number"
+                          value={Math.round(selectedBlock.width)}
+                          onChange={(e) => updateBlockProperty('width', parseInt(e.target.value || '0'))}
+                          className="w-full bg-gray-700 text-white rounded px-2 py-2 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-400 block mb-1">Altura</label>
+                        <input
+                          type="number"
+                          value={Math.round(selectedBlock.height)}
+                          onChange={(e) => updateBlockProperty('height', parseInt(e.target.value || '0'))}
+                          className="w-full bg-gray-700 text-white rounded px-2 py-2 text-xs"
+                        />
+                      </div>
                     </div>
 
                     <div>
