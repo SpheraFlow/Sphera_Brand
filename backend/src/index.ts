@@ -37,6 +37,13 @@ import db from "./config/database";
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+const setNoCacheHeaders = (res: Response) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  res.setHeader('Surrogate-Control', 'no-store');
+};
+
 // ============================================
 // 📞 GRAMPO TELEFÔNICO - PRIMEIRA LINHA
 // ============================================
@@ -57,7 +64,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 const clientLogosPath = path.resolve(__dirname, "../storage/client-logos");
-app.use("/static/client-logos", express.static(clientLogosPath));
+app.use(
+  "/static/client-logos",
+  express.static(clientLogosPath, {
+    setHeaders: (res) => setNoCacheHeaders(res as unknown as Response)
+  })
+);
 
 // Expor assets de branding (galeria)
 const brandingAssetsPath = path.resolve(__dirname, "../storage/branding");
@@ -141,7 +153,12 @@ app.use("/api/token-usage", tokenUsageRouter);
 
 // Servir arquivos gerados pelo Python (Temporários)
 const presentationOutputPath = path.resolve(__dirname, "../python_gen/output");
-app.use("/presentation-output", express.static(presentationOutputPath));
+app.use(
+  "/presentation-output",
+  express.static(presentationOutputPath, {
+    setHeaders: (res) => setNoCacheHeaders(res as unknown as Response)
+  })
+);
 
 // Servir fontes usadas pelo gerador (para o editor do frontend)
 const presentationFontsPath = path.resolve(__dirname, "../python_gen/fonts");
@@ -149,7 +166,12 @@ app.use("/presentation-fonts", express.static(presentationFontsPath));
 
 // Servir apresentações salvas (Permanentes)
 const presentationsStoragePath = path.resolve(__dirname, "../storage/presentations");
-app.use("/storage/presentations", express.static(presentationsStoragePath));
+app.use(
+  "/storage/presentations",
+  express.static(presentationsStoragePath, {
+    setHeaders: (res) => setNoCacheHeaders(res as unknown as Response)
+  })
+);
 
 // Teste de conexão com PostgreSQL e Ambiente
 const checkEnvironment = async () => {

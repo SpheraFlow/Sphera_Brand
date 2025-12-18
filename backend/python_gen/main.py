@@ -121,28 +121,29 @@ def render_defesa(data, output_name):
     
     layout = _layout_by_id(data.get('layout'))
 
-    font_subtitle = load_font('lato-regular.ttf', 28)
-    font_body = load_font('lato-regular.ttf', 26)
+    font_subtitle = load_font('poppins-bold.ttf', 22)
+    font_body = load_font('lato-regular.ttf', 22)
     
     # Subtítulo (Frase do Slogan)
     subtitulo = data.get('subtitulo', '')
     if subtitulo:
         b = layout.get('subtitulo')
         if b:
-            font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 28)))
-            draw.text((float(b.get('x', 100)), float(b.get('y', 520))), subtitulo.upper(), font=font, fill=b.get('color', '#FFFFFF'))
+            font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 22)))
+            max_w = int(b.get('width', 900))
+            draw_text_wrapped(draw, subtitulo.upper(), font, b.get('color', '#FFFFFF'), float(b.get('x', 174)), float(b.get('y', 636)), max_w, line_spacing=0, align=b.get('align', 'left'), max_lines=1)
         else:
-            draw.text((100, 520), subtitulo.upper(), font=font_subtitle, fill=COLOR_WHITE)
+            draw_text_wrapped(draw, subtitulo.upper(), font_subtitle, COLOR_WHITE, 174, 636, 900, line_spacing=0, align='left', max_lines=1)
     
     # Texto Direito (Texto explicativo)
     texto_longo = data.get('texto_longo', data.get('texto', ''))
     b = layout.get('texto')
     if b:
-        font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 26)))
-        max_w = int(b.get('width', 750))
-        draw_text_wrapped(draw, texto_longo, font, b.get('color', '#FFFFFF'), float(b.get('x', 1050)), float(b.get('y', 200)), max_w, line_spacing=10, align=b.get('align', 'left'))
+        font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 22)))
+        max_w = int(b.get('width', 900))
+        draw_text_wrapped(draw, texto_longo, font, b.get('color', '#FFFFFF'), float(b.get('x', 936)), float(b.get('y', 147)), max_w, line_spacing=10, align=b.get('align', 'left'))
     else:
-        draw_text_wrapped(draw, texto_longo, font_body, COLOR_WHITE, 1050, 200, 750, line_spacing=10)
+        draw_text_wrapped(draw, texto_longo, font_body, COLOR_WHITE, 936, 147, 900, line_spacing=10)
     
     img.save(os.path.join(OUTPUT_DIR, output_name))
     print(f"[OK] Gerado: {output_name}")
@@ -163,7 +164,7 @@ def render_metas(data, output_name):
     layout = _layout_by_id(data.get('layout'))
 
     font_subtitle = load_font('lato-regular.ttf', 32)
-    font_body = load_font('lato-regular.ttf', 26)
+    font_body = load_font('lato-regular.ttf', 22)
     
     # Subtítulo (Mês)
     mes = data.get('mes', '')
@@ -179,11 +180,11 @@ def render_metas(data, output_name):
     texto_longo = data.get('texto_longo', '')
     b = layout.get('texto')
     if b:
-        font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 26)))
-        max_w = int(b.get('width', 750))
-        draw_text_wrapped(draw, texto_longo, font, b.get('color', '#FFFFFF'), float(b.get('x', 1050)), float(b.get('y', 200)), max_w, line_spacing=10, align=b.get('align', 'left'))
+        font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 22)))
+        max_w = int(b.get('width', 900))
+        draw_text_wrapped(draw, texto_longo, font, b.get('color', '#FFFFFF'), float(b.get('x', 936)), float(b.get('y', 147)), max_w, line_spacing=10, align=b.get('align', 'left'))
     else:
-        draw_text_wrapped(draw, texto_longo, font_body, COLOR_WHITE, 1050, 200, 750, line_spacing=10)
+        draw_text_wrapped(draw, texto_longo, font_body, COLOR_WHITE, 936, 147, 900, line_spacing=10)
     
     img.save(os.path.join(OUTPUT_DIR, output_name))
     print(f"[OK] Gerado: {output_name}")
@@ -332,28 +333,39 @@ def render_slogan(data, output_name):
     
     frase = data.get('frase', '')
     
-    # Frase centralizada ACIMA do texto "SLOGAN DA CAMPANHA" (Y=480)
+    # Frase em uma única linha (auto-shrink se exceder a largura do bloco)
     b = layout.get('frase')
     if b:
-        font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 70)))
-        x = float(b.get('x', 960))
-        y = float(b.get('y', 480))
+        base_size = int(b.get('fontSize', 70))
+        max_w = int(b.get('width', 1500))
         color = b.get('color', '#0095FF')
-        try:
-            draw.text((x, y), frase.upper(), font=font, fill=color, anchor="mm")
-        except:
+        x = float(b.get('x', 223))
+        y = float(b.get('y', 505))
+
+        size = base_size
+        while size > 18:
+            font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), size)
             bbox = draw.textbbox((0, 0), frase.upper(), font=font)
             w = bbox[2] - bbox[0]
-            h = bbox[3] - bbox[1]
-            draw.text((x - w/2, y - h/2), frase.upper(), font=font, fill=color)
+            if w <= max_w:
+                break
+            size -= 2
+
+        draw.text((x, y), frase.upper(), font=font, fill=color)
     else:
-        try:
-            draw.text((960, 480), frase.upper(), font=font_slogan, fill=COLOR_BLUE, anchor="mm")
-        except:
-            bbox = draw.textbbox((0, 0), frase.upper(), font=font_slogan)
+        x = 223
+        y = 505
+        max_w = 1500
+        size = 70
+        while size > 18:
+            font = load_font('poppins-bold.ttf', size)
+            bbox = draw.textbbox((0, 0), frase.upper(), font=font)
             w = bbox[2] - bbox[0]
-            h = bbox[3] - bbox[1]
-            draw.text((960 - w/2, 480 - h/2), frase.upper(), font=font_slogan, fill=COLOR_BLUE)
+            if w <= max_w:
+                break
+            size -= 2
+
+        draw.text((x, y), frase.upper(), font=font, fill=COLOR_BLUE)
     
     img.save(os.path.join(OUTPUT_DIR, output_name))
     print(f"[OK] Gerado: {output_name}")
@@ -383,9 +395,10 @@ def render_planner(data, output_name):
         b = layout.get('mes')
         if b:
             font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 32)))
-            draw.text((float(b.get('x', 100)), float(b.get('y', 520))), mes.upper(), font=font, fill=b.get('color', '#FFFFFF'))
+            max_w = int(b.get('width', 980))
+            draw_text_wrapped(draw, mes.upper(), font, b.get('color', '#FFFFFF'), float(b.get('x', 187)), float(b.get('y', 584)), max_w, line_spacing=0, align=b.get('align', 'left'), max_lines=1)
         else:
-            draw.text((187, 584), mes.upper(), font=font_month, fill=COLOR_WHITE)
+            draw_text_wrapped(draw, mes.upper(), font_month, COLOR_WHITE, 187, 584, 980, line_spacing=0, align='left', max_lines=1)
     
     # Nome do cliente
     nome_cliente = data.get('nome_cliente', '')
@@ -462,6 +475,7 @@ def main():
         render_metas(content['grid'], '02_metas.png')
 
     # 3. Slogan
+    if 'slogan' in content:
         render_slogan(content['slogan'], '03_slogan.png')
         
     if 'desafios' in content:

@@ -37,27 +37,79 @@ const resolveClientLogoPathFromUrl = (logoUrl: unknown): string | null => {
     return absolutePath;
 };
 
+router.get('/available-months/:clienteId', async (req: Request, res: Response) => {
+    try {
+        const { clienteId } = req.params;
+        if (!clienteId) return res.status(400).json({ success: false, error: 'Cliente ID é obrigatório' });
+
+        const result = await db.query(
+            `SELECT mes
+             FROM calendarios
+             WHERE cliente_id = $1
+             GROUP BY mes
+             ORDER BY MAX(criado_em) DESC`,
+            [clienteId]
+        );
+
+        const months = (result.rows || [])
+            .map((r: any) => (r?.mes ? String(r.mes) : ''))
+            .filter((m: string) => !!m);
+
+        return res.json({ success: true, months });
+    } catch (error: any) {
+        console.error('❌ Erro ao listar meses disponíveis:', error);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // ROTA NOVA: Gerar conteúdo com IA baseado no calendário
 router.post('/generate-content', async (req: Request, res: Response) => {
     try {
-        const { clienteId } = req.body;
+        const { clienteId, months } = req.body;
 
         if (!clienteId) {
             return res.status(400).json({ success: false, error: 'Cliente ID é obrigatório' });
         }
 
-        // 1. Buscar Calendário e Posts
-        const calResult = await db.query(
-            "SELECT * FROM calendarios WHERE cliente_id = $1 ORDER BY criado_em DESC LIMIT 1",
-            [clienteId]
-        );
+        // 1. Buscar Calendário e Posts (último ou período selecionado)
+        const requestedMonths: string[] = Array.isArray(months)
+            ? months.map((m: any) => String(m)).filter((m: string) => !!m)
+            : [];
 
-        if (calResult.rows.length === 0) {
-            return res.status(404).json({ success: false, error: 'Nenhum calendário encontrado para este cliente.' });
+        let calendar: any = null;
+        let monthLabel = '';
+
+        if (requestedMonths.length > 0) {
+            const calResult = await db.query(
+                `SELECT mes, calendario_json, criado_em
+                 FROM calendarios
+                 WHERE cliente_id = $1 AND mes = ANY($2::text[])
+                 ORDER BY criado_em DESC`,
+                [clienteId, requestedMonths]
+            );
+
+            if (calResult.rows.length === 0) {
+                return res.status(404).json({ success: false, error: 'Nenhum calendário encontrado para o período selecionado.' });
+            }
+
+            monthLabel = requestedMonths.join(' | ');
+            calendar = {
+                selected_months: requestedMonths,
+                calendars: calResult.rows.map((r: any) => ({ mes: r.mes, calendario_json: r.calendario_json }))
+            };
+        } else {
+            const calResult = await db.query(
+                "SELECT * FROM calendarios WHERE cliente_id = $1 ORDER BY criado_em DESC LIMIT 1",
+                [clienteId]
+            );
+
+            if (calResult.rows.length === 0) {
+                return res.status(404).json({ success: false, error: 'Nenhum calendário encontrado para este cliente.' });
+            }
+
+            calendar = calResult.rows[0].calendario_json;
+            monthLabel = calResult.rows[0].mes;
         }
-
-        const calendar = calResult.rows[0].calendario_json; // JSON com posts
-        const month = calResult.rows[0].mes;
 
         // 2. Buscar Branding (para contexto)
         const brandResult = await db.query(
@@ -93,7 +145,7 @@ router.post('/generate-content', async (req: Request, res: Response) => {
         // 3. Montar Prompt para IA
         const prompt = `Você é um assistente de marketing. Analise os dados e retorne APENAS JSON válido, sem texto adicional.
 
-CALENDÁRIO (Mês: ${month}):
+CALENDÁRIO (Período: ${monthLabel}):
 ${JSON.stringify(calendar, null, 2)}
 
 BRANDING:
@@ -219,6 +271,20 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
     console.log("🎨 [PRESENTATION] Solicitada geração de lâminas");
     try {
         const data = req.body;
+
+        const requestedMonths: string[] = Array.isArray(data?.months)
+            ? data.months.map((m: any) => String(m)).filter((m: string) => !!m)
+            : [];
+
+        if (requestedMonths.length > 0) {
+            const label = requestedMonths.join(' | ');
+            if (data?.grid && (!data.grid.mes || String(data.grid.mes).toLowerCase().includes('mês'))) {
+                data.grid.mes = label;
+            }
+            if (data?.planner && (!data.planner.mes || String(data.planner.mes).toLowerCase().includes('mês'))) {
+                data.planner.mes = label;
+            }
+        }
 
         // Resolver logo do planner vinda do frontend (se existir)
         if (data?.planner?.logo_url) {

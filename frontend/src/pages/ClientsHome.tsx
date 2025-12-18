@@ -34,6 +34,33 @@ export default function ClientsHome() {
   });
   const navigate = useNavigate();
 
+  const getBackendOrigin = () => {
+    const baseURL = (import.meta as any)?.env?.VITE_API_URL;
+    if (typeof baseURL === 'string' && baseURL.startsWith('http')) {
+      try {
+        return new URL(baseURL).origin;
+      } catch (_e) {
+        return window.location.origin;
+      }
+    }
+    return window.location.origin;
+  };
+
+  const resolveAssetUrl = (url: string) => {
+    if (!url) return url;
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    if (url.startsWith('/')) return `${getBackendOrigin()}${url}`;
+    return url;
+  };
+
+  const withCacheBust = (url: string) => {
+    const u = url || '';
+    if (!u) return u;
+    const hasQuery = u.includes('?');
+    const sep = hasQuery ? '&' : '?';
+    return `${u}${sep}t=${Date.now()}`;
+  };
+
   useEffect(() => {
     loadClientes();
   }, []);
@@ -70,7 +97,8 @@ export default function ClientsHome() {
         return;
       }
 
-      const updated = { ...logoOverrides, [clientId]: url };
+      const finalUrl = withCacheBust(resolveAssetUrl(url));
+      const updated = { ...logoOverrides, [clientId]: finalUrl };
       setLogoOverrides(updated);
       try {
         localStorage.setItem('clientLogos', JSON.stringify(updated));
@@ -291,7 +319,7 @@ export default function ClientsHome() {
                   <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xl font-bold overflow-hidden">
                     {logoOverrides[cliente.id] || cliente.avatarUrl ? (
                       <img
-                        src={logoOverrides[cliente.id] || (cliente.avatarUrl as string)}
+                        src={withCacheBust(resolveAssetUrl(logoOverrides[cliente.id] || (cliente.avatarUrl as string)))}
                         alt={cliente.nome}
                         className="w-full h-full object-cover"
                       />

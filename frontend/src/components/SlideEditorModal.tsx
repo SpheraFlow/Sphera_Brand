@@ -33,6 +33,33 @@ export default function SlideEditorModal({
   slideData,
   onSave
 }: SlideEditorModalProps) {
+  const getBackendOrigin = () => {
+    const baseURL = (import.meta as any)?.env?.VITE_API_URL;
+    if (typeof baseURL === 'string' && baseURL.startsWith('http')) {
+      try {
+        return new URL(baseURL).origin;
+      } catch (_e) {
+        return window.location.origin;
+      }
+    }
+    return window.location.origin;
+  };
+
+  const resolveAssetUrl = (url: string) => {
+    if (!url) return url;
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    if (url.startsWith('/')) return `${getBackendOrigin()}${url}`;
+    return url;
+  };
+
+  const withCacheBust = (url: string) => {
+    const u = url || '';
+    if (!u) return u;
+    const hasQuery = u.includes('?');
+    const sep = hasQuery ? '&' : '?';
+    return `${u}${sep}t=${Date.now()}`;
+  };
+
   const [blocks, setBlocks] = useState<TextBlock[]>(() => {
     // Inicializar blocos baseado no tipo de slide
     const initialBlocks: TextBlock[] = [];
@@ -79,15 +106,15 @@ export default function SlideEditorModal({
       initialBlocks.push({
         id: 'subtitulo',
         content: slideData.subtitulo,
-        x: l?.x ?? 100,
-        y: l?.y ?? 600,
-        width: l?.width ?? 700,
-        height: l?.height ?? 90,
-        fontSize: l?.fontSize ?? 28,
+        x: l?.x ?? 174,
+        y: l?.y ?? 636,
+        width: l?.width ?? 900,
+        height: l?.height ?? 120,
+        fontSize: l?.fontSize ?? 22,
         color: l?.color ?? '#FFFFFF',
-        fontWeight: l?.fontWeight ?? 'normal',
+        fontWeight: l?.fontWeight ?? 'bold',
         align: l?.align ?? 'left',
-        fontFamily: l?.fontFamily ?? 'Lato',
+        fontFamily: l?.fontFamily ?? 'PoppinsBold',
         shadow: l?.shadow ?? true
       });
     }
@@ -99,11 +126,11 @@ export default function SlideEditorModal({
       initialBlocks.push({
         id: 'texto',
         content: slideData.texto || slideData.texto_longo,
-        x: l?.x ?? 1050,
-        y: l?.y ?? 200,
-        width: l?.width ?? 780,
-        height: l?.height ?? 780,
-        fontSize: l?.fontSize ?? 24,
+        x: l?.x ?? 936,
+        y: l?.y ?? 147,
+        width: l?.width ?? 900,
+        height: l?.height ?? 850,
+        fontSize: l?.fontSize ?? 22,
         color: l?.color ?? '#FFFFFF',
         fontWeight: l?.fontWeight ?? 'normal',
         align: l?.align ?? 'left',
@@ -117,14 +144,14 @@ export default function SlideEditorModal({
       initialBlocks.push({
         id: 'frase',
         content: slideData.frase,
-        x: l?.x ?? 960,
-        y: l?.y ?? 450,
-        width: l?.width ?? 1200,
-        height: l?.height ?? 260,
-        fontSize: l?.fontSize ?? 75,
+        x: l?.x ?? 223,
+        y: l?.y ?? 505,
+        width: l?.width ?? 1500,
+        height: l?.height ?? 120,
+        fontSize: l?.fontSize ?? 70,
         color: l?.color ?? '#0095FF',
         fontWeight: l?.fontWeight ?? 'bold',
-        align: l?.align ?? 'center',
+        align: l?.align ?? 'left',
         fontFamily: l?.fontFamily ?? 'PoppinsBold',
         shadow: l?.shadow ?? true
       });
@@ -194,8 +221,8 @@ export default function SlideEditorModal({
         content: slideData.mes || '',
         x: mesLayout?.x ?? 187,
         y: mesLayout?.y ?? 584,
-        width: mesLayout?.width ?? 700,
-        height: mesLayout?.height ?? 90,
+        width: mesLayout?.width ?? 980,
+        height: mesLayout?.height ?? 120,
         fontSize: mesLayout?.fontSize ?? 32,
         color: mesLayout?.color ?? '#FFFFFF',
         fontWeight: mesLayout?.fontWeight ?? 'normal',
@@ -482,10 +509,10 @@ export default function SlideEditorModal({
                         cursor: draggingId === block.id ? 'grabbing' : 'grab',
                         userSelect: 'none',
                         whiteSpace: 'pre-wrap',
-                        overflow: 'hidden',
+                        overflow: block.kind === 'logo' ? 'hidden' : 'visible',
                         textShadow: block.shadow === false ? 'none' : '2px 2px 4px rgba(0,0,0,0.8)',
                         border: selectedBlockId === block.id ? '2px dashed #0095FF' : '2px dashed transparent',
-                        padding: '8px',
+                        padding: block.kind === 'logo' ? '0px' : '2px',
                         transition: draggingId ? 'none' : 'all 0.2s',
                       }}
                       className="hover:bg-blue-500/10"
@@ -509,7 +536,7 @@ export default function SlideEditorModal({
                       {block.kind === 'logo' ? (
                         (slideData?.logo_url ? (
                           <img
-                            src={slideData.logo_url}
+                            src={withCacheBust(resolveAssetUrl(slideData.logo_url))}
                             alt="Logo"
                             className="w-full h-full object-contain pointer-events-none"
                             draggable={false}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import api from '../services/api';
 import { useParams } from 'react-router-dom';
 import VisualSlideEditor from './VisualSlideEditor';
@@ -46,6 +46,10 @@ export default function PresentationGenerator() {
   const [tempFiles, setTempFiles] = useState<string[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+
+  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
+  const [periodMode, setPeriodMode] = useState<'ultimo' | 'selecionar'>('ultimo');
 
   const getBackendOrigin = () => {
     const baseURL = (api as any)?.defaults?.baseURL;
@@ -128,11 +132,38 @@ export default function PresentationGenerator() {
 
   const clamp = (value: string, max: number) => value.slice(0, max);
 
+  const fetchAvailableMonths = async () => {
+    if (!clientId) return;
+    try {
+      const res = await api.get(`/presentation/available-months/${clientId}`);
+      const months = Array.isArray(res.data?.months) ? (res.data.months as string[]) : [];
+      setAvailableMonths(months);
+    } catch (e) {
+      console.error('Erro ao buscar meses disponíveis:', e);
+      setAvailableMonths([]);
+    }
+  };
+
+  useEffect(() => {
+    if (!clientId) return;
+    if (periodMode !== 'selecionar') return;
+    if (availableMonths.length > 0) return;
+    fetchAvailableMonths();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, periodMode]);
+
+  useEffect(() => {
+    if (periodMode !== 'selecionar') {
+      setSelectedMonths([]);
+    }
+  }, [periodMode]);
+
   const handleAiFill = async () => {
     if (!clientId) return alert("Cliente não identificado");
     try {
       setAiLoading(true);
-      const res = await api.post('/presentation/generate-content', { clienteId: clientId });
+      const months = periodMode === 'selecionar' ? selectedMonths : [];
+      const res = await api.post('/presentation/generate-content', { clienteId: clientId, months });
       
       if (res.data.success && res.data.content) {
         const c = res.data.content;
@@ -182,6 +213,7 @@ export default function PresentationGenerator() {
 
       const payload = {
         clienteId: clientId,
+        months: periodMode === 'selecionar' ? selectedMonths : [],
         defesa,
         grid,
         slogan,
@@ -359,6 +391,7 @@ export default function PresentationGenerator() {
       const logoUrl = getClientLogoOverrideUrl();
       const payload = {
         clienteId: clientId,
+        months: periodMode === 'selecionar' ? selectedMonths : [],
         defesa: editingSlide.index === 0 ? updatedData : defesa,
         grid: editingSlide.index === 1 ? updatedData : grid,
         slogan: editingSlide.index === 2 ? updatedData : slogan,
@@ -432,6 +465,89 @@ export default function PresentationGenerator() {
               💾 Salvar Versão
               </button>
             )}
+        </div>
+      </div>
+
+      <div className="mb-6 bg-gray-900 rounded-lg p-4 border border-gray-700">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-bold text-white">Período da geração</h3>
+            <p className="text-xs text-gray-400 mt-1">
+              Define qual calendário será usado como base para a IA e para o período exibido.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-3">
+              <label className="flex items-center gap-2 text-sm text-gray-200">
+                <input
+                  type="radio"
+                  name="periodMode"
+                  value="ultimo"
+                  checked={periodMode === 'ultimo'}
+                  onChange={() => setPeriodMode('ultimo')}
+                />
+                Último calendário
+              </label>
+
+              <label className="flex items-center gap-2 text-sm text-gray-200">
+                <input
+                  type="radio"
+                  name="periodMode"
+                  value="selecionar"
+                  checked={periodMode === 'selecionar'}
+                  onChange={() => {
+                    setPeriodMode('selecionar');
+                    fetchAvailableMonths();
+                  }}
+                />
+                Selecionar meses
+              </label>
+            </div>
+
+            {periodMode === 'selecionar' && (
+              <div className="bg-gray-800 rounded-lg p-3 border border-gray-700">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-300 font-bold">Meses disponíveis</span>
+                  <button
+                    type="button"
+                    onClick={fetchAvailableMonths}
+                    className="text-xs text-blue-400 hover:text-blue-300 font-bold"
+                  >
+                    Atualizar
+                  </button>
+                </div>
+
+                {availableMonths.length === 0 ? (
+                  <div className="text-xs text-gray-400">
+                    Nenhum mês encontrado. Gere ou crie calendários primeiro.
+                  </div>
+                ) : (
+                  <div className="max-h-32 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {availableMonths.map((m) => (
+                      <label key={m} className="flex items-center gap-2 text-xs text-gray-200">
+                        <input
+                          type="checkbox"
+                          checked={selectedMonths.includes(m)}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setSelectedMonths((prev) =>
+                              checked ? Array.from(new Set([...prev, m])) : prev.filter((x) => x !== m)
+                            );
+                          }}
+                        />
+                        {m}
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                <div className="mt-2 text-[11px] text-gray-400">
+                  Selecionados: <span className="text-gray-200">{selectedMonths.length}</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
