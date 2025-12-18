@@ -18,19 +18,18 @@ const resolveClientLogoPathFromUrl = (logoUrl: unknown): string | null => {
     if (!logoUrl || typeof logoUrl !== 'string') return null;
 
     let pathname = logoUrl;
-    try {
-        if (logoUrl.startsWith('http://') || logoUrl.startsWith('https://')) {
-            pathname = new URL(logoUrl).pathname;
-        }
-    } catch {
-        pathname = logoUrl;
+    if (logoUrl.startsWith('http://') || logoUrl.startsWith('https://')) {
+        // Remover scheme + host e manter apenas o path
+        pathname = logoUrl.replace(/^https?:\/\/[^/]+/i, '');
     }
 
     const marker = '/static/client-logos/';
     const idx = pathname.lastIndexOf(marker);
     if (idx === -1) return null;
 
-    const filename = pathname.slice(idx + marker.length).split('?')[0].split('#')[0];
+    const filenamePart = pathname.slice(idx + marker.length);
+    const beforeQuery = filenamePart.split('?')[0] || '';
+    const filename = beforeQuery.split('#')[0] || '';
     if (!filename) return null;
 
     const absolutePath = path.resolve(__dirname, '../../storage/client-logos', filename);
@@ -78,7 +77,8 @@ router.post('/generate-content', async (req: Request, res: Response) => {
                 keywords: b.keywords
             };
             
-            logoPath = resolveClientLogoPathFromUrl(b.logo_url);
+            const logoUrl = (b.logo_url ?? b.logoUrl ?? b.logo ?? b.logo_path ?? b.logoPath) as unknown;
+            logoPath = resolveClientLogoPathFromUrl(logoUrl);
         }
         
         const branding = brandingData;
@@ -229,10 +229,11 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
                 const clientName = clientResult.rows?.[0]?.nome;
 
                 const brandResult = await db.query(
-                    "SELECT logo_url FROM branding WHERE cliente_id = $1 ORDER BY updated_at DESC LIMIT 1",
+                    "SELECT * FROM branding WHERE cliente_id = $1 ORDER BY updated_at DESC LIMIT 1",
                     [clienteId]
                 );
-                const logoUrl = brandResult.rows?.[0]?.logo_url;
+                const b = brandResult.rows?.[0];
+                const logoUrl = b ? (b.logo_url ?? b.logoUrl ?? b.logo ?? b.logo_path ?? b.logoPath) : null;
 
                 const logoPath = resolveClientLogoPathFromUrl(logoUrl);
 
