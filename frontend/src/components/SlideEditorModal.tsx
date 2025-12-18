@@ -13,6 +13,7 @@ interface TextBlock {
   align: 'left' | 'center' | 'right';
   fontFamily: 'PoppinsBold' | 'Lato';
   kind?: 'text' | 'logo';
+  shadow?: boolean;
 }
 
 interface SlideEditorModalProps {
@@ -57,7 +58,8 @@ export default function SlideEditorModal({
         color: l?.color ?? '#0095FF',
         fontWeight: l?.fontWeight ?? 'bold',
         align: l?.align ?? 'left',
-        fontFamily: l?.fontFamily ?? 'PoppinsBold'
+        fontFamily: l?.fontFamily ?? 'PoppinsBold',
+        shadow: l?.shadow ?? true
       });
     }
     
@@ -74,7 +76,8 @@ export default function SlideEditorModal({
         color: l?.color ?? '#FFFFFF',
         fontWeight: l?.fontWeight ?? 'normal',
         align: l?.align ?? 'left',
-        fontFamily: l?.fontFamily ?? 'Lato'
+        fontFamily: l?.fontFamily ?? 'Lato',
+        shadow: l?.shadow ?? true
       });
     }
     
@@ -108,7 +111,8 @@ export default function SlideEditorModal({
         color: l?.color ?? '#0095FF',
         fontWeight: l?.fontWeight ?? 'bold',
         align: l?.align ?? 'center',
-        fontFamily: l?.fontFamily ?? 'PoppinsBold'
+        fontFamily: l?.fontFamily ?? 'PoppinsBold',
+        shadow: l?.shadow ?? true
       });
     }
     
@@ -125,7 +129,8 @@ export default function SlideEditorModal({
         color: l?.color ?? '#FFFFFF',
         fontWeight: l?.fontWeight ?? 'normal',
         align: l?.align ?? 'center',
-        fontFamily: l?.fontFamily ?? 'Lato'
+        fontFamily: l?.fontFamily ?? 'Lato',
+        shadow: l?.shadow ?? true
       });
     }
 
@@ -155,7 +160,8 @@ export default function SlideEditorModal({
           fontWeight: l?.fontWeight ?? 'normal',
           align: l?.align ?? 'center',
           fontFamily: l?.fontFamily ?? 'Lato',
-          kind: 'text'
+          kind: 'text',
+          shadow: l?.shadow ?? true
         });
       }
     }
@@ -175,7 +181,8 @@ export default function SlideEditorModal({
         fontWeight: mesLayout?.fontWeight ?? 'normal',
         align: mesLayout?.align ?? 'left',
         fontFamily: mesLayout?.fontFamily ?? 'Lato',
-        kind: 'text'
+        kind: 'text',
+        shadow: mesLayout?.shadow ?? true
       });
 
       const nameLayout = getLayout('nome_cliente');
@@ -191,7 +198,8 @@ export default function SlideEditorModal({
         fontWeight: nameLayout?.fontWeight ?? 'normal',
         align: nameLayout?.align ?? 'left',
         fontFamily: nameLayout?.fontFamily ?? 'Lato',
-        kind: 'text'
+        kind: 'text',
+        shadow: nameLayout?.shadow ?? true
       });
 
       const logoLayout = getLayout('logo');
@@ -332,7 +340,8 @@ export default function SlideEditorModal({
       fontWeight: b.fontWeight,
       align: b.align,
       fontFamily: b.fontFamily,
-      kind: b.kind || 'text'
+      kind: b.kind || 'text',
+      shadow: b.shadow ?? true
     }));
     
     blocks.forEach((block) => {
@@ -434,7 +443,7 @@ export default function SlideEditorModal({
                         userSelect: 'none',
                         whiteSpace: 'pre-wrap',
                         overflow: 'hidden',
-                        textShadow: '2px 2px 4px rgba(0,0,0,0.8)',
+                        textShadow: block.shadow === false ? 'none' : '2px 2px 4px rgba(0,0,0,0.8)',
                         border: selectedBlockId === block.id ? '2px dashed #0095FF' : '2px dashed transparent',
                         padding: '8px',
                         transition: draggingId ? 'none' : 'all 0.2s',
@@ -484,6 +493,37 @@ export default function SlideEditorModal({
                               ✕ Cancelar (Esc)
                             </button>
                           </div>
+
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Sombra</label>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => updateBlockProperty('shadow', true)}
+                          className={`flex-1 px-3 py-2 rounded text-xs ${
+                            selectedBlock.shadow !== false ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
+                          }`}
+                        >
+                          ON
+                        </button>
+                        <button
+                          onClick={() => updateBlockProperty('shadow', false)}
+                          className={`flex-1 px-3 py-2 rounded text-xs ${
+                            selectedBlock.shadow === false ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
+                          }`}
+                        >
+                          OFF
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <button
+                        onClick={() => updateBlockProperty('content', '')}
+                        className="w-full bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-xs font-bold"
+                      >
+                        🗑️ Limpar conteúdo
+                      </button>
+                    </div>
                         </div>
                       ) : (
                         block.content

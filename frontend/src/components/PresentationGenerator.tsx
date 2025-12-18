@@ -3,6 +3,7 @@ import api from '../services/api';
 import { useParams } from 'react-router-dom';
 import VisualSlideEditor from './VisualSlideEditor';
 import SlideEditorModal from './SlideEditorModal';
+import download from 'downloadjs';
 
 interface DefenseData {
   titulo: string;
@@ -45,6 +46,36 @@ export default function PresentationGenerator() {
   const [tempFiles, setTempFiles] = useState<string[]>([]);
   const [history, setHistory] = useState<any[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+
+  const getBackendOrigin = () => {
+    const baseURL = (api as any)?.defaults?.baseURL;
+    if (typeof baseURL === 'string' && baseURL.startsWith('http')) {
+      try {
+        return new URL(baseURL).origin;
+      } catch (_e) {
+        return window.location.origin;
+      }
+    }
+    return window.location.origin;
+  };
+
+  const resolveAssetUrl = (url: string) => {
+    if (!url) return url;
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    if (url.startsWith('/')) return `${getBackendOrigin()}${url}`;
+    return url;
+  };
+
+  const getPngFilename = (imgUrl: string, fallback: string) => {
+    try {
+      const u = new URL(imgUrl, window.location.origin);
+      const raw = (u.pathname.split('/').pop() || fallback).trim();
+      return raw.toLowerCase().endsWith('.png') ? raw : `${raw}.png`;
+    } catch (_e) {
+      const raw = (imgUrl.split('?')[0].split('/').pop() || fallback).trim();
+      return raw.toLowerCase().endsWith('.png') ? raw : `${raw}.png`;
+    }
+  };
 
   // Estado dos formulários
   const [defesa, setDefesa] = useState<DefenseData>({
@@ -142,7 +173,8 @@ export default function PresentationGenerator() {
       
 
       if (response.data.success) {
-        setGeneratedImages(response.data.images);
+        const urls = (response.data.images || []).map((u: string) => resolveAssetUrl(u));
+        setGeneratedImages(urls);
         setTempFiles(response.data.tempFiles || []);
       } else {
         alert('Erro ao gerar lâminas');
@@ -187,7 +219,13 @@ export default function PresentationGenerator() {
     try {
       const res = await api.get(`/presentation/history/${clientId}`);
       if (res.data.success) {
-        setHistory(res.data.history);
+        const h = (res.data.history || []).map((item: any) => {
+          const arquivos = Array.isArray(item.arquivos)
+            ? item.arquivos.map((u: string) => resolveAssetUrl(u))
+            : [];
+          return { ...item, arquivos };
+        });
+        setHistory(h);
         setShowHistory(true);
       }
     } catch (error) {
@@ -197,19 +235,37 @@ export default function PresentationGenerator() {
 
   const handleDownload = async (imgUrl: string, filename: string) => {
     try {
-      const response = await fetch(imgUrl);
+      const finalUrl = resolveAssetUrl(imgUrl);
+      const response = await fetch(finalUrl);
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
+      download(blob, getPngFilename(finalUrl, filename), 'image/png');
     } catch (error) {
       console.error('Erro ao baixar imagem:', error);
       alert('Erro ao baixar imagem. Tente novamente.');
+    }
+  };
+
+  const handleBatchDownload = async () => {
+    if (!generatedImages.length) return;
+    try {
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+
+      await Promise.all(
+        generatedImages.map(async (imgUrl, idx) => {
+          const finalUrl = resolveAssetUrl(imgUrl);
+          const res = await fetch(finalUrl);
+          const blob = await res.blob();
+          const name = getPngFilename(finalUrl, `slide_${idx + 1}.png`);
+          zip.file(name, blob);
+        })
+      );
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      download(zipBlob, `laminas_${new Date().toISOString().slice(0, 10)}.zip`, 'application/zip');
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao baixar em lote. Tente novamente.');
     }
   };
 
@@ -379,7 +435,7 @@ export default function PresentationGenerator() {
                     </button>
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-2">
-                    {item.arquivos.map((img: string, idx: number) => (
+                    {(Array.isArray(item.arquivos) ? item.arquivos : []).map((img: string, idx: number) => (
                       <img 
                         key={idx} 
                         src={img} 
@@ -558,9 +614,19 @@ export default function PresentationGenerator() {
 
         {/* Coluna de Preview (Resultados) */}
         <div className="lg:col-span-2 bg-gray-900 rounded-xl p-6 border border-gray-800 min-h-[500px]">
-          <h3 className="text-sm font-semibold text-gray-400 mb-4 flex items-center gap-2">
-            <span>🖼️</span> Resultados Gerados
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-semibold text-gray-400 flex items-center gap-2">
+              <span>🖼️</span> Resultados Gerados
+            </h3>
+            {generatedImages.length > 0 && (
+              <button
+                onClick={handleBatchDownload}
+                className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 text-xs"
+              >
+                ⬇️⬇️ Baixar em Lote
+              </button>
+            )}
+          </div>
           
           {generatedImages.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -581,7 +647,7 @@ export default function PresentationGenerator() {
                       ✏️ Editar
                     </button>
                     <button 
-                      onClick={() => handleDownload(imgUrl, imgUrl.split('/').pop() || 'slide.png')}
+                      onClick={() => handleDownload(imgUrl, getPngFilename(imgUrl, 'slide.png'))}
                       className="bg-white text-black px-6 py-2.5 rounded-full font-bold text-sm hover:bg-gray-200 transform hover:scale-105 transition-all shadow-lg flex items-center gap-2"
                     >
                       ⬇️ Baixar

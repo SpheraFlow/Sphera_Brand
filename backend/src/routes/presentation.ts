@@ -356,7 +356,27 @@ router.get('/history/:clienteId', async (req: Request, res: Response) => {
             "SELECT * FROM presentations WHERE cliente_id = $1 ORDER BY criado_em DESC",
             [clienteId]
         );
-        res.json({ success: true, history: result.rows });
+
+        const history = result.rows.map((row: any) => {
+            let arquivos = row.arquivos;
+            let dados_json = row.dados_json;
+
+            try {
+                if (typeof arquivos === 'string') arquivos = JSON.parse(arquivos);
+            } catch (_e) {
+                // manter como está
+            }
+
+            try {
+                if (typeof dados_json === 'string') dados_json = JSON.parse(dados_json);
+            } catch (_e) {
+                // manter como está
+            }
+
+            return { ...row, arquivos, dados_json };
+        });
+
+        res.json({ success: true, history });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
     }
