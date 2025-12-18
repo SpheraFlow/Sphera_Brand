@@ -720,11 +720,14 @@ router.get("/calendars/:clientId", async (req: Request, res: Response) => {
         updatedAt: calendar.updated_at
       }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("❌ Erro ao buscar calendário:", error);
     return res.status(500).json({
       success: false,
-      error: "Erro ao buscar calendário."
+      error: "Erro ao buscar calendário.",
+      ...(process.env.NODE_ENV !== "production" && error?.message
+        ? { details: error.message }
+        : {})
     });
   }
 });

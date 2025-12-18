@@ -78,6 +78,7 @@ CREATE TABLE calendarios (
   dias JSONB,  -- Opcional: usado para formato legado
   metadata JSONB,
   criado_em TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW(),
   CONSTRAINT fk_cliente_calendario FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
 );
 
