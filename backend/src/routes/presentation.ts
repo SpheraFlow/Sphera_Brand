@@ -14,6 +14,30 @@ const CONTENT_FILE = path.join(GEN_DIR, 'content.json');
 const SCRIPT_FILE = path.join(GEN_DIR, 'main.py');
 const OUTPUT_DIR = path.join(GEN_DIR, 'output');
 
+const resolveClientLogoPathFromUrl = (logoUrl: unknown): string | null => {
+    if (!logoUrl || typeof logoUrl !== 'string') return null;
+
+    let pathname = logoUrl;
+    try {
+        if (logoUrl.startsWith('http://') || logoUrl.startsWith('https://')) {
+            pathname = new URL(logoUrl).pathname;
+        }
+    } catch {
+        pathname = logoUrl;
+    }
+
+    const marker = '/static/client-logos/';
+    const idx = pathname.lastIndexOf(marker);
+    if (idx === -1) return null;
+
+    const filename = pathname.slice(idx + marker.length).split('?')[0].split('#')[0];
+    if (!filename) return null;
+
+    const absolutePath = path.resolve(__dirname, '../../storage/client-logos', filename);
+    if (!fs.existsSync(absolutePath)) return null;
+    return absolutePath;
+};
+
 // ROTA NOVA: Gerar conteúdo com IA baseado no calendário
 router.post('/generate-content', async (req: Request, res: Response) => {
     try {
@@ -54,15 +78,7 @@ router.post('/generate-content', async (req: Request, res: Response) => {
                 keywords: b.keywords
             };
             
-            // Tentar resolver caminho da logo
-            // Assumindo que a logo esteja em b.logo_url (ex: /static/client-logos/arquivo.png)
-            if (b.logo_url) {
-                const relativePath = b.logo_url.replace('/static/client-logos/', '');
-                const absolutePath = path.resolve(__dirname, '../../storage/client-logos', relativePath);
-                if (fs.existsSync(absolutePath)) {
-                    logoPath = absolutePath;
-                }
-            }
+            logoPath = resolveClientLogoPathFromUrl(b.logo_url);
         }
         
         const branding = brandingData;
@@ -218,14 +234,7 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
                 );
                 const logoUrl = brandResult.rows?.[0]?.logo_url;
 
-                let logoPath: string | null = null;
-                if (logoUrl && typeof logoUrl === 'string') {
-                    const relativePath = logoUrl.replace('/static/client-logos/', '');
-                    const absolutePath = path.resolve(__dirname, '../../storage/client-logos', relativePath);
-                    if (fs.existsSync(absolutePath)) {
-                        logoPath = absolutePath;
-                    }
-                }
+                const logoPath = resolveClientLogoPathFromUrl(logoUrl);
 
                 if (data.planner && clientName) {
                     data.planner.nome_cliente = clientName;

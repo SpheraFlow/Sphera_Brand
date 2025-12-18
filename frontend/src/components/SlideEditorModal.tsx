@@ -37,6 +37,10 @@ export default function SlideEditorModal({
     // Inicializar blocos baseado no tipo de slide
     const initialBlocks: TextBlock[] = [];
 
+    const isPlannerSlide =
+      (slideName || '').toLowerCase().includes('planner') ||
+      (slideData?.mes !== undefined && slideData?.nome_cliente !== undefined);
+
     const layoutList = Array.isArray(slideData?.layout) ? slideData.layout : [];
     const layoutById = new Map<string, any>();
     layoutList.forEach((l: any) => {
@@ -45,7 +49,7 @@ export default function SlideEditorModal({
 
     const getLayout = (id: string) => layoutById.get(id);
 
-    if (slideData.titulo) {
+    if (!isPlannerSlide && slideData.titulo) {
       const l = getLayout('titulo');
       initialBlocks.push({
         id: 'titulo',
@@ -176,13 +180,13 @@ export default function SlideEditorModal({
     }
 
     // Planner: mes, nome_cliente e caixa da logo
-    if (slideData.nome_cliente !== undefined || slideData.logo_path !== undefined) {
+    if (isPlannerSlide) {
       const mesLayout = getLayout('mes');
       initialBlocks.push({
         id: 'mes',
         content: slideData.mes || '',
-        x: mesLayout?.x ?? 100,
-        y: mesLayout?.y ?? 520,
+        x: mesLayout?.x ?? 187,
+        y: mesLayout?.y ?? 584,
         width: mesLayout?.width ?? 700,
         height: mesLayout?.height ?? 90,
         fontSize: mesLayout?.fontSize ?? 32,
@@ -198,15 +202,15 @@ export default function SlideEditorModal({
       initialBlocks.push({
         id: 'nome_cliente',
         content: slideData.nome_cliente || '',
-        x: nameLayout?.x ?? 100,
-        y: nameLayout?.y ?? 950,
+        x: nameLayout?.x ?? 210,
+        y: nameLayout?.y ?? 696,
         width: nameLayout?.width ?? 700,
         height: nameLayout?.height ?? 80,
-        fontSize: nameLayout?.fontSize ?? 24,
-        color: nameLayout?.color ?? '#FFFFFF',
-        fontWeight: nameLayout?.fontWeight ?? 'normal',
+        fontSize: nameLayout?.fontSize ?? 32,
+        color: nameLayout?.color ?? '#0095FF',
+        fontWeight: nameLayout?.fontWeight ?? 'bold',
         align: nameLayout?.align ?? 'left',
-        fontFamily: nameLayout?.fontFamily ?? 'Lato',
+        fontFamily: nameLayout?.fontFamily ?? 'PoppinsBold',
         kind: 'text',
         shadow: nameLayout?.shadow ?? true
       });
@@ -215,8 +219,8 @@ export default function SlideEditorModal({
       initialBlocks.push({
         id: 'logo',
         content: '',
-        x: logoLayout?.x ?? 120,
-        y: logoLayout?.y ?? 390,
+        x: logoLayout?.x ?? 1241,
+        y: logoLayout?.y ?? 533,
         width: logoLayout?.width ?? 300,
         height: logoLayout?.height ?? 300,
         fontSize: 12,
@@ -344,6 +348,10 @@ export default function SlideEditorModal({
     // Atualizar slideData com novos textos
     const updatedSlideData = { ...slideData };
 
+    const isPlannerSlide =
+      (slideName || '').toLowerCase().includes('planner') ||
+      (slideData?.mes !== undefined && slideData?.nome_cliente !== undefined);
+
     const blockIds = new Set(blocks.map((b) => b.id));
 
     // Persistir layout para o Python respeitar posição/tamanho/fonte
@@ -373,7 +381,7 @@ export default function SlideEditorModal({
     });
 
     // Se o bloco foi removido, limpar o campo correspondente para não ser re-renderizado
-    if (!blockIds.has('titulo')) updatedSlideData.titulo = '';
+    if (!isPlannerSlide && !blockIds.has('titulo')) updatedSlideData.titulo = '';
     if (!blockIds.has('subtitulo')) updatedSlideData.subtitulo = '';
     if (!blockIds.has('texto')) updatedSlideData.texto_longo = '';
     if (!blockIds.has('frase')) updatedSlideData.frase = '';

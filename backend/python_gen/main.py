@@ -375,7 +375,7 @@ def render_planner(data, output_name):
     layout = _layout_by_id(data.get('layout'))
 
     font_month = load_font('lato-regular.ttf', 32)
-    font_client = load_font('lato-regular.ttf', 24)
+    font_client = load_font('poppins-bold.ttf', 32)
     
     # Mês abaixo do título existente
     mes = data.get('mes', '')
@@ -385,7 +385,7 @@ def render_planner(data, output_name):
             font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 32)))
             draw.text((float(b.get('x', 100)), float(b.get('y', 520))), mes.upper(), font=font, fill=b.get('color', '#FFFFFF'))
         else:
-            draw.text((100, 520), mes.upper(), font=font_month, fill=COLOR_WHITE)
+            draw.text((187, 584), mes.upper(), font=font_month, fill=COLOR_WHITE)
     
     # Nome do cliente
     nome_cliente = data.get('nome_cliente', '')
@@ -395,7 +395,7 @@ def render_planner(data, output_name):
             font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 24)))
             draw.text((float(b.get('x', 100)), float(b.get('y', 950))), nome_cliente, font=font, fill=b.get('color', '#FFFFFF'))
         else:
-            draw.text((100, 950), nome_cliente, font=font_client, fill=COLOR_WHITE)
+            draw.text((210, 696), nome_cliente, font=font_client, fill=COLOR_BLUE)
     
     # Logo do Cliente
     logo_path = data.get('logo_path')
@@ -419,8 +419,8 @@ def render_planner(data, output_name):
             else:
                 logo.thumbnail((300, 300), Image.Resampling.LANCZOS)
                 # Default: esquerda (meio)
-                logo_x = 120
-                logo_y = 390
+                logo_x = 1241
+                logo_y = 533
 
             img.paste(logo, (logo_x, logo_y), logo)
         except Exception as e:
