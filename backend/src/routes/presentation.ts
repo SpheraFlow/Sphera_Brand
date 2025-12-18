@@ -191,7 +191,17 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
         // 2. Rodar Python
         // Comando: python main.py
         // cwd é importante para o script achar templates/fonts relativos a ele
-        exec(`python "${SCRIPT_FILE}"`, { cwd: GEN_DIR }, (error, stdout, stderr) => {
+        const pythonBin = process.env.PYTHON_BIN || "python3";
+        if (!fs.existsSync(SCRIPT_FILE)) {
+            res.status(500).json({
+                success: false,
+                error: 'Script Python não encontrado',
+                details: SCRIPT_FILE
+            });
+            return;
+        }
+
+        exec(`${pythonBin} "${SCRIPT_FILE}"`, { cwd: GEN_DIR }, (error, stdout, stderr) => {
             if (error) {
                 console.error(`❌ [PRESENTATION] Erro ao executar Python: ${error.message}`);
                 console.error(`❌ [PRESENTATION] Stderr: ${stderr}`);
