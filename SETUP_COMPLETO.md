@@ -29,8 +29,8 @@ PORT=3001
 DB_HOST=localhost
 DB_PORT=5432
 DB_NAME=app_db
-DB_USER=
-DB_PASSWORD=
+DB_USER=spheraflow
+DB_PASSWORD=@Trafego123
 
 # Upload
 UPLOAD_DIR=./uploads
@@ -90,8 +90,8 @@ docker exec -it postgres psql -U spheraflow -d app_db
 - Host: localhost
 - Porta: 5432
 - Database: app_db
-- User: 
-- Password: 
+- User: spheraflow
+- Password: @Trafego123
 
 ---
 

@@ -209,43 +209,37 @@ export default function PresentationGenerator() {
     }
   };
 
-  const handleOpenEditor = (imgUrl: string, index: number) => {
+  const handleOpenEditor = (imgUrl: string, _index: number) => {
     // Extrair nome do arquivo para identificar o tipo
     // Ex: /presentation-output/01_defesa.png -> defesa
     const filename = imgUrl.split('/').pop() || '';
     
-    let type = '';
     let templateName = '';
     let slideName = '';
     let data = {};
     let realIndex = 0;
 
     if (filename.includes('defesa')) {
-        type = 'defesa';
         templateName = 'defesa_da_campanha';
         slideName = 'Defesa';
         data = defesa;
         realIndex = 0;
     } else if (filename.includes('metas')) {
-        type = 'grid';
         templateName = 'metas';
         slideName = 'Metas';
         data = grid;
         realIndex = 1;
     } else if (filename.includes('slogan')) {
-        type = 'slogan';
         templateName = 'slogan';
         slideName = 'Slogan';
         data = slogan;
         realIndex = 2;
     } else if (filename.includes('desafios')) {
-        type = 'desafios';
         templateName = 'novos_desafios';
         slideName = 'Desafios';
         data = desafios;
         realIndex = 3;
     } else if (filename.includes('planner')) {
-        type = 'planner';
         templateName = 'planner_trimestral';
         slideName = 'Planner';
         data = planner;
@@ -262,7 +256,7 @@ export default function PresentationGenerator() {
     });
   };
 
-  const handleSaveSlideEdit = async (blocks: any[], updatedData: any) => {
+  const handleSaveSlideEdit = async (_blocks: any[], updatedData: any) => {
     if (!editingSlide) return;
     
     try {
