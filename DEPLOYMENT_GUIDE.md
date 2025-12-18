@@ -252,6 +252,8 @@ server {
     listen 80;
     server_name SEU_DOMINIO.com www.SEU_DOMINIO.com;
 
+    client_max_body_size 20m;
+
     # Frontend
     location / {
         root /var/www/mvp-system/frontend/dist;

@@ -153,6 +153,8 @@ server {
     listen 80;
     server_name _;
 
+    client_max_body_size 20m;
+
     # Frontend
     location / {
         root /var/www/mvp-system/frontend/dist;
