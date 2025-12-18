@@ -81,20 +81,23 @@ export default function SlideEditorModal({
       });
     }
     
-    if (slideData.texto || slideData.texto_longo) {
+    const isDesafiosSlide = Array.isArray(slideData.itens);
+
+    if (!isDesafiosSlide && (slideData.texto || slideData.texto_longo)) {
       const l = getLayout('texto');
       initialBlocks.push({
         id: 'texto',
         content: slideData.texto || slideData.texto_longo,
         x: l?.x ?? 1050,
         y: l?.y ?? 200,
-        width: l?.width ?? 750,
-        height: l?.height ?? 650,
-        fontSize: l?.fontSize ?? 26,
+        width: l?.width ?? 780,
+        height: l?.height ?? 780,
+        fontSize: l?.fontSize ?? 24,
         color: l?.color ?? '#FFFFFF',
         fontWeight: l?.fontWeight ?? 'normal',
         align: l?.align ?? 'left',
-        fontFamily: l?.fontFamily ?? 'Lato'
+        fontFamily: l?.fontFamily ?? 'Lato',
+        shadow: l?.shadow ?? true
       });
     }
     
@@ -134,25 +137,31 @@ export default function SlideEditorModal({
       });
     }
 
-    // Desafios: 9 itens em grid 3x3
+    // Desafios: 9 itens em grid (posições específicas)
     if (Array.isArray(slideData.itens)) {
       const items: string[] = slideData.itens;
-      const startX = 1150;
-      const startY = 300;
-      const stepX = 280;
-      const stepY = 280;
+
+      const defaultPositions = [
+        { x: 903, y: 264 },
+        { x: 1190, y: 243 },
+        { x: 1488, y: 249 },
+        { x: 915, y: 487 },
+        { x: 1197, y: 489 },
+        { x: 1479, y: 476 },
+        { x: 938, y: 684 },
+        { x: 1212, y: 680 },
+        { x: 1486, y: 680 }
+      ];
 
       for (let i = 0; i < 9; i++) {
-        const row = Math.floor(i / 3);
-        const col = i % 3;
         const id = `item-${i}`;
         const l = getLayout(id);
 
         initialBlocks.push({
           id,
           content: items[i] || '',
-          x: l?.x ?? startX + (col * stepX),
-          y: l?.y ?? startY + (row * stepY),
+          x: l?.x ?? defaultPositions[i].x,
+          y: l?.y ?? defaultPositions[i].y,
           width: l?.width ?? 280,
           height: l?.height ?? 280,
           fontSize: l?.fontSize ?? 20,
@@ -324,9 +333,18 @@ export default function SlideEditorModal({
     );
   };
 
+  const handleDeleteSelectedBlock = () => {
+    if (!selectedBlockId) return;
+    setBlocks((prev) => prev.filter((b) => b.id !== selectedBlockId));
+    setSelectedBlockId(null);
+    setIsEditing(null);
+  };
+
   const handleSaveLayout = () => {
     // Atualizar slideData com novos textos
     const updatedSlideData = { ...slideData };
+
+    const blockIds = new Set(blocks.map((b) => b.id));
 
     // Persistir layout para o Python respeitar posição/tamanho/fonte
     updatedSlideData.layout = blocks.map((b) => ({
@@ -354,21 +372,26 @@ export default function SlideEditorModal({
       if (block.id === 'nome_cliente') updatedSlideData.nome_cliente = block.content;
     });
 
+    // Se o bloco foi removido, limpar o campo correspondente para não ser re-renderizado
+    if (!blockIds.has('titulo')) updatedSlideData.titulo = '';
+    if (!blockIds.has('subtitulo')) updatedSlideData.subtitulo = '';
+    if (!blockIds.has('texto')) updatedSlideData.texto_longo = '';
+    if (!blockIds.has('frase')) updatedSlideData.frase = '';
+    if (!blockIds.has('legenda')) updatedSlideData.legenda = '';
+    if (!blockIds.has('mes')) updatedSlideData.mes = '';
+    if (!blockIds.has('nome_cliente')) updatedSlideData.nome_cliente = '';
+
     // Desafios: reconstruir itens
-    const itemBlocks = blocks
-      .filter((b) => b.id.startsWith('item-'))
-      .sort((a, b) => {
-        const ai = parseInt(a.id.replace('item-', ''), 10);
-        const bi = parseInt(b.id.replace('item-', ''), 10);
-        return ai - bi;
+    const itemBlocks = blocks.filter((b) => b.id.startsWith('item-'));
+    if (Array.isArray(slideData.itens) || itemBlocks.length > 0) {
+      const fixedItems = new Array(9).fill('');
+      itemBlocks.forEach((b) => {
+        const idx = parseInt(b.id.replace('item-', ''), 10);
+        if (!Number.isNaN(idx) && idx >= 0 && idx < 9) fixedItems[idx] = b.content || '';
       });
-    if (itemBlocks.length > 0) {
-      updatedSlideData.itens = itemBlocks.map((b) => b.content || '');
-      updatedSlideData.texto = itemBlocks
-        .map((b) => (b.content || '').trim())
-        .filter(Boolean)
-        .map((t) => `• ${t}`)
-        .join('\n');
+      updatedSlideData.itens = fixedItems;
+      // Em "Novos Desafios" não usar campo texto (não gerar elemento texto)
+      if ('texto' in updatedSlideData) delete updatedSlideData.texto;
     }
     
     onSave(blocks, updatedSlideData);
@@ -493,37 +516,6 @@ export default function SlideEditorModal({
                               ✕ Cancelar (Esc)
                             </button>
                           </div>
-
-                    <div>
-                      <label className="text-xs text-gray-400 block mb-1">Sombra</label>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => updateBlockProperty('shadow', true)}
-                          className={`flex-1 px-3 py-2 rounded text-xs ${
-                            selectedBlock?.shadow !== false ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
-                          }`}
-                        >
-                          ON
-                        </button>
-                        <button
-                          onClick={() => updateBlockProperty('shadow', false)}
-                          className={`flex-1 px-3 py-2 rounded text-xs ${
-                            selectedBlock?.shadow === false ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
-                          }`}
-                        >
-                          OFF
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <button
-                        onClick={() => updateBlockProperty('content', '')}
-                        className="w-full bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-xs font-bold"
-                      >
-                        🗑️ Limpar conteúdo
-                      </button>
-                    </div>
                         </div>
                       ) : (
                         block.content
@@ -578,6 +570,37 @@ export default function SlideEditorModal({
                         <option value="PoppinsBold">Poppins Bold</option>
                         <option value="Lato">Lato</option>
                       </select>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Sombra</label>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => updateBlockProperty('shadow', true)}
+                          className={`flex-1 px-3 py-2 rounded text-xs ${
+                            selectedBlock.shadow !== false ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
+                          }`}
+                        >
+                          ON
+                        </button>
+                        <button
+                          onClick={() => updateBlockProperty('shadow', false)}
+                          className={`flex-1 px-3 py-2 rounded text-xs ${
+                            selectedBlock.shadow === false ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
+                          }`}
+                        >
+                          OFF
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <button
+                        onClick={handleDeleteSelectedBlock}
+                        className="w-full bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-xs font-bold"
+                      >
+                        🗑️ Excluir elemento
+                      </button>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
