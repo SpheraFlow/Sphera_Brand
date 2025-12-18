@@ -205,17 +205,38 @@ def render_desafios(data, output_name):
     font_item = load_font('lato-regular.ttf', 20)
     
     # Grid 3x3 (APENAS lado direito)
+    # IMPORTANTE: preservar índices 0..8 (mesmo que alguns itens estejam vazios)
     items = data.get('itens', data.get('items', []))
     if isinstance(items, str):
-        items = [line.strip('• ').strip() for line in items.split('\n') if line.strip()]
-    items = [item.strip() for item in items if item.strip()]
-    
-    # Coordenadas do Grid (280x280px por box)
-    # Ajuste fino das coordenadas baseado no visual do template
-    start_x = 1150
-    start_y = 300
-    step_x = 280
-    step_y = 280
+        parsed = [line.strip('• ').strip() for line in items.split('\n')]
+        items = parsed
+
+    if not isinstance(items, list):
+        items = []
+
+    # Normalizar para exatamente 9 itens
+    normalized = []
+    for i in range(9):
+        try:
+            v = items[i]
+        except Exception:
+            v = ''
+        v = (str(v) if v is not None else '').strip()
+        normalized.append(v)
+    items = normalized
+
+    # Coordenadas dos boxes (top-left) conforme referência do template
+    default_positions = [
+        (903, 264),
+        (1190, 243),
+        (1488, 249),
+        (915, 487),
+        (1197, 489),
+        (1479, 476),
+        (938, 684),
+        (1212, 680),
+        (1486, 680),
+    ]
     
     # Índices de fundo branco (texto preto) - Verificar visualmente o template depois se possível
     # Assumindo padrão xadrez ou similar
@@ -223,7 +244,7 @@ def render_desafios(data, output_name):
     
     # Se existir layout vindo do editor, usar ele (ids item-0..item-8)
     if layout:
-        for i in range(min(9, len(items))):
+        for i in range(9):
             b = layout.get(f'item-{i}')
             if not b:
                 continue
@@ -276,22 +297,20 @@ def render_desafios(data, output_name):
         print(f"[OK] Gerado: {output_name}")
         return
 
-    for row in range(3):
-        for col in range(3):
-            idx = row * 3 + col
-            if idx >= len(items):
-                break
-            
-            cx = start_x + (col * step_x)
-            cy = start_y + (row * step_y)
-            text = items[idx]
-            
-            # Lógica de contraste
-            text_color = COLOR_BLACK if idx in white_bg_indices else COLOR_WHITE
-            
-            # Centralizar texto no box com wrap
-            # Limitador (até 4 linhas) no fallback também
-            draw_text_wrapped(draw, text, font_item, text_color, cx, cy - 40, 240, line_spacing=8, align='center', max_lines=4)
+    for idx in range(9):
+        x, y = default_positions[idx]
+        box_w = 280
+        box_h = 280
+        cx = x + box_w / 2
+        cy = y + box_h / 2
+        text = items[idx]
+
+        # Lógica de contraste
+        text_color = COLOR_BLACK if idx in white_bg_indices else COLOR_WHITE
+
+        # Centralizar texto no box com wrap
+        # Limitador (até 4 linhas) no fallback também
+        draw_text_wrapped(draw, text, font_item, text_color, cx, cy - 40, 240, line_spacing=8, align='center', max_lines=4)
     
     img.save(os.path.join(OUTPUT_DIR, output_name))
     print(f"[OK] Gerado: {output_name}")
