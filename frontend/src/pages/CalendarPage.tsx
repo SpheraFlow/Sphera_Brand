@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ContentMixSelector from '../components/ContentMixSelector';
 import PhotoIdeasModal from '../components/PhotoIdeasModal';
