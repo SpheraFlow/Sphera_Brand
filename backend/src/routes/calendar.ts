@@ -1063,9 +1063,14 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     const year = "2026";
 
     // 2. Preparar caminhos
-    const pythonScript = path.join(__dirname, "../../python_gen/calendar_to_excel.py");
-    const templatePath = path.join(__dirname, "../../calendario/modelo final.xlsx");
-    const outputDir = path.join(__dirname, "../../calendario/output");
+    // Em produção o backend roda com cwd em /var/www/mvp-system/backend
+    // O template fica em /var/www/mvp-system/calendario
+    const backendDir = process.cwd();
+    const projectDir = path.resolve(backendDir, "..");
+
+    const pythonScript = path.resolve(backendDir, "python_gen", "calendar_to_excel.py");
+    const templatePath = path.resolve(projectDir, "calendario", "modelo final.xlsx");
+    const outputDir = path.resolve(projectDir, "calendario", "output");
     const outputFileName = `${clientName || 'Cliente'}_${monthName.replace(/\s+/g, '_')}.xlsx`;
     const outputPath = path.join(outputDir, outputFileName);
 
