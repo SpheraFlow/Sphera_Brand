@@ -1143,7 +1143,7 @@ router.post("/export-excel", async (req: Request, res: Response) => {
 
   } catch (error: any) {
     console.error("❌ [ERRO FATAL] Erro ao exportar Excel:", error);
-    res.status(500).json({ 
+    return res.status(500).json({ 
       error: "Falha interna ao exportar Excel.", 
       details: error.message 
     });
