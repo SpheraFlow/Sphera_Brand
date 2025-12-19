@@ -35,7 +35,12 @@ export default function ClientsHome() {
   const navigate = useNavigate();
 
   const getBackendOrigin = () => {
-    const baseURL = (import.meta as any)?.env?.VITE_API_URL;
+    const fromAxios = (api as any)?.defaults?.baseURL;
+    const baseURL =
+      (typeof fromAxios === 'string' && fromAxios ? fromAxios : undefined) ||
+      (import.meta as any)?.env?.VITE_API_BASE_URL ||
+      (import.meta as any)?.env?.VITE_API_URL;
+
     if (typeof baseURL === 'string' && baseURL.startsWith('http')) {
       try {
         return new URL(baseURL).origin;
@@ -43,6 +48,8 @@ export default function ClientsHome() {
         return window.location.origin;
       }
     }
+
+    // Quando baseURL é relativo (ex: '/api'), a origem é a mesma do frontend.
     return window.location.origin;
   };
 
@@ -50,6 +57,10 @@ export default function ClientsHome() {
     if (!url) return url;
     if (url.startsWith('http://') || url.startsWith('https://')) return url;
     if (url.startsWith('/')) return `${getBackendOrigin()}${url}`;
+    if (url.startsWith('static/')) return `${getBackendOrigin()}/${url}`;
+    if (url.includes('static/client-logos/') && !url.startsWith('/')) {
+      return `${getBackendOrigin()}/${url}`;
+    }
     return url;
   };
 
@@ -59,6 +70,19 @@ export default function ClientsHome() {
     const hasQuery = u.includes('?');
     const sep = hasQuery ? '&' : '?';
     return `${u}${sep}t=${Date.now()}`;
+  };
+
+  const clearLogoOverride = (clientId: string) => {
+    setLogoOverrides((prev) => {
+      const updated = { ...prev };
+      delete updated[clientId];
+      try {
+        localStorage.setItem('clientLogos', JSON.stringify(updated));
+      } catch {
+        // ignore storage errors
+      }
+      return updated;
+    });
   };
 
   useEffect(() => {
@@ -322,6 +346,7 @@ export default function ClientsHome() {
                         src={withCacheBust(resolveAssetUrl(logoOverrides[cliente.id] || (cliente.avatarUrl as string)))}
                         alt={cliente.nome}
                         className="w-full h-full object-cover"
+                        onError={() => clearLogoOverride(cliente.id)}
                       />
                     ) : (
                       getInitials(cliente.nome)
