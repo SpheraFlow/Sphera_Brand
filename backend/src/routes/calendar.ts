@@ -1132,102 +1132,12 @@ router.put("/calendars/:calendarId/metadata", async (req: Request, res: Response
   }
 });
 
-// DELETE /api/calendars/post/:calendarId/:postIndex - Remove um post específico
-router.delete("/calendars/post/:calendarId/:postIndex", async (req: Request, res: Response) => {
-  try {
-    const { calendarId, postIndex } = req.params;
-
-    console.log(`🗑️ Removendo post ${postIndex} do calendário ${calendarId}`);
-
-    const result = await db.query(
-      "SELECT calendario_json FROM calendarios WHERE id = $1",
-      [calendarId]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: "Calendário não encontrado."
-      });
-    }
-
-    const posts = result.rows[0].calendario_json;
-    const index = parseInt(postIndex as string, 10);
-
-    if (index < 0 || index >= posts.length) {
-      return res.status(400).json({
-        success: false,
-        error: "Índice de post inválido."
-      });
-    }
-
-    // Remove o post
-    posts.splice(index, 1);
-
-    // Salvar de volta
-    await db.query(
-      `UPDATE calendarios 
-       SET calendario_json = $1, 
-           updated_at = NOW() 
-       WHERE id = $2`,
-      [JSON.stringify(posts), calendarId]
-    );
-
-    console.log("✅ Post removido com sucesso");
-
-    return res.json({
-      success: true,
-      message: "Post removido com sucesso."
-    });
-  } catch (error) {
-    console.error("❌ Erro ao remover post:", error);
-    return res.status(500).json({
-      success: false,
-      error: "Erro ao remover post."
-    });
-  }
-});
-
-// Atualizar metadados do calendário (ex: Referências do Mês)
-router.put("/:id/metadata", async (req: Request, res: Response) => {
-  console.log(`📝 [DEBUG] Atualizando metadata do calendário ${req.params.id}`);
-  try {
-    const { id } = req.params;
-    const updateData = req.body; // espera { month_references: "..." }
-
-    // Buscar metadata atual
-    const currentResult = await db.query(
-      "SELECT metadata FROM calendarios WHERE id = $1",
-      [id]
-    );
-
-    if (currentResult.rows.length === 0) {
-      return res.status(404).json({ success: false, error: "Calendário não encontrado" });
-    }
-
-    const currentMetadata = currentResult.rows[0].metadata || {};
-    
-    // Merge simples (top-level)
-    const newMetadata = { ...currentMetadata, ...updateData };
-
-    await db.query(
-      "UPDATE calendarios SET metadata = $1 WHERE id = $2",
-      [newMetadata, id]
-    );
-
-    return res.json({ success: true, metadata: newMetadata });
-  } catch (error) {
-    console.error("Erro ao atualizar metadata:", error);
-    return res.status(500).json({ success: false, error: "Erro ao atualizar metadata" });
-  }
-});
-
 router.post("/calendars/export-excel", async (req: Request, res: Response): Promise<void> => {
   console.log("\n📊 [DEBUG] ROTA /export-excel ACIONADA");
   console.log("📦 [DEBUG] Payload:", JSON.stringify(req.body, null, 2));
 
   try {
-    const { calendarId, clientName } = req.body;
+    const { calendarId, clientName } = (req.body ?? {}) as { calendarId?: string; clientName?: string };
 
     if (!calendarId) {
       res.status(400).json({ error: "calendarId é obrigatório." });
@@ -1270,6 +1180,15 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     const yearMatch = String(monthLabel).match(/(\d{4})/);
     const year = yearMatch?.[1] || String(new Date().getFullYear());
 
+    const sanitizeFilePart = (value: string): string => {
+      // Remove acentos, espaços e caracteres inválidos para nome de arquivo
+      return value
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-zA-Z0-9_-]+/g, "")
+        .trim();
+    };
+
     // 2. Preparar caminhos
     // Em produção o backend roda com cwd em /var/www/mvp-system/backend
     // O template fica em /var/www/mvp-system/calendario
@@ -1279,7 +1198,9 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     const pythonScript = path.resolve(backendDir, "python_gen", "calendar_to_excel.py");
     const templatePath = path.resolve(projectDir, "calendario", "modelo final.xlsx");
     const outputDir = path.resolve(projectDir, "calendario", "output");
-    const outputFileName = `${resolvedClientName}_${String(monthLabel).replace(/\s+/g, '_')}.xlsx`;
+    const safeClient = sanitizeFilePart(resolvedClientName || "Cliente") || "Cliente";
+    const safeMonth = sanitizeFilePart(String(monthLabel).replace(/\s+/g, "_")) || "Mes";
+    const outputFileName = `${safeClient}_${safeMonth}.xlsx`;
     const outputPath = path.join(outputDir, outputFileName);
 
     // Criar diretório de saída se não existir

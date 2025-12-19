@@ -176,6 +176,11 @@ def create_fixed_structure(ws, month_label, client_name):
     """
     Cria estrutura fixa (linhas 1-8): título + legenda
     """
+    # Limpar área do cabeçalho/legenda para evitar duplicações vindas do template
+    for r in range(1, 9):
+        for c in range(1, 9):  # A..H
+            ws.cell(row=r, column=c).value = ''
+
     # Linha 1: Título
     ws['A1'] = month_label
     ws['B1'] = client_name
@@ -235,6 +240,12 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
 
     # Preencher cabeçalhos dos dias em cada semana
     for week_index, header_row in enumerate(week_start_rows):
+        # Limpar bloco inteiro (6 linhas) antes de preencher, evitando sobras do template
+        # (ex: cabeçalhos duplicados, "----" etc)
+        for r in range(header_row, header_row + 6):
+            for c in range(1, 8):  # A..G
+                ws.cell(row=r, column=c).value = ''
+
         for dow in range(7):  # 0=Dom...6=Sab
             day_num = (week_index * 7) - first_weekday_sun0 + dow + 1
             col = col_by_dow[dow]
