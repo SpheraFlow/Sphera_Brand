@@ -1081,7 +1081,7 @@ router.post("/export-excel", async (req: Request, res: Response) => {
     console.log(`  Output: ${outputPath}`);
 
     // 3. Chamar script Python
-    const pythonProcess = spawn("python", [
+    const pythonProcess = spawn("python3", [
       pythonScript,
       JSON.stringify(posts),
       templatePath,
