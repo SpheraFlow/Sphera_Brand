@@ -59,11 +59,13 @@ const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 export default function CalendarPage() {
   const { clientId } = useParams<{ clientId: string }>();
   const [calendar, setCalendar] = useState<Calendar | null>(null);
+  const [clientName, setClientName] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedPost, setSelectedPost] = useState<{ post: Post; index: number } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
+  const [periodoDias, setPeriodoDias] = useState<number>(30);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDeletingPost, setIsDeletingPost] = useState(false);
@@ -111,8 +113,22 @@ export default function CalendarPage() {
     if (clientId) {
       loadCalendar();
       loadPromptChains();
+      loadClientName();
     }
   }, [clientId, currentMonth]); // Recarregar quando o mês mudar
+
+  const loadClientName = async () => {
+    if (!clientId) return;
+    try {
+      const response = await api.get(`/clients/${clientId}`);
+      const name = response.data?.cliente?.nome;
+      if (name) {
+        setClientName(name);
+      }
+    } catch (e) {
+      // manter vazio; backend também resolve o nome
+    }
+  };
 
   const loadPromptChains = async () => {
     try {
@@ -202,14 +218,14 @@ export default function CalendarPage() {
     try {
       setIsGenerating(true);
 
-      const safeClientName = `cliente_${clientId || 'desconhecido'}`;
+      const downloadClientName = clientName || 'Cliente';
       const safeMonth = String(calendar.mes || 'mes').replace(/\s+/g, '_');
 
       const response = await api.post(
         '/calendars/export-excel',
         {
           calendarId: calendar.id,
-          clientName: safeClientName
+          clientName: downloadClientName
         },
         {
           responseType: 'blob'
@@ -220,7 +236,7 @@ export default function CalendarPage() {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Calendario_${safeClientName}_${safeMonth}.xlsx`);
+      link.setAttribute('download', `Calendario_${downloadClientName}_${safeMonth}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -240,6 +256,7 @@ export default function CalendarPage() {
     setMix({ reels: 2, static: 4, carousel: 4, stories: 2, photos: 0 });
     setBriefing('');
     setGenerationPrompt('');
+    setPeriodoDias(30);
     setShowGenerateModal(true);
   };
 
@@ -321,6 +338,7 @@ export default function CalendarPage() {
       setIsGenerating(true);
       const response = await api.post('/generate-calendar', {
         clienteId: clientId,
+        periodo: periodoDias,
         briefing,
         mes: format(currentMonth, 'MMMM yyyy', { locale: ptBR }),
         mix,
@@ -1331,6 +1349,8 @@ interface GenerateModalProps {
   setMix: (v: ContentMix) => void;
   briefing: string;
   setBriefing: (v: string) => void;
+  periodoDias: number;
+  setPeriodoDias: (v: number) => void;
   generationPrompt: string;
   setGenerationPrompt: (v: string) => void;
   formatInstructions: FormatInstructions;
@@ -1346,6 +1366,7 @@ interface GenerateModalProps {
 function GenerateModal({
   mix, setMix,
   briefing, setBriefing,
+  periodoDias, setPeriodoDias,
   generationPrompt, setGenerationPrompt,
   formatInstructions, setFormatInstructions,
   promptChains,
@@ -1362,6 +1383,18 @@ function GenerateModal({
         <h2 className="text-2xl font-bold mb-6">🚀 Gerar Calendário Editorial</h2>
 
         <div className="space-y-6 mb-6">
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">Período</label>
+            <select
+              value={String(periodoDias)}
+              onChange={(e) => setPeriodoDias(parseInt(e.target.value, 10))}
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500"
+            >
+              <option value="30">Mensal (30 dias)</option>
+              <option value="90">Trimestral (90 dias)</option>
+            </select>
+          </div>
+
           <div>
             <label className="block text-sm text-gray-400 mb-2">Mix de Conteúdo</label>
             <p className="text-xs text-gray-500 mb-4">

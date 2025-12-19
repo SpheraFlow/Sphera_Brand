@@ -18,12 +18,128 @@ const applyTemplate = (template: string, vars: Record<string, any>): string => {
   });
 };
 
+async function syncFeriadosBrasilApi(anoNum: number): Promise<void> {
+  // Fonte: BrasilAPI (sem chave): https://brasilapi.com.br/api/feriados/v1/{ano}
+  // Armazena no banco para evitar depender de rede em todas as gerações.
+  try {
+    const url = `https://brasilapi.com.br/api/feriados/v1/${anoNum}`;
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      return;
+    }
+    const data = (await resp.json()) as Array<{ date: string; name: string; type?: string }>; // date: YYYY-MM-DD
+
+    if (!Array.isArray(data) || data.length === 0) return;
+
+    for (const f of data) {
+      if (!f?.date || !f?.name) continue;
+      await db.query(
+        `INSERT INTO datas_comemorativas (data, titulo, categorias, relevancia)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (data, titulo) DO NOTHING`,
+        [f.date, f.name, JSON.stringify(["geral", "feriado"]), 10]
+      );
+    }
+  } catch (_e) {
+    // Se falhar, seguimos com fallback local
+  }
+}
+
+// POST /api/datas-comemorativas/sync?ano=2026
+// Sincroniza feriados nacionais via internet (BrasilAPI) para o banco.
+router.post("/datas-comemorativas/sync", async (req: Request, res: Response) => {
+  try {
+    const ano = parseInt(String(req.query.ano || ""), 10);
+    if (!ano || Number.isNaN(ano)) {
+      return res.status(400).json({ success: false, error: "Informe o parâmetro ?ano=YYYY" });
+    }
+
+    await syncFeriadosBrasilApi(ano);
+    return res.json({ success: true });
+  } catch (e: any) {
+    return res.status(500).json({ success: false, error: e?.message || "Erro ao sincronizar" });
+  }
+});
+
+const buildFallbackDatasResumoTexto = (mesNum: number, anoNum: number, nicheText: string) => {
+  const niche = (nicheText || "").toLowerCase();
+
+  const baseByMonth: Record<number, { day: number; title: string }[]> = {
+    1: [
+      { day: 1, title: "Confraternização Universal" },
+      { day: 30, title: "Dia da Saudade" },
+    ],
+    2: [
+      { day: 4, title: "Dia Mundial do Câncer" },
+    ],
+    3: [
+      { day: 8, title: "Dia Internacional da Mulher" },
+      { day: 20, title: "Início do Outono" },
+    ],
+    4: [
+      { day: 7, title: "Dia Mundial da Saúde" },
+      { day: 22, title: "Dia da Terra" },
+    ],
+    5: [
+      { day: 1, title: "Dia do Trabalho" },
+    ],
+    6: [
+      { day: 12, title: "Dia dos Namorados" },
+      { day: 21, title: "Início do Inverno" },
+    ],
+    7: [
+      { day: 20, title: "Dia do Amigo" },
+      { day: 26, title: "Dia dos Avós" },
+    ],
+    8: [
+      { day: 11, title: "Dia dos Pais" },
+      { day: 27, title: "Dia do Psicólogo" },
+    ],
+    9: [
+      { day: 7, title: "Independência do Brasil" },
+      { day: 23, title: "Início da Primavera" },
+    ],
+    10: [
+      { day: 12, title: "Dia das Crianças" },
+      { day: 31, title: "Halloween" },
+    ],
+    11: [
+      { day: 2, title: "Finados" },
+      { day: 15, title: "Proclamação da República" },
+    ],
+    12: [
+      { day: 24, title: "Véspera de Natal" },
+      { day: 25, title: "Natal" },
+      { day: 31, title: "Réveillon" },
+    ],
+  };
+
+  const nicheExtra: { day: number; title: string }[] = [];
+  if (niche.includes("treino") || niche.includes("academ") || niche.includes("fitness") || niche.includes("corrida") || niche.includes("esporte")) {
+    nicheExtra.push({ day: 6, title: "Dia Nacional do Esporte" });
+    nicheExtra.push({ day: 7, title: "Dia Mundial da Saúde" });
+  }
+  if (niche.includes("saúde") || niche.includes("saude") || niche.includes("clínica") || niche.includes("clinica") || niche.includes("terapia") || niche.includes("psico")) {
+    nicheExtra.push({ day: 10, title: "Dia Mundial da Saúde Mental" });
+    nicheExtra.push({ day: 27, title: "Dia Nacional de Combate ao Câncer" });
+  }
+
+  const list = [...(baseByMonth[mesNum] || []), ...nicheExtra];
+  if (list.length === 0) return "";
+
+  const monthStr = String(mesNum).padStart(2, "0");
+  return list
+    .map((d) => `- ${String(d.day).padStart(2, "0")}/${monthStr}/${anoNum}: ${d.title}`)
+    .join("\n");
+};
+
 router.post("/generate-calendar", async (req: Request, res: Response) => {
   console.log("\n🛑 [DEBUG] ROTA /generate-calendar ACIONADA");
   console.log(`📦 [DEBUG] Payload completo:`, JSON.stringify(req.body, null, 2));
 
   try {
-    const { clienteId, briefing, mes, mix, generationPrompt, chainId, formatInstructions, monthReferences } = req.body;
+    const { clienteId, briefing, mes, periodo, mix, generationPrompt, chainId, formatInstructions, monthReferences } = req.body;
+
     console.log(`➡️ [DEBUG] Cliente ID: ${clienteId}`);
     console.log(`➡️ [DEBUG] Briefing: ${briefing}`);
     if (generationPrompt) {
@@ -34,6 +150,21 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
     console.log("🔍 [DEBUG] Buscando branding...");
     const brandingResult = await db.query("SELECT * FROM branding WHERE cliente_id = $1", [clienteId]);
     let branding = brandingResult.rows[0];
+
+    // Buscar categorias/nicho do cliente (se houver)
+    let categoriasNicho: string[] = [];
+    try {
+      const clientRes = await db.query(
+        "SELECT categorias_nicho FROM clientes WHERE id = $1",
+        [clienteId]
+      );
+      const raw = clientRes.rows?.[0]?.categorias_nicho;
+      if (Array.isArray(raw)) {
+        categoriasNicho = raw.map((c: any) => String(c).trim()).filter(Boolean);
+      }
+    } catch (_e) {
+      categoriasNicho = [];
+    }
 
     if (!branding) {
       console.log("⚠️ [DEBUG] Branding não encontrado. Usando Fallback.");
@@ -124,6 +255,7 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
 
     // Calcular total de posts e validar
     const totalPosts = (mix.reels || 0) + (mix.static || 0) + (mix.carousel || 0) + (mix.stories || 0) + (mix.photos || 0);
+
     console.log(`📊 [DEBUG] Cálculo: reels=${mix.reels}, static=${mix.static}, carousel=${mix.carousel}, stories=${mix.stories}, photos=${mix.photos}, total=${totalPosts}`);
 
     if (totalPosts === 0) {
@@ -132,6 +264,8 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
     }
 
     console.log(`✅ [DEBUG] Total de posts a gerar: ${totalPosts}`);
+
+    const periodoFinal = typeof periodo === 'number' ? periodo : 30;
 
     // 1.1 Buscar datas comemorativas do mês (se mês for fornecido em formato 'MMMM yyyy')
     let datasResumoTexto = "";
@@ -174,28 +308,72 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
 
         const mesNum = mapaMeses[mesNome];
 
-        if (mesNum && anoNum) {
-          console.log(`📅 [DEBUG] Buscando datas comemorativas para ${mesNum}/${anoNum}...`);
-          const datasResult = await db.query(
-            `SELECT data, titulo, categorias, relevancia FROM datas_comemorativas
-             WHERE EXTRACT(MONTH FROM data) = $1 AND EXTRACT(YEAR FROM data) = $2
-             ORDER BY data ASC, relevancia DESC`,
-            [mesNum, anoNum]
-          );
+        const keywordsTextForNiche = Array.isArray(branding?.keywords)
+          ? branding.keywords.join(", ")
+          : branding?.keywords || "";
+        const nicheText = `${briefing || ""} ${branding.tone_of_voice || ""} ${branding.audience || ""} ${keywordsTextForNiche}`;
 
-          if (datasResult.rows.length > 0) {
-            datasResumoTexto = datasResult.rows
-              .map((d: any) => {
-                const dt = new Date(d.data);
-                const dia = dt.getDate().toString().padStart(2, "0");
-                const mesNumStr = (dt.getMonth() + 1).toString().padStart(2, "0");
-                const cats = Array.isArray(d.categorias) ? d.categorias.join(", ") : "";
-                return `- ${dia}/${mesNumStr}: ${d.titulo}${cats ? ` (categorias: ${cats})` : ""}`;
-              })
-              .join("\n");
-            console.log(`✅ [DEBUG] ${datasResult.rows.length} datas comemorativas encontradas para o mês.`);
-          } else {
-            console.log("ℹ️ [DEBUG] Nenhuma data comemorativa cadastrada para este mês.");
+        // Fallback: se o cliente não tiver nicho definido, inferir algumas categorias simples pelas keywords/briefing
+        const categoriasInferidas: string[] = [];
+        const nicheLower = nicheText.toLowerCase();
+        if (nicheLower.includes("saude") || nicheLower.includes("saúde") || nicheLower.includes("clinica") || nicheLower.includes("clínica") || nicheLower.includes("medic") || nicheLower.includes("nutri")) {
+          categoriasInferidas.push("saude");
+        }
+        if (nicheLower.includes("fitness") || nicheLower.includes("academ") || nicheLower.includes("treino") || nicheLower.includes("corrida") || nicheLower.includes("cross") || nicheLower.includes("pilates")) {
+          categoriasInferidas.push("fitness");
+        }
+        if (nicheLower.includes("kids") || nicheLower.includes("crian") || nicheLower.includes("pediatr") || nicheLower.includes("escola") || nicheLower.includes("infantil")) {
+          categoriasInferidas.push("kids");
+        }
+        if (nicheLower.includes("psico") || nicheLower.includes("terapia") || nicheLower.includes("saude mental") || nicheLower.includes("saúde mental")) {
+          categoriasInferidas.push("psicologia");
+        }
+
+        const categoriasParaBusca = Array.from(
+          new Set([
+            ...(categoriasNicho || []),
+            ...(categoriasInferidas || []),
+            "geral",
+            "feriado",
+          ])
+        ).filter(Boolean);
+
+        if (mesNum && anoNum) {
+          // 0) Melhor esforço: busca na internet (cache no banco)
+          await syncFeriadosBrasilApi(anoNum);
+
+          console.log(`📅 [DEBUG] Buscando datas comemorativas para ${mesNum}/${anoNum}...`);
+          try {
+            const whereCategorias = categoriasParaBusca.length > 0 ? "AND categorias ?| $3" : "";
+            const params: any[] = [mesNum, anoNum];
+            if (categoriasParaBusca.length > 0) params.push(categoriasParaBusca);
+
+            const datasResult = await db.query(
+              `SELECT data, titulo, categorias, relevancia FROM datas_comemorativas
+               WHERE EXTRACT(MONTH FROM data) = $1 AND EXTRACT(YEAR FROM data) = $2
+               ${whereCategorias}
+               ORDER BY data ASC, relevancia DESC`,
+              params
+            );
+
+            if (datasResult.rows.length > 0) {
+              datasResumoTexto = datasResult.rows
+                .map((d: any) => {
+                  const dt = new Date(d.data);
+                  const dia = dt.getDate().toString().padStart(2, "0");
+                  const mesNumStr = (dt.getMonth() + 1).toString().padStart(2, "0");
+                  const cats = Array.isArray(d.categorias) ? d.categorias.join(", ") : "";
+                  return `- ${dia}/${mesNumStr}/${anoNum}: ${d.titulo}${cats ? ` (categorias: ${cats})` : ""}`;
+                })
+                .join("\n");
+              console.log(`✅ [DEBUG] ${datasResult.rows.length} datas comemorativas encontradas para o mês.`);
+            }
+          } catch (dbDatasError: any) {
+            datasResumoTexto = "";
+          }
+
+          if (!datasResumoTexto) {
+            datasResumoTexto = buildFallbackDatasResumoTexto(mesNum, anoNum, nicheText);
           }
         }
       } catch (e) {
@@ -252,8 +430,10 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
 
     // 6. Montar Prompt
     console.log("🤖 [DEBUG] Montando prompt determinístico para o Gemini com DNA de marca enriquecido...");
+    const hojeISO = new Date().toISOString().slice(0, 10);
     const prompt = `
       Atue como Strategist Planner.
+
       Crie um Planejamento de Conteúdo contendo EXATAMENTE esta quantidade de posts (nem mais, nem menos):
 
       - ${mix.reels || 0} roteiros de REELS (Vídeo vertical, dinâmico).
@@ -280,8 +460,18 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
       - Stories: ${formatInstructions?.stories || 'Sem instruções adicionais para Stories.'}
       - Ideias de Fotos: ${formatInstructions?.photos || 'Para ideias de fotos, foque em conceitos visuais criativos, locações, ângulos, iluminação e mood. Seja específico e técnico para orientar fotógrafos.'}
 
-      DATAS COMEMORATIVAS RELEVANTES DO MÊS (quando disponíveis):
-      ${datasResumoTexto || 'Nenhuma data comemorativa específica cadastrada para este mês. Se fizer sentido para o contexto geral, ainda assim considere oportunidades sazonais típicas.'}
+      DATAS COMEMORATIVAS/RELEVANTES DO MÊS (use como base obrigatória):
+      ${datasResumoTexto || 'Sem lista prévia. Você DEVE levantar datas relevantes reais do mês e usá-las no planejamento.'}
+
+      DATA ATUAL (referência): ${hojeISO}
+
+      REGRA DE PRIORIZAÇÃO (muito importante):
+      - Priorize datas relevantes que ocorram nas próximas 2-3 semanas a partir da DATA ATUAL, quando isso fizer sentido para o mês alvo.
+      - Se o mês alvo não for o mês atual, priorize as datas relevantes dentro do mês alvo e distribua os posts de forma equilibrada.
+
+      REGRA OBRIGATÓRIA SOBRE DATAS:
+      - Inclua no mínimo 4 posts ancorados em datas comemorativas/relevantes reais do mês e coerentes com o nicho do cliente.
+      - O campo "tema" deve mencionar a data/evento (ex: "Janeiro Branco: ..." / "Dia Mundial da Saúde: ...").
 
       DOCUMENTOS DA MARCA (resumo de guias, posicionamento, manifesto, etc):
       ${docsResumo || 'Nenhum documento adicional cadastrado. Use apenas o DNA e o briefing acima.'}
@@ -424,7 +614,7 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
 
     const saved = await db.query(
       "INSERT INTO calendarios (cliente_id, mes, calendario_json, periodo, metadata) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-      [clienteId, mesFinal, JSON.stringify(calendarData), totalPosts, metadata]
+      [clienteId, mesFinal, JSON.stringify(calendarData), periodoFinal, metadata]
     );
 
     console.log("🎉 [SUCESSO] Calendário gerado! ID: " + saved.rows[0].id);
@@ -1032,7 +1222,6 @@ router.put("/:id/metadata", async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/calendars/export-excel - Exporta calendário para Excel
 router.post("/calendars/export-excel", async (req: Request, res: Response): Promise<void> => {
   console.log("\n📊 [DEBUG] ROTA /export-excel ACIONADA");
   console.log("📦 [DEBUG] Payload:", JSON.stringify(req.body, null, 2));
@@ -1048,7 +1237,7 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     // 1. Buscar calendário do banco
     console.log(`🔍 [DEBUG] Buscando calendário ID: ${calendarId}`);
     const result = await db.query(
-      "SELECT calendario_json, mes FROM calendarios WHERE id = $1",
+      "SELECT calendario_json, mes, cliente_id, periodo FROM calendarios WHERE id = $1",
       [calendarId]
     );
 
@@ -1059,8 +1248,27 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
 
     const calendar = result.rows[0];
     const posts = calendar.calendario_json;
-    const monthName = calendar.mes || "Janeiro"; // "Janeiro 2026" ou "Janeiro"
-    const year = "2026";
+    const monthLabel = calendar.mes || "Janeiro";
+    const periodo = calendar.periodo;
+
+    let resolvedClientName = (clientName as string) || "Cliente";
+    try {
+      if (calendar.cliente_id) {
+        const clientResult = await db.query(
+          "SELECT nome FROM clientes WHERE id = $1",
+          [calendar.cliente_id]
+        );
+        const dbName = clientResult.rows?.[0]?.nome;
+        if (dbName) {
+          resolvedClientName = dbName;
+        }
+      }
+    } catch (e) {
+      // fallback: mantém o clientName do payload
+    }
+
+    const yearMatch = String(monthLabel).match(/(\d{4})/);
+    const year = yearMatch?.[1] || String(new Date().getFullYear());
 
     // 2. Preparar caminhos
     // Em produção o backend roda com cwd em /var/www/mvp-system/backend
@@ -1071,7 +1279,7 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     const pythonScript = path.resolve(backendDir, "python_gen", "calendar_to_excel.py");
     const templatePath = path.resolve(projectDir, "calendario", "modelo final.xlsx");
     const outputDir = path.resolve(projectDir, "calendario", "output");
-    const outputFileName = `${clientName || 'Cliente'}_${monthName.replace(/\s+/g, '_')}.xlsx`;
+    const outputFileName = `${resolvedClientName}_${String(monthLabel).replace(/\s+/g, '_')}.xlsx`;
     const outputPath = path.join(outputDir, outputFileName);
 
     // Criar diretório de saída se não existir
@@ -1091,9 +1299,10 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
       JSON.stringify(posts),
       templatePath,
       outputPath,
-      clientName || "Cliente",
-      monthName.split(" ")[0], // Apenas o mês ("Janeiro")
-      year
+      resolvedClientName,
+      String(monthLabel),
+      year,
+      String(periodo || "")
     ]);
 
     let pythonOutput = "";

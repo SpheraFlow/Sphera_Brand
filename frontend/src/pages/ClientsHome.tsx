@@ -9,6 +9,7 @@ interface Cliente {
   nome: string;
   status: string;
   avatarUrl: string | null;
+  categorias_nicho?: string[];
   criado_em: string;
 }
 
@@ -25,6 +26,11 @@ export default function ClientsHome() {
   const [loading, setLoading] = useState(true);
   const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [newClientName, setNewClientName] = useState('');
+  const [showNichoModal, setShowNichoModal] = useState(false);
+  const [nichoClientId, setNichoClientId] = useState<string | null>(null);
+  const [nichoClientName, setNichoClientName] = useState<string>('');
+  const [nichoValue, setNichoValue] = useState<string>('');
+  const [savingNicho, setSavingNicho] = useState(false);
   const [calendarsOverview, setCalendarsOverview] = useState<Record<string, ClientCalendarOverview>>({});
   const [brokenLogoClients, setBrokenLogoClients] = useState<Set<string>>(() => new Set());
   const [logoOverrides, setLogoOverrides] = useState<Record<string, string>>(() => {
@@ -45,6 +51,32 @@ export default function ClientsHome() {
       next.add(clientId);
       return next;
     });
+  };
+
+  const openNichoModal = (cliente: Cliente) => {
+    setNichoClientId(cliente.id);
+    setNichoClientName(cliente.nome);
+    const current = Array.isArray(cliente.categorias_nicho) ? cliente.categorias_nicho : [];
+    setNichoValue(current.join(', '));
+    setShowNichoModal(true);
+  };
+
+  const saveNicho = async () => {
+    if (!nichoClientId) return;
+
+    try {
+      setSavingNicho(true);
+      await api.put(`/clients/${nichoClientId}`, {
+        categorias_nicho: nichoValue,
+      });
+      setShowNichoModal(false);
+      await loadClientes();
+    } catch (error: any) {
+      console.error('Erro ao salvar nicho:', error);
+      alert('Erro ao salvar nicho: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setSavingNicho(false);
+    }
   };
 
   useEffect(() => {
@@ -275,12 +307,20 @@ export default function ClientsHome() {
                 Selecione um cliente para acessar o painel
               </p>
             </div>
-            <button
-              onClick={() => setShowNewClientModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-colors"
-            >
-              + Novo Cliente
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate('/calendar')}
+                className="bg-gray-700 hover:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition-colors"
+              >
+                Calendário
+              </button>
+              <button
+                onClick={() => setShowNewClientModal(true)}
+                className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-colors"
+              >
+                + Novo Cliente
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -370,7 +410,37 @@ export default function ClientsHome() {
                     <span className="text-gray-400">
                       Criado em {new Date(cliente.criado_em).toLocaleDateString('pt-BR')}
                     </span>
+                    <button
+                      className="text-[11px] text-gray-400 hover:text-blue-300 underline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openNichoModal(cliente);
+                      }}
+                      title="Defina as categorias/nicho do cliente para filtrar datas relevantes automaticamente"
+                      type="button"
+                    >
+                      Nicho
+                    </button>
                   </div>
+
+                  {Array.isArray(cliente.categorias_nicho) && cliente.categorias_nicho.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {cliente.categorias_nicho.slice(0, 3).map((c) => (
+                        <span
+                          key={c}
+                          className="px-2 py-1 rounded-full bg-gray-700 text-gray-200 text-[11px] border border-gray-600"
+                          title="Categoria do nicho"
+                        >
+                          {c}
+                        </span>
+                      ))}
+                      {cliente.categorias_nicho.length > 3 && (
+                        <span className="px-2 py-1 rounded-full bg-gray-700 text-gray-300 text-[11px] border border-gray-600">
+                          +{cliente.categorias_nicho.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {calendarsOverview[cliente.id] && (
                     <div className="flex items-center justify-between gap-2">
@@ -434,6 +504,58 @@ export default function ClientsHome() {
                 className="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium transition-colors"
               >
                 Criar Cliente
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showNichoModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md border border-gray-700">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold">Nicho do cliente</h2>
+                <p className="text-gray-400 text-sm mt-1">{nichoClientName}</p>
+              </div>
+              <button
+                onClick={() => setShowNichoModal(false)}
+                className="text-gray-400 hover:text-white"
+                disabled={savingNicho}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-xs text-gray-400 mb-1">Categorias (separadas por vírgula)</label>
+              <input
+                type="text"
+                value={nichoValue}
+                onChange={(e) => setNichoValue(e.target.value)}
+                placeholder="Ex: saude, fitness, kids, psicologia"
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500"
+                autoFocus
+              />
+              <p className="text-gray-500 text-xs mt-2">
+                Essas categorias serão usadas para filtrar datas relevantes no Calendário Geral durante a geração.
+              </p>
+            </div>
+
+            <div className="mt-5 flex gap-3">
+              <button
+                onClick={() => setShowNichoModal(false)}
+                className="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded-lg font-medium transition-colors"
+                disabled={savingNicho}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={saveNicho}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium transition-colors disabled:opacity-60"
+                disabled={savingNicho}
+              >
+                {savingNicho ? 'Salvando…' : 'Salvar'}
               </button>
             </div>
           </div>

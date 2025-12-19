@@ -3,6 +3,7 @@ import ClientsHome from './pages/ClientsHome';
 import ClientLayout from './layouts/ClientLayout';
 import Dashboard from './pages/Dashboard';
 import CalendarPage from './pages/CalendarPage';
+import GeneralCalendarPage from './pages/GeneralCalendarPage';
 import KnowledgeBase from './pages/KnowledgeBase';
 import BrandProfile from './pages/BrandProfile';
 import ReferencesPage from './pages/ReferencesPage';
@@ -12,6 +13,7 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<ClientsHome />} />
+        <Route path="/calendar" element={<GeneralCalendarPage />} />
         <Route path="/client/:clientId" element={<ClientLayout />}>
           <Route index element={<Navigate to="dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
