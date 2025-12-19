@@ -45,11 +45,11 @@ export default function SlideEditorModal({
   useEffect(() => {
     if (slideData?.logo_url) {
       const newLogoUrl = String(slideData.logo_url).trim();
-      if (newLogoUrl && newLogoUrl !== logoUrlOverride) {
+      if (newLogoUrl) {
         setLogoUrlOverride(newLogoUrl);
       }
     }
-  }, [slideData?.logo_url]);
+  }, [slideData?.logo_url, slideData]);
 
   const [showGrid, setShowGrid] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(true);
@@ -302,11 +302,11 @@ export default function SlideEditorModal({
     if (!canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
-    // Usar escala mais precisa para manter coordenadas absolutas 1920x1080
+    // Escala precisa para coordenadas absolutas 1920x1080
     const scaleX = 1920 / rect.width;
     const scaleY = 1080 / rect.height;
 
-    // Atualizar posição do mouse para mostrar coordenadas
+    // Atualizar posição do mouse para mostrar coordenadas (arredondar apenas para display)
     const mouseX = Math.round((e.clientX - rect.left) * scaleX);
     const mouseY = Math.round((e.clientY - rect.top) * scaleY);
     setMousePos({ x: mouseX, y: mouseY });
@@ -322,8 +322,9 @@ export default function SlideEditorModal({
           block.id === draggingId
             ? { 
                 ...block, 
-                x: snapValue(Math.max(0, block.x + deltaX)), 
-                y: snapValue(Math.max(0, block.y + deltaY)) 
+                // Aplicar snap e garantir valores positivos, mantendo precisão
+                x: Math.max(0, snapValue(block.x + deltaX)), 
+                y: Math.max(0, snapValue(block.y + deltaY)) 
               }
             : block
         )
@@ -341,6 +342,7 @@ export default function SlideEditorModal({
           block.id === resizingId
             ? {
                 ...block,
+                // Manter precisão no resize, mínimo 20px
                 width: Math.max(20, block.width + deltaX),
                 height: Math.max(20, block.height + deltaY)
               }
@@ -559,11 +561,12 @@ export default function SlideEditorModal({
                       }}
                       style={{
                         position: 'absolute',
-                        left: `${(block.x / 1920) * 100}%`,
-                        top: `${(block.y / 1080) * 100}%`,
-                        width: `${(block.width / 1920) * 100}%`,
-                        height: `${(block.height / 1080) * 100}%`,
-                        fontSize: `${(block.fontSize / 1080) * 100}vh`,
+                        // Conversão precisa de coordenadas absolutas (1920x1080) para percentuais
+                        left: `${((block.x / 1920) * 100).toFixed(4)}%`,
+                        top: `${((block.y / 1080) * 100).toFixed(4)}%`,
+                        width: `${((block.width / 1920) * 100).toFixed(4)}%`,
+                        height: `${((block.height / 1080) * 100).toFixed(4)}%`,
+                        fontSize: `${((block.fontSize / 1080) * 100).toFixed(4)}vh`,
                         color: block.color,
                         fontWeight: block.fontWeight,
                         textAlign: block.align,

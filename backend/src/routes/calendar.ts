@@ -2,6 +2,9 @@ import { Router, Request, Response } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import db from "../config/database";
 import { updateTokenUsage } from "../utils/tokenTracker";
+import { spawn } from "child_process";
+import path from "path";
+import fs from "fs";
 
 const router = Router();
 
@@ -1026,6 +1029,124 @@ router.put("/:id/metadata", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Erro ao atualizar metadata:", error);
     return res.status(500).json({ success: false, error: "Erro ao atualizar metadata" });
+  }
+});
+
+// POST /api/calendars/export-excel - Exporta calendário para Excel
+router.post("/export-excel", async (req: Request, res: Response) => {
+  console.log("\n📊 [DEBUG] ROTA /export-excel ACIONADA");
+  console.log("📦 [DEBUG] Payload:", JSON.stringify(req.body, null, 2));
+
+  try {
+    const { calendarId, clientName } = req.body;
+
+    if (!calendarId) {
+      return res.status(400).json({ error: "calendarId é obrigatório." });
+    }
+
+    // 1. Buscar calendário do banco
+    console.log(`🔍 [DEBUG] Buscando calendário ID: ${calendarId}`);
+    const result = await db.query(
+      "SELECT calendario_json, mes FROM calendarios WHERE id = $1",
+      [calendarId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Calendário não encontrado" });
+    }
+
+    const calendar = result.rows[0];
+    const posts = calendar.calendario_json;
+    const monthName = calendar.mes || "Janeiro"; // "Janeiro 2026" ou "Janeiro"
+    const year = "2026";
+
+    console.log(`✅ [DEBUG] Calendário encontrado: ${monthName}, ${posts.length} posts`);
+
+    // 2. Preparar caminhos
+    const pythonScript = path.join(__dirname, "../../python_gen/calendar_to_excel.py");
+    const templatePath = path.join(__dirname, "../../calendario/modelo final.xlsx");
+    const outputDir = path.join(__dirname, "../../calendario/output");
+    const outputFileName = `${clientName || 'Cliente'}_${monthName.replace(/\s+/g, '_')}.xlsx`;
+    const outputPath = path.join(outputDir, outputFileName);
+
+    // Criar diretório de saída se não existir
+    if (!fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+      console.log(`📁 [DEBUG] Diretório criado: ${outputDir}`);
+    }
+
+    console.log(`🐍 [DEBUG] Executando Python script...`);
+    console.log(`  Script: ${pythonScript}`);
+    console.log(`  Template: ${templatePath}`);
+    console.log(`  Output: ${outputPath}`);
+
+    // 3. Chamar script Python
+    const pythonProcess = spawn("python", [
+      pythonScript,
+      JSON.stringify(posts),
+      templatePath,
+      outputPath,
+      clientName || "Cliente",
+      monthName.split(" ")[0], // Apenas o mês ("Janeiro")
+      year
+    ]);
+
+    let pythonOutput = "";
+    let pythonError = "";
+
+    pythonProcess.stdout.on("data", (data) => {
+      const output = data.toString();
+      pythonOutput += output;
+      console.log(`[PYTHON] ${output.trim()}`);
+    });
+
+    pythonProcess.stderr.on("data", (data) => {
+      const error = data.toString();
+      pythonError += error;
+      console.error(`[PYTHON ERROR] ${error.trim()}`);
+    });
+
+    pythonProcess.on("close", (code) => {
+      if (code === 0) {
+        console.log(`✅ [SUCCESS] Python script executado com sucesso`);
+        
+        // Verificar se arquivo foi criado
+        if (fs.existsSync(outputPath)) {
+          console.log(`📄 [DEBUG] Arquivo Excel criado: ${outputPath}`);
+          
+          // Retornar arquivo para download
+          res.download(outputPath, outputFileName, (err) => {
+            if (err) {
+              console.error(`❌ [ERROR] Erro ao enviar arquivo: ${err}`);
+              if (!res.headersSent) {
+                res.status(500).json({ error: "Erro ao enviar arquivo" });
+              }
+            } else {
+              console.log(`✅ [SUCCESS] Arquivo enviado para download`);
+            }
+          });
+        } else {
+          console.error(`❌ [ERROR] Arquivo não foi criado: ${outputPath}`);
+          res.status(500).json({ 
+            error: "Arquivo Excel não foi gerado",
+            details: pythonOutput 
+          });
+        }
+      } else {
+        console.error(`❌ [ERROR] Python script falhou com código: ${code}`);
+        res.status(500).json({ 
+          error: "Erro ao gerar Excel",
+          details: pythonError || pythonOutput 
+        });
+      }
+    });
+
+  } catch (error: any) {
+    console.error("❌ [ERRO FATAL] Erro ao exportar Excel:", error);
+    res.status(500).json({ 
+      error: "Falha interna ao exportar Excel.", 
+      details: error.message 
+    });
   }
 });
 
