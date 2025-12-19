@@ -5,6 +5,7 @@ import VisualSlideEditor from './VisualSlideEditor';
 import SlideEditorModal from './SlideEditorModal';
 import download from 'downloadjs';
 import { resolveAssetUrl, withCacheBust } from '../utils/assetHelpers';
+import PeriodSelector from './PeriodSelector';
 
 interface DefenseData {
   titulo: string;
@@ -50,7 +51,7 @@ export default function PresentationGenerator() {
 
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
-  const [periodMode, setPeriodMode] = useState<'ultimo' | 'selecionar'>('ultimo');
+  const [periodMode, setPeriodMode] = useState<'ultimo' | 'unico' | 'multiplos'>('ultimo');
 
   // Helpers agora vêm de assetHelpers.ts
 
@@ -120,25 +121,16 @@ export default function PresentationGenerator() {
     }
   };
 
-  useEffect(() => {
-    if (!clientId) return;
-    if (periodMode !== 'selecionar') return;
-    if (availableMonths.length > 0) return;
-    fetchAvailableMonths();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, periodMode]);
-
-  useEffect(() => {
-    if (periodMode !== 'selecionar') {
-      setSelectedMonths([]);
-    }
-  }, [periodMode]);
+  const handlePeriodChange = (mode: 'ultimo' | 'unico' | 'multiplos', months: string[]) => {
+    setPeriodMode(mode);
+    setSelectedMonths(months);
+  };
 
   const handleAiFill = async () => {
     if (!clientId) return alert("Cliente não identificado");
     try {
       setAiLoading(true);
-      const months = periodMode === 'selecionar' ? selectedMonths : [];
+      const months = (periodMode === 'unico' || periodMode === 'multiplos') ? selectedMonths : [];
       const res = await api.post('/presentation/generate-content', { clienteId: clientId, months });
       
       if (res.data.success && res.data.content) {
@@ -192,7 +184,7 @@ export default function PresentationGenerator() {
 
       const payload = {
         clienteId: clientId,
-        months: periodMode === 'selecionar' ? selectedMonths : [],
+        months: (periodMode === 'unico' || periodMode === 'multiplos') ? selectedMonths : [],
         defesa,
         grid,
         slogan,
@@ -377,7 +369,7 @@ export default function PresentationGenerator() {
       const effectiveLogoUrl = updatedPlannerLogoUrl || currentPlannerLogoUrl || logoUrl;
       const payload = {
         clienteId: clientId,
-        months: periodMode === 'selecionar' ? selectedMonths : [],
+        months: (periodMode === 'unico' || periodMode === 'multiplos') ? selectedMonths : [],
         defesa: editingSlide.index === 0 ? updatedData : defesa,
         grid: editingSlide.index === 1 ? updatedData : grid,
         slogan: editingSlide.index === 2 ? updatedData : slogan,
@@ -415,7 +407,14 @@ export default function PresentationGenerator() {
             Cria slides profissionais baseados no seu planejamento
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+            <PeriodSelector
+              availableMonths={availableMonths}
+              selectedMonths={selectedMonths}
+              periodMode={periodMode}
+              onPeriodChange={handlePeriodChange}
+              onFetchMonths={fetchAvailableMonths}
+            />
             <button
             onClick={fetchHistory}
             className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 text-sm"
@@ -454,88 +453,6 @@ export default function PresentationGenerator() {
         </div>
       </div>
 
-      <div className="mb-6 bg-gray-900 rounded-lg p-4 border border-gray-700">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <h3 className="text-sm font-bold text-white">Período da geração</h3>
-            <p className="text-xs text-gray-400 mt-1">
-              Define qual calendário será usado como base para a IA e para o período exibido.
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <div className="flex flex-wrap gap-3">
-              <label className="flex items-center gap-2 text-sm text-gray-200">
-                <input
-                  type="radio"
-                  name="periodMode"
-                  value="ultimo"
-                  checked={periodMode === 'ultimo'}
-                  onChange={() => setPeriodMode('ultimo')}
-                />
-                Último calendário
-              </label>
-
-              <label className="flex items-center gap-2 text-sm text-gray-200">
-                <input
-                  type="radio"
-                  name="periodMode"
-                  value="selecionar"
-                  checked={periodMode === 'selecionar'}
-                  onChange={() => {
-                    setPeriodMode('selecionar');
-                    fetchAvailableMonths();
-                  }}
-                />
-                Selecionar meses
-              </label>
-            </div>
-
-            {periodMode === 'selecionar' && (
-              <div className="bg-gray-800 rounded-lg p-3 border border-gray-700">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-gray-300 font-bold">Meses disponíveis</span>
-                  <button
-                    type="button"
-                    onClick={fetchAvailableMonths}
-                    className="text-xs text-blue-400 hover:text-blue-300 font-bold"
-                  >
-                    Atualizar
-                  </button>
-                </div>
-
-                {availableMonths.length === 0 ? (
-                  <div className="text-xs text-gray-400">
-                    Nenhum mês encontrado. Gere ou crie calendários primeiro.
-                  </div>
-                ) : (
-                  <div className="max-h-32 overflow-auto grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {availableMonths.map((m) => (
-                      <label key={m} className="flex items-center gap-2 text-xs text-gray-200">
-                        <input
-                          type="checkbox"
-                          checked={selectedMonths.includes(m)}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setSelectedMonths((prev) =>
-                              checked ? Array.from(new Set([...prev, m])) : prev.filter((x) => x !== m)
-                            );
-                          }}
-                        />
-                        {m}
-                      </label>
-                    ))}
-                  </div>
-                )}
-
-                <div className="mt-2 text-[11px] text-gray-400">
-                  Selecionados: <span className="text-gray-200">{selectedMonths.length}</span>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* Área de Histórico */}
       {showHistory && (

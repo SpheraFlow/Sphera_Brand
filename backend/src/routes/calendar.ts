@@ -120,8 +120,8 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
     }
 
     // Calcular total de posts e validar
-    const totalPosts = (mix.reels || 0) + (mix.static || 0) + (mix.carousel || 0) + (mix.stories || 0);
-    console.log(`📊 [DEBUG] Cálculo: reels=${mix.reels}, static=${mix.static}, carousel=${mix.carousel}, stories=${mix.stories}, total=${totalPosts}`);
+    const totalPosts = (mix.reels || 0) + (mix.static || 0) + (mix.carousel || 0) + (mix.stories || 0) + (mix.photos || 0);
+    console.log(`📊 [DEBUG] Cálculo: reels=${mix.reels}, static=${mix.static}, carousel=${mix.carousel}, stories=${mix.stories}, photos=${mix.photos}, total=${totalPosts}`);
 
     if (totalPosts === 0) {
       console.error("❌ [ERRO] Total de posts deve ser maior que 0");
@@ -257,6 +257,7 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
       - ${mix.static || 0} posts ESTÁTICOS (Imagem única).
       - ${mix.carousel || 0} CARROSSÉIS (Conteúdo denso/lista).
       - ${mix.stories || 0} sequências de STORIES.
+      - ${mix.photos || 0} IDEIAS DE FOTOS (Conceitos visuais para sessões fotográficas).
 
       Total de itens: ${totalPosts}.
 
@@ -274,6 +275,7 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
       - Posts estáticos: ${formatInstructions?.static || 'Sem instruções adicionais para posts estáticos.'}
       - Carrosséis: ${formatInstructions?.carousel || 'Sem instruções adicionais para carrosséis.'}
       - Stories: ${formatInstructions?.stories || 'Sem instruções adicionais para Stories.'}
+      - Ideias de Fotos: ${formatInstructions?.photos || 'Para ideias de fotos, foque em conceitos visuais criativos, locações, ângulos, iluminação e mood. Seja específico e técnico para orientar fotógrafos.'}
 
       DATAS COMEMORATIVAS RELEVANTES DO MÊS (quando disponíveis):
       ${datasResumoTexto || 'Nenhuma data comemorativa específica cadastrada para este mês. Se fizer sentido para o contexto geral, ainda assim considere oportunidades sazonais típicas.'}
@@ -306,13 +308,15 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
         {
           "data": "DD/MM",
           "tema": "...",
-          "formato": "Reels/Carrossel/Static/Stories",
+          "formato": "Reels/Carrossel/Static/Stories/Photos",
           "ideia_visual": "...",
           "copy_sugestao": "...",
           "objetivo": "...",
           "image_generation_prompt": "..."
         }
       ]
+
+      IMPORTANTE: Para formato 'Photos', seja ainda mais detalhado no campo 'ideia_visual' incluindo: locação, ângulo, iluminação, composição, props, vestuário e mood desejado.
     `;
 
     // 5. Chamar Gemini (com fallback robusto)

@@ -154,6 +154,8 @@ export const calendarService = {
       periodo,
       briefing,
       mes,
+    }, {
+      timeout: 120000 // 2 minutos - Geração com IA pode demorar (Prompt Chains + Gemini)
     });
     return response.data;
   },

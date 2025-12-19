@@ -1,4 +1,4 @@
-import { useState, useRef, MouseEvent as ReactMouseEvent } from 'react';
+import { useState, useRef, useEffect, MouseEvent as ReactMouseEvent } from 'react';
 import api from '../services/api';
 import { resolveAssetUrl, withCacheBust } from '../utils/assetHelpers';
 
@@ -40,6 +40,25 @@ export default function SlideEditorModal({
   const [logoUrlOverride, setLogoUrlOverride] = useState<string>(() => {
     return (slideData?.logo_url ? String(slideData.logo_url) : '').trim();
   });
+
+  // Sincronizar logoUrlOverride quando slideData.logo_url mudar
+  useEffect(() => {
+    if (slideData?.logo_url) {
+      const newLogoUrl = String(slideData.logo_url).trim();
+      if (newLogoUrl && newLogoUrl !== logoUrlOverride) {
+        setLogoUrlOverride(newLogoUrl);
+      }
+    }
+  }, [slideData?.logo_url]);
+
+  const [showGrid, setShowGrid] = useState(true);
+  const [snapToGrid, setSnapToGrid] = useState(true);
+  const [mousePos, setMousePos] = useState<{ x: number; y: number } | null>(null);
+
+  const snapValue = (value: number, gridSize: number = 10) => {
+    if (!snapToGrid) return value;
+    return Math.round(value / gridSize) * gridSize;
+  };
 
   const isPlannerSlide =
     (slideName || '').toLowerCase().includes('planner') ||
@@ -280,11 +299,19 @@ export default function SlideEditorModal({
   };
 
   const handleMouseMove = (e: ReactMouseEvent) => {
-    if ((!draggingId && !resizingId) || (!dragStart && !resizeStart) || !canvasRef.current) return;
+    if (!canvasRef.current) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
+    // Usar escala mais precisa para manter coordenadas absolutas 1920x1080
     const scaleX = 1920 / rect.width;
     const scaleY = 1080 / rect.height;
+
+    // Atualizar posição do mouse para mostrar coordenadas
+    const mouseX = Math.round((e.clientX - rect.left) * scaleX);
+    const mouseY = Math.round((e.clientY - rect.top) * scaleY);
+    setMousePos({ x: mouseX, y: mouseY });
+
+    if ((!draggingId && !resizingId) || (!dragStart && !resizeStart)) return;
 
     if (draggingId && dragStart) {
       const deltaX = (e.clientX - dragStart.x) * scaleX;
@@ -293,7 +320,11 @@ export default function SlideEditorModal({
       setBlocks((prev) =>
         prev.map((block) =>
           block.id === draggingId
-            ? { ...block, x: Math.max(0, block.x + deltaX), y: Math.max(0, block.y + deltaY) }
+            ? { 
+                ...block, 
+                x: snapValue(Math.max(0, block.x + deltaX)), 
+                y: snapValue(Math.max(0, block.y + deltaY)) 
+              }
             : block
         )
       );
@@ -495,6 +526,26 @@ export default function SlideEditorModal({
                   className="w-full h-full object-contain pointer-events-none"
                   draggable={false}
                 />
+
+                {/* Grid Visual */}
+                {showGrid && (
+                  <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ opacity: 0.3 }}>
+                    <defs>
+                      <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
+                        <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#0095FF" strokeWidth="0.5" />
+                      </pattern>
+                    </defs>
+                    <rect width="100%" height="100%" fill="url(#grid)" />
+                  </svg>
+                )}
+
+                {/* Réguas */}
+                <div className="absolute top-0 left-0 right-0 h-6 bg-gray-900/80 flex items-center justify-center text-[10px] text-gray-400 pointer-events-none">
+                  Régua Horizontal (1920px)
+                </div>
+                <div className="absolute top-0 left-0 bottom-0 w-6 bg-gray-900/80 flex items-center justify-center text-[10px] text-gray-400 pointer-events-none" style={{ writingMode: 'vertical-rl' }}>
+                  Régua Vertical (1080px)
+                </div>
                 
                 {/* Overlay de Textos */}
                 <div className="absolute inset-0">
@@ -594,16 +645,40 @@ export default function SlideEditorModal({
               </div>
               
               <div className="mt-4 bg-gray-800 rounded-lg p-4 text-xs text-gray-400">
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4 mb-3">
                   <div>
                     <strong className="text-white">🖱️ Arrastar:</strong> Clique e arraste o texto
                   </div>
                   <div>
                     <strong className="text-white">✏️ Editar:</strong> Duplo clique no texto
                   </div>
-                  <div>
-                    <strong className="text-white">⚙️ Propriedades:</strong> Selecione e ajuste ao lado →
+                </div>
+                <div className="flex items-center justify-between pt-3 border-t border-gray-700">
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={showGrid}
+                        onChange={(e) => setShowGrid(e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-white">📐 Mostrar Grid</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={snapToGrid}
+                        onChange={(e) => setSnapToGrid(e.target.checked)}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-white">🧲 Snap to Grid (10px)</span>
+                    </label>
                   </div>
+                  {mousePos && (
+                    <div className="text-white font-mono">
+                      📍 X: {mousePos.x}px, Y: {mousePos.y}px
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
