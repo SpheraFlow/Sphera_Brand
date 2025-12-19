@@ -1033,7 +1033,7 @@ router.put("/:id/metadata", async (req: Request, res: Response) => {
 });
 
 // POST /api/calendars/export-excel - Exporta calendário para Excel
-router.post("/export-excel", async (req: Request, res: Response) => {
+router.post("/export-excel", async (req: Request, res: Response): Promise<void> => {
   console.log("\n📊 [DEBUG] ROTA /export-excel ACIONADA");
   console.log("📦 [DEBUG] Payload:", JSON.stringify(req.body, null, 2));
 
@@ -1041,7 +1041,8 @@ router.post("/export-excel", async (req: Request, res: Response) => {
     const { calendarId, clientName } = req.body;
 
     if (!calendarId) {
-      return res.status(400).json({ error: "calendarId é obrigatório." });
+      res.status(400).json({ error: "calendarId é obrigatório." });
+      return;
     }
 
     // 1. Buscar calendário do banco
@@ -1052,15 +1053,14 @@ router.post("/export-excel", async (req: Request, res: Response) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Calendário não encontrado" });
+      res.status(404).json({ error: "Calendário não encontrado" });
+      return;
     }
 
     const calendar = result.rows[0];
     const posts = calendar.calendario_json;
     const monthName = calendar.mes || "Janeiro"; // "Janeiro 2026" ou "Janeiro"
     const year = "2026";
-
-    console.log(`✅ [DEBUG] Calendário encontrado: ${monthName}, ${posts.length} posts`);
 
     // 2. Preparar caminhos
     const pythonScript = path.join(__dirname, "../../python_gen/calendar_to_excel.py");
@@ -1109,11 +1109,11 @@ router.post("/export-excel", async (req: Request, res: Response) => {
     pythonProcess.on("close", (code) => {
       if (code === 0) {
         console.log(`✅ [SUCCESS] Python script executado com sucesso`);
-        
+
         // Verificar se arquivo foi criado
         if (fs.existsSync(outputPath)) {
           console.log(`📄 [DEBUG] Arquivo Excel criado: ${outputPath}`);
-          
+
           // Retornar arquivo para download
           res.download(outputPath, outputFileName, (err) => {
             if (err) {
@@ -1141,12 +1141,16 @@ router.post("/export-excel", async (req: Request, res: Response) => {
       }
     });
 
+    // A resposta é enviada dentro do callback do pythonProcess.on('close')
+    return;
+
   } catch (error: any) {
     console.error("❌ [ERRO FATAL] Erro ao exportar Excel:", error);
-    return res.status(500).json({ 
+    res.status(500).json({ 
       error: "Falha interna ao exportar Excel.", 
       details: error.message 
     });
+    return;
   }
 });
 
