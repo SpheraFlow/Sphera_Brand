@@ -1,4 +1,6 @@
 import { useState, useRef, MouseEvent as ReactMouseEvent } from 'react';
+import api from '../services/api';
+import { resolveAssetUrl, withCacheBust } from '../utils/assetHelpers';
 
 interface TextBlock {
   id: string;
@@ -33,32 +35,15 @@ export default function SlideEditorModal({
   slideData,
   onSave
 }: SlideEditorModalProps) {
-  const getBackendOrigin = () => {
-    const baseURL = (import.meta as any)?.env?.VITE_API_URL;
-    if (typeof baseURL === 'string' && baseURL.startsWith('http')) {
-      try {
-        return new URL(baseURL).origin;
-      } catch (_e) {
-        return window.location.origin;
-      }
-    }
-    return window.location.origin;
-  };
+  // Helpers agora vêm de assetHelpers.ts
 
-  const resolveAssetUrl = (url: string) => {
-    if (!url) return url;
-    if (url.startsWith('http://') || url.startsWith('https://')) return url;
-    if (url.startsWith('/')) return `${getBackendOrigin()}${url}`;
-    return url;
-  };
+  const [logoUrlOverride, setLogoUrlOverride] = useState<string>(() => {
+    return (slideData?.logo_url ? String(slideData.logo_url) : '').trim();
+  });
 
-  const withCacheBust = (url: string) => {
-    const u = url || '';
-    if (!u) return u;
-    const hasQuery = u.includes('?');
-    const sep = hasQuery ? '&' : '?';
-    return `${u}${sep}t=${Date.now()}`;
-  };
+  const isPlannerSlide =
+    (slideName || '').toLowerCase().includes('planner') ||
+    (slideData?.mes !== undefined && slideData?.nome_cliente !== undefined);
 
   const [blocks, setBlocks] = useState<TextBlock[]>(() => {
     // Inicializar blocos baseado no tipo de slide
@@ -381,13 +366,7 @@ export default function SlideEditorModal({
   };
 
   const handleSaveLayout = () => {
-    // Atualizar slideData com novos textos
     const updatedSlideData = { ...slideData };
-
-    const isPlannerSlide =
-      (slideName || '').toLowerCase().includes('planner') ||
-      (slideData?.mes !== undefined && slideData?.nome_cliente !== undefined);
-
     const blockIds = new Set(blocks.map((b) => b.id));
 
     // Persistir layout para o Python respeitar posição/tamanho/fonte
@@ -405,7 +384,7 @@ export default function SlideEditorModal({
       kind: b.kind || 'text',
       shadow: b.shadow ?? true
     }));
-    
+
     blocks.forEach((block) => {
       if (block.id === 'titulo') updatedSlideData.titulo = block.content;
       if (block.id === 'subtitulo') updatedSlideData.subtitulo = block.content;
@@ -425,6 +404,10 @@ export default function SlideEditorModal({
     if (!blockIds.has('mes')) updatedSlideData.mes = '';
     if (!blockIds.has('nome_cliente')) updatedSlideData.nome_cliente = '';
 
+    if (typeof logoUrlOverride === 'string' && logoUrlOverride.trim()) {
+      updatedSlideData.logo_url = logoUrlOverride.trim();
+    }
+
     // Desafios: reconstruir itens
     const itemBlocks = blocks.filter((b) => b.id.startsWith('item-'));
     if (Array.isArray(slideData.itens) || itemBlocks.length > 0) {
@@ -437,8 +420,33 @@ export default function SlideEditorModal({
       // Em "Novos Desafios" não usar campo texto (não gerar elemento texto)
       if ('texto' in updatedSlideData) delete updatedSlideData.texto;
     }
-    
+
     onSave(blocks, updatedSlideData);
+  };
+
+  const handleUploadLogoForSlide = async (file: File | null | undefined) => {
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await api.post('/client-logos/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      const url = res.data?.url as string | undefined;
+      if (!url) {
+        alert('Erro ao fazer upload da logo.');
+        return;
+      }
+
+      // Guardar a URL relativa retornada pelo backend (ex: /static/client-logos/xxx.png)
+      setLogoUrlOverride(String(url));
+      alert('✅ Logo enviada para esta lâmina. Clique em "Salvar e Regenerar".');
+    } catch (e: any) {
+      console.error('Erro ao fazer upload da logo (lâmina):', e);
+      alert('Erro ao fazer upload da logo: ' + (e.response?.data?.error || e.message));
+    }
   };
 
   const selectedBlock = blocks.find((b) => b.id === selectedBlockId);
@@ -494,7 +502,10 @@ export default function SlideEditorModal({
                     <div
                       key={block.id}
                       onMouseDown={(e) => handleMouseDown(block.id, e)}
-                      onDoubleClick={() => handleDoubleClick(block.id, block.content)}
+                      onDoubleClick={() => {
+                        if (block.kind === 'logo') return;
+                        handleDoubleClick(block.id, block.content);
+                      }}
                       style={{
                         position: 'absolute',
                         left: `${(block.x / 1920) * 100}%`,
@@ -534,9 +545,9 @@ export default function SlideEditorModal({
                       )}
 
                       {block.kind === 'logo' ? (
-                        (slideData?.logo_url ? (
+                        ((logoUrlOverride || slideData?.logo_url) ? (
                           <img
-                            src={withCacheBust(resolveAssetUrl(slideData.logo_url))}
+                            src={withCacheBust(resolveAssetUrl(logoUrlOverride || slideData.logo_url))}
                             alt="Logo"
                             className="w-full h-full object-contain pointer-events-none"
                             draggable={false}
@@ -604,6 +615,20 @@ export default function SlideEditorModal({
                 
                 {selectedBlock ? (
                   <div className="space-y-3">
+                    {selectedBlock.kind === 'logo' && (
+                      <div className="bg-gray-900 rounded p-3 border border-gray-700">
+                        <label className="text-xs text-gray-400 block mb-2">Logo (por lâmina)</label>
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg,image/webp"
+                          className="w-full text-xs text-gray-300"
+                          onChange={(e) => handleUploadLogoForSlide(e.target.files?.[0])}
+                        />
+                        <p className="text-[11px] text-gray-500 mt-2">
+                          Esta logo sobrescreve a do cliente apenas nesta geração.
+                        </p>
+                      </div>
+                    )}
                     <div>
                       <label className="text-xs text-gray-400 block mb-1">Tamanho</label>
                       <input

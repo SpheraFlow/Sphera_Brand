@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import ImagePreview from '../components/ImagePreview';
+import { resolveAssetUrl, withCacheBust, stripCacheBust } from '../utils/assetHelpers';
 
 interface Cliente {
   id: string;
@@ -24,6 +26,7 @@ export default function ClientsHome() {
   const [showNewClientModal, setShowNewClientModal] = useState(false);
   const [newClientName, setNewClientName] = useState('');
   const [calendarsOverview, setCalendarsOverview] = useState<Record<string, ClientCalendarOverview>>({});
+  const [brokenLogoClients, setBrokenLogoClients] = useState<Set<string>>(() => new Set());
   const [logoOverrides, setLogoOverrides] = useState<Record<string, string>>(() => {
     try {
       const stored = localStorage.getItem('clientLogos');
@@ -34,54 +37,13 @@ export default function ClientsHome() {
   });
   const navigate = useNavigate();
 
-  const getBackendOrigin = () => {
-    const fromAxios = (api as any)?.defaults?.baseURL;
-    const baseURL =
-      (typeof fromAxios === 'string' && fromAxios ? fromAxios : undefined) ||
-      (import.meta as any)?.env?.VITE_API_BASE_URL ||
-      (import.meta as any)?.env?.VITE_API_URL;
+  // Helpers agora vêm de assetHelpers.ts
 
-    if (typeof baseURL === 'string' && baseURL.startsWith('http')) {
-      try {
-        return new URL(baseURL).origin;
-      } catch (_e) {
-        return window.location.origin;
-      }
-    }
-
-    // Quando baseURL é relativo (ex: '/api'), a origem é a mesma do frontend.
-    return window.location.origin;
-  };
-
-  const resolveAssetUrl = (url: string) => {
-    if (!url) return url;
-    if (url.startsWith('http://') || url.startsWith('https://')) return url;
-    if (url.startsWith('/')) return `${getBackendOrigin()}${url}`;
-    if (url.startsWith('static/')) return `${getBackendOrigin()}/${url}`;
-    if (url.includes('static/client-logos/') && !url.startsWith('/')) {
-      return `${getBackendOrigin()}/${url}`;
-    }
-    return url;
-  };
-
-  const withCacheBust = (url: string) => {
-    const u = url || '';
-    if (!u) return u;
-    const hasQuery = u.includes('?');
-    const sep = hasQuery ? '&' : '?';
-    return `${u}${sep}t=${Date.now()}`;
-  };
-
-  const clearLogoOverride = (clientId: string) => {
-    setLogoOverrides((prev) => {
-      const updated = { ...prev };
-      delete updated[clientId];
-      try {
-        localStorage.setItem('clientLogos', JSON.stringify(updated));
-      } catch {
-        // ignore storage errors
-      }
-      return updated;
+  const markLogoBroken = (clientId: string) => {
+    setBrokenLogoClients((prev) => {
+      const next = new Set(prev);
+      next.add(clientId);
+      return next;
     });
   };
 
@@ -109,6 +71,7 @@ export default function ClientsHome() {
     if (!file) return;
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('clientId', clientId); // Enviar clientId para salvar no banco
 
     try {
       const res = await api.post('/client-logos/upload', formData, {
@@ -121,9 +84,15 @@ export default function ClientsHome() {
         return;
       }
 
-      const finalUrl = withCacheBust(resolveAssetUrl(url));
-      const updated = { ...logoOverrides, [clientId]: finalUrl };
+      // Persistir sem cache-bust (o cache-bust é aplicado só na renderização)
+      const storedUrl = stripCacheBust(resolveAssetUrl(url));
+      const updated = { ...logoOverrides, [clientId]: storedUrl };
       setLogoOverrides(updated);
+      setBrokenLogoClients((prev) => {
+        const next = new Set(prev);
+        next.delete(clientId);
+        return next;
+      });
       try {
         localStorage.setItem('clientLogos', JSON.stringify(updated));
       } catch {
@@ -341,12 +310,13 @@ export default function ClientsHome() {
                 {/* Avatar/Ícone */}
                 <div className="flex items-center mb-4">
                   <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xl font-bold overflow-hidden">
-                    {logoOverrides[cliente.id] || cliente.avatarUrl ? (
-                      <img
-                        src={withCacheBust(resolveAssetUrl(logoOverrides[cliente.id] || (cliente.avatarUrl as string)))}
+                    {(logoOverrides[cliente.id] || cliente.avatarUrl) && !brokenLogoClients.has(cliente.id) ? (
+                      <ImagePreview
+                        src={withCacheBust(stripCacheBust(resolveAssetUrl(logoOverrides[cliente.id] || (cliente.avatarUrl as string))))}
                         alt={cliente.nome}
                         className="w-full h-full object-cover"
-                        onError={() => clearLogoOverride(cliente.id)}
+                        onError={() => markLogoBroken(cliente.id)}
+                        fallback={<span className="text-xl font-bold">{getInitials(cliente.nome)}</span>}
                       />
                     ) : (
                       getInitials(cliente.nome)

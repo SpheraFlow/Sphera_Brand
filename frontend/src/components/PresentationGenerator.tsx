@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import VisualSlideEditor from './VisualSlideEditor';
 import SlideEditorModal from './SlideEditorModal';
 import download from 'downloadjs';
+import { resolveAssetUrl, withCacheBust } from '../utils/assetHelpers';
 
 interface DefenseData {
   titulo: string;
@@ -51,32 +52,7 @@ export default function PresentationGenerator() {
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
   const [periodMode, setPeriodMode] = useState<'ultimo' | 'selecionar'>('ultimo');
 
-  const getBackendOrigin = () => {
-    const baseURL = (api as any)?.defaults?.baseURL;
-    if (typeof baseURL === 'string' && baseURL.startsWith('http')) {
-      try {
-        return new URL(baseURL).origin;
-      } catch (_e) {
-        return window.location.origin;
-      }
-    }
-    return window.location.origin;
-  };
-
-  const withCacheBust = (url: string) => {
-    const u = url || '';
-    if (!u) return u;
-    const hasQuery = u.includes('?');
-    const sep = hasQuery ? '&' : '?';
-    return `${u}${sep}t=${Date.now()}`;
-  };
-
-  const resolveAssetUrl = (url: string) => {
-    if (!url) return url;
-    if (url.startsWith('http://') || url.startsWith('https://')) return url;
-    if (url.startsWith('/')) return `${getBackendOrigin()}${url}`;
-    return url;
-  };
+  // Helpers agora vêm de assetHelpers.ts
 
   const getPngFilename = (imgUrl: string, fallback: string) => {
     try {
@@ -211,6 +187,9 @@ export default function PresentationGenerator() {
 
       const logoUrl = getClientLogoOverrideUrl();
 
+      const plannerLogoUrl = (planner as any)?.logo_url as string | undefined;
+      const effectiveLogoUrl = plannerLogoUrl || logoUrl;
+
       const payload = {
         clienteId: clientId,
         months: periodMode === 'selecionar' ? selectedMonths : [],
@@ -220,7 +199,7 @@ export default function PresentationGenerator() {
         desafios,
         planner: {
           ...planner,
-          ...(logoUrl ? { logo_url: logoUrl } : {})
+          ...(effectiveLogoUrl ? { logo_url: effectiveLogoUrl } : {})
         }
       };
 
@@ -358,9 +337,11 @@ export default function PresentationGenerator() {
         templateName = 'planner_trimestral';
         slideName = 'Planner';
         const logoUrl = getClientLogoOverrideUrl();
+        const plannerLogoUrl = (planner as any)?.logo_url as string | undefined;
+        const effectiveLogoUrl = plannerLogoUrl || logoUrl;
         data = {
           ...planner,
-          ...(logoUrl ? { logo_url: logoUrl } : {})
+          ...(effectiveLogoUrl ? { logo_url: effectiveLogoUrl } : {})
         };
         realIndex = 4;
     }
@@ -389,6 +370,11 @@ export default function PresentationGenerator() {
       
       // Regenerar apenas esta lâmina
       const logoUrl = getClientLogoOverrideUrl();
+
+      // Se a lâmina (planner) já tem logo_url (ex: upload por lâmina), ela tem prioridade.
+      const updatedPlannerLogoUrl = (updatedData as any)?.logo_url as string | undefined;
+      const currentPlannerLogoUrl = (planner as any)?.logo_url as string | undefined;
+      const effectiveLogoUrl = updatedPlannerLogoUrl || currentPlannerLogoUrl || logoUrl;
       const payload = {
         clienteId: clientId,
         months: periodMode === 'selecionar' ? selectedMonths : [],
@@ -398,7 +384,7 @@ export default function PresentationGenerator() {
         desafios: editingSlide.index === 3 ? updatedData : desafios,
         planner: {
           ...(editingSlide.index === 4 ? updatedData : planner),
-          ...(logoUrl ? { logo_url: logoUrl } : {})
+          ...(effectiveLogoUrl ? { logo_url: effectiveLogoUrl } : {})
         }
       };
 
