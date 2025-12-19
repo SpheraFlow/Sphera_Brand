@@ -172,25 +172,51 @@ def prepare_month_sheet(wb, base_ws, sheet_title):
     ws.title = sheet_title
     return ws
 
+def create_fixed_structure(ws, month_label, client_name):
+    """
+    Cria estrutura fixa (linhas 1-8): título + legenda
+    """
+    # Linha 1: Título
+    ws['A1'] = month_label
+    ws['B1'] = client_name
+    ws['H1'] = 'CHAVE'
+    
+    # Linhas 2-7: Legenda de tipos de conteúdo
+    ws['A2'] = 'Reels'
+    ws['A3'] = 'Arte'
+    ws['B3'] = 'Conteúdo'
+    ws['A4'] = 'Foto'
+    ws['B4'] = 'Institucional'
+    ws['A5'] = 'Arte'
+    ws['B5'] = 'Institucional'
+    ws['A6'] = 'Campanha'
+    ws['A7'] = 'Outros'
+    
+    # Linha 8: Vazia (separador)
+
 def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
-    # Atualizar título (linha 1, coluna B)
-    ws['B1'] = f"{month_label} | {client_name}"
+    """
+    Preenche uma aba com estrutura fixa + blocos semanais de 6 linhas
+    Colunas: A=Domingo, B=Segunda, C=Terça, D=Quarta, E=Quinta, F=Sexta, G=Sábado
+    """
+    # Criar estrutura fixa (linhas 1-8)
+    create_fixed_structure(ws, month_label, client_name)
 
-    # Estrutura do template
-    week_start_rows = [9, 14, 20, 26, 32]
+    # Blocos semanais começam na linha 9, cada bloco tem 6 linhas
+    week_start_rows = [9, 15, 21, 27, 33, 39]  # até 6 semanas
 
-    # Colunas do template (A=Domingo ... G=Sábado)
-    col_by_sun0 = {
-        0: 'A',
-        1: 'B',
-        2: 'C',
-        3: 'D',
-        4: 'E',
-        5: 'F',
-        6: 'G'
+    # Colunas: A=Domingo(0) ... G=Sábado(6)
+    col_by_dow = {
+        0: 'A',  # Domingo
+        1: 'B',  # Segunda
+        2: 'C',  # Terça
+        3: 'D',  # Quarta
+        4: 'E',  # Quinta
+        5: 'F',  # Sexta
+        6: 'G'   # Sábado
     }
 
-    header_labels = {
+    day_labels = {
         0: 'DOMINGO',
         1: 'SEGUNDA',
         2: 'TERÇA',
@@ -202,21 +228,22 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
 
     _, days_in_month = calendar.monthrange(year_num, month_num)
 
-    # weekday do dia 1: 0=Mon..6=Sun
+    # Calcular dia da semana do dia 1 (0=Segunda...6=Domingo)
     first_weekday_mon0 = datetime(year_num, month_num, 1).weekday()
+    # Converter para 0=Domingo...6=Sábado
     first_weekday_sun0 = (first_weekday_mon0 + 1) % 7
 
-    # Preencher cabeçalhos com datas corretas
+    # Preencher cabeçalhos dos dias em cada semana
     for week_index, header_row in enumerate(week_start_rows):
-        for dow_sun0 in range(7):
-            day_num = (week_index * 7) - first_weekday_sun0 + dow_sun0 + 1
-            col = col_by_sun0[dow_sun0]
+        for dow in range(7):  # 0=Dom...6=Sab
+            day_num = (week_index * 7) - first_weekday_sun0 + dow + 1
+            col = col_by_dow[dow]
             if 1 <= day_num <= days_in_month:
-                ws[f'{col}{header_row}'] = f"{header_labels[dow_sun0]} ({day_num})"
+                ws[f'{col}{header_row}'] = f"{day_labels[dow]} ({day_num})"
             else:
                 ws[f'{col}{header_row}'] = ''
 
-    # Preencher posts
+    # Preencher posts do JSON nos dias corretos
     total_posts_filled = 0
     for post in posts:
         try:
@@ -224,23 +251,44 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
             if day < 1 or day > days_in_month:
                 continue
 
+            # Calcular posição do dia no calendário
             position = (day - 1) + first_weekday_sun0
             week_index = position // 7
-            dow_sun0 = position % 7
+            dow = position % 7
 
             if week_index >= len(week_start_rows):
                 continue
 
             header_row = week_start_rows[week_index]
-            format_row = header_row + 1
-            content_row = header_row + 2
-            col = col_by_sun0[dow_sun0]
+            tipo_row = header_row + 1      # Linha 2 do bloco: tipo
+            categoria_row = header_row + 2  # Linha 3 do bloco: categoria (se houver)
+            desc_row = header_row + 3       # Linha 4 do bloco: descrição
+            col = col_by_dow[dow]
 
-            excel_format = format_to_excel(post.get('formato', 'Static'))
-            ws[f'{col}{format_row}'] = excel_format
+            # Preencher tipo (ex: "Arte", "Reels", "Foto")
+            formato = post.get('formato', 'Static')
+            if formato == 'Static':
+                ws[f'{col}{tipo_row}'] = 'Arte'
+                ws[f'{col}{categoria_row}'] = 'Conteúdo'
+            elif formato == 'Reels':
+                ws[f'{col}{tipo_row}'] = 'Reels'
+            elif formato == 'Carrossel':
+                ws[f'{col}{tipo_row}'] = 'Carrossel'
+            elif formato == 'Stories':
+                ws[f'{col}{tipo_row}'] = 'Stories'
+            elif formato == 'Photos':
+                ws[f'{col}{tipo_row}'] = 'Foto'
+                ws[f'{col}{categoria_row}'] = 'Institucional'
+            else:
+                ws[f'{col}{tipo_row}'] = 'Arte'
+                ws[f'{col}{categoria_row}'] = 'Conteúdo'
 
+            # Preencher descrição (resumida)
             title = post.get('title', '')
-            ws[f'{col}{content_row}'] = title
+            # Limitar descrição a ~100 caracteres para caber na célula
+            desc = title[:100] + '...' if len(title) > 100 else title
+            ws[f'{col}{desc_row}'] = desc
+            
             total_posts_filled += 1
         except Exception as e:
             print(f"[WARN] Erro ao preencher post: {e}")
@@ -266,7 +314,11 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
     if len(wb.sheetnames) == 0:
         wb.create_sheet("Template")
 
-    base_ws = wb.active
+    # Preferir uma aba base estável do template (evita pegar uma aba "(2)" por engano)
+    if "CoreSport_Março" in wb.sheetnames:
+        base_ws = wb["CoreSport_Março"]
+    else:
+        base_ws = wb.active
 
     # Converter mês para número e ano
     start_month_num = parse_month_name(month_name)
@@ -335,6 +387,13 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
             month_label
         )
         total_posts_filled += filled
+
+    # Remover a aba base do template do arquivo final (evita manter "CoreSport_*" no output)
+    try:
+        if base_ws.title in wb.sheetnames and base_ws.title.startswith("CoreSport"):
+            wb.remove(base_ws)
+    except Exception:
+        pass
     
     # Criar diretório de saída se não existir
     output_dir = os.path.dirname(output_path)
