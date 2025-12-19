@@ -1033,7 +1033,7 @@ router.put("/:id/metadata", async (req: Request, res: Response) => {
 });
 
 // POST /api/calendars/export-excel - Exporta calendário para Excel
-router.post("/export-excel", async (req: Request, res: Response): Promise<void> => {
+router.post("/calendars/export-excel", async (req: Request, res: Response): Promise<void> => {
   console.log("\n📊 [DEBUG] ROTA /export-excel ACIONADA");
   console.log("📦 [DEBUG] Payload:", JSON.stringify(req.body, null, 2));
 
