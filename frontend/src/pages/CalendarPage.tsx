@@ -194,31 +194,38 @@ export default function CalendarPage() {
   };
 
   const handlePrintCalendar = async () => {
-    if (!selectedCalendar) {
-      alert('Nenhum calendário selecionado.');
+    if (!calendar) {
+      alert('Nenhum calendário carregado.');
       return;
     }
 
     try {
       setIsGenerating(true);
-      
-      const response = await api.post('/calendars/export-excel', {
-        calendarId: selectedCalendar.id,
-        clientName: clientName || 'Cliente'
-      }, {
-        responseType: 'blob'
-      });
-      
+
+      const safeClientName = `cliente_${clientId || 'desconhecido'}`;
+      const safeMonth = String(calendar.mes || 'mes').replace(/\s+/g, '_');
+
+      const response = await api.post(
+        '/calendars/export-excel',
+        {
+          calendarId: calendar.id,
+          clientName: safeClientName
+        },
+        {
+          responseType: 'blob'
+        }
+      );
+
       // Download do arquivo Excel
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `Calendario_${clientName || 'Cliente'}_${selectedCalendar.mes}.xlsx`);
+      link.setAttribute('download', `Calendario_${safeClientName}_${safeMonth}.xlsx`);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      
+
       alert('✅ Calendário Excel gerado com sucesso!');
     } catch (err: any) {
       console.error('Erro ao gerar Excel:', err);
