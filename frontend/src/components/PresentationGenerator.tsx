@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import api from '../services/api';
 import { useParams } from 'react-router-dom';
 import VisualSlideEditor from './VisualSlideEditor';
