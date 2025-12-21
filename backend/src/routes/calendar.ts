@@ -1137,6 +1137,14 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
   console.log("📦 [DEBUG] Payload:", JSON.stringify(req.body, null, 2));
 
   try {
+    if (!req.is("application/json") || !req.body) {
+      res.status(400).json({
+        error: "Body JSON é obrigatório.",
+        details: "Envie Content-Type: application/json e um JSON com { calendarId }"
+      });
+      return;
+    }
+
     const { calendarId, clientName } = (req.body ?? {}) as { calendarId?: string; clientName?: string };
 
     if (!calendarId) {
@@ -1157,6 +1165,7 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     }
 
     const calendar = result.rows[0];
+
     const posts = calendar.calendario_json;
     const monthLabel = calendar.mes || "Janeiro";
     const periodo = calendar.periodo;
