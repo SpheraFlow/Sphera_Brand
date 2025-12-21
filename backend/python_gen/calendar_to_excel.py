@@ -178,8 +178,10 @@ def create_fixed_structure(ws, month_label, client_name):
     """
     # Limpar área do cabeçalho/legenda para evitar duplicações vindas do template
     for r in range(1, 9):
-        for c in range(1, 9):  # A..H
-            ws.cell(row=r, column=c).value = ''
+        # IMPORTANTE: não limpar a coluna H para preservar a "CHAVE"/validações/listas do template.
+        # Limpar apenas A..G.
+        for c in range(1, 8):  # A..G
+            ws.cell(row=r, column=c).value = None
 
     # Linha 1: Título
     ws['A1'] = month_label
