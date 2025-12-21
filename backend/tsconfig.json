@@ -6,7 +6,7 @@
     
     /* Modules */
     "module": "commonjs",
-    "rootDir": "./",
+    "rootDir": "./src",
     "moduleResolution": "node",
     "baseUrl": "./",
     "paths": {
@@ -39,6 +39,6 @@
     /* Completeness */
     "skipLibCheck": true
   },
-  "include": ["src/**/*", "db/**/*", "tests/**/*"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }
