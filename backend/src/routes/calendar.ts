@@ -1226,7 +1226,9 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
         const dateStr = String((p as any)?.data || "");
         const m = dateStr.match(/\b(\d{1,2})\/(\d{1,2})\b/);
         if (!m) continue;
-        const monthNum = parseInt(m[2], 10);
+        const monthStr = m?.[2];
+        if (!monthStr) continue;
+        const monthNum = parseInt(monthStr, 10);
         if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
           months.add(monthNum);
         }

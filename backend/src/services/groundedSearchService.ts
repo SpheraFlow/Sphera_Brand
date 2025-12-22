@@ -1,4 +1,9 @@
-import { VertexAI } from "@google-cloud/vertexai";
+let VertexAI: any;
+try {
+  VertexAI = require("@google-cloud/vertexai")?.VertexAI;
+} catch (e) {
+  VertexAI = undefined;
+}
 
 export type GroundedSource = {
   title?: string;
@@ -63,6 +68,12 @@ export async function groundedSuggestDatas(params: {
   queryExtra?: string;
   maxResults?: number;
 }): Promise<{ suggestions: GroundedSuggestion[]; rawText: string; sources: GroundedSource[] }> {
+  if (!VertexAI) {
+    throw new Error(
+      "Dependência opcional ausente: @google-cloud/vertexai. Instale no backend (npm i @google-cloud/vertexai) para usar groundedSuggestDatas."
+    );
+  }
+
   const { project, location } = getVertexConfig();
 
   const categoriasArr = normalizeCategorias(params.categorias);
