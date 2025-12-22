@@ -176,11 +176,8 @@ def create_fixed_structure(ws, month_label, client_name):
     title_value = f"{month_label} | {client_name}".strip(" |")
     ws["A1"] = title_value
 
-    try:
-        if ws["H1"].value is not None or ws["H1"].value == "":
-            ws["H1"] = "CHAVE"
-    except Exception:
-        pass
+    # Não sobrescrever a posição do cabeçalho "CHAVE" do template.
+    # Alguns templates usam "CHAVE" em outra coluna (ex.: G1) e qualquer escrita fixa aqui pode deslocar o layout.
 
 def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
     """
@@ -210,6 +207,22 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
             if 1 <= d <= days_in_month:
                 day_to_slot[d] = (header_row, col)
 
+    # Validar alinhamento do layout:
+    # - Se o mês começa no domingo, o dia 1 deve estar em A na primeira linha.
+    # - Se o mês NÃO começa no domingo, o template esperado (como no print) é a 1ª semana "encaixada" na esquerda,
+    #   então o dia 1 também deve estar em A (com o dia da semana real).
+    try:
+        first_weekday_mon0 = datetime(year_num, month_num, 1).weekday()  # 0=Seg ... 6=Dom
+        first_weekday_sun0 = (first_weekday_mon0 + 1) % 7  # 0=Dom ... 6=Sáb
+        slot_day1 = day_to_slot.get(1)
+        if slot_day1 is not None:
+            _, col1 = slot_day1
+            if col1 != 'A':
+                # Ex.: planilha com SEGUNDA(1) em B. Forçar regeneração.
+                day_to_slot = {}
+    except Exception:
+        pass
+
     if len(day_to_slot) != days_in_month:
         day_labels = {
             0: 'DOMINGO',
@@ -221,26 +234,59 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
             6: 'SÁBADO'
         }
 
-        first_weekday_mon0 = datetime(year_num, month_num, 1).weekday()
-        first_weekday_sun0 = (first_weekday_mon0 + 1) % 7
+        # O template usa a 1ª semana "encaixada" na esquerda: o dia 1 começa na coluna A,
+        # e preenche até sábado, sem criar a coluna de domingo nessa primeira linha.
+        first_weekday_mon0 = datetime(year_num, month_num, 1).weekday()  # 0=Seg ... 6=Dom
+        first_weekday_sun0 = (first_weekday_mon0 + 1) % 7  # 0=Dom ... 6=Sáb
 
         day_to_slot = {}
+        current_day = 1
+
         for week_index, header_row in enumerate(week_start_rows):
+            # Semana 0: começa no dia da semana do dia 1 e vai até sábado, começando na col A
+            if week_index == 0 and first_weekday_sun0 != 0:
+                cols_in_week = []
+                # mapeia: coluna A corresponde ao first_weekday_sun0 (ex.: SEGUNDA), coluna B ao próximo, ... até sábado
+                for offset in range(0, 7 - first_weekday_sun0):
+                    cols_in_week.append((col_letters[offset], first_weekday_sun0 + offset))
+                for col, dow in cols_in_week:
+                    if current_day <= days_in_month:
+                        ws[f"{col}{header_row}"].value = f"{day_labels[dow]} ({current_day})"
+                        day_to_slot[current_day] = (header_row, col)
+                        current_day += 1
+                # limpar as colunas restantes na linha (se houver)
+                for c in col_letters[len(cols_in_week):]:
+                    ws[f"{c}{header_row}"].value = None
+                continue
+
+            # Demais semanas: grade normal (domingo..sábado) em A..G
             for dow in range(7):
-                day_num = (week_index * 7) - first_weekday_sun0 + dow + 1
                 col = col_letters[dow]
-                if 1 <= day_num <= days_in_month:
-                    ws[f"{col}{header_row}"].value = f"{day_labels[dow]} ({day_num})"
-                    day_to_slot[day_num] = (header_row, col)
+                if current_day <= days_in_month:
+                    ws[f"{col}{header_row}"].value = f"{day_labels[dow]} ({current_day})"
+                    day_to_slot[current_day] = (header_row, col)
+                    current_day += 1
                 else:
                     ws[f"{col}{header_row}"].value = None
 
+            if current_day > days_in_month:
+                # já preencheu todo o mês; pode parar de escrever cabeçalhos
+                pass
+
+    def _top_left_of_merged(cell_ref: str) -> str:
+        # Retorna a coordenada top-left do range mesclado que contém cell_ref, ou a própria cell_ref.
+        try:
+            for rng in ws.merged_cells.ranges:
+                if cell_ref in rng:
+                    return str(rng.coord).split(":")[0]
+        except Exception:
+            pass
+        return cell_ref
+
     # Limpar apenas as células de post (tipo + descrição) mantendo estilos/mesclas
     for d, (header_row, col) in day_to_slot.items():
-        tipo_row = header_row + 1
-        desc_row = header_row + 2
-        ws[f"{col}{tipo_row}"].value = None
-        ws[f"{col}{desc_row}"].value = None
+        content_cell = _top_left_of_merged(f"{col}{header_row + 1}")
+        ws[content_cell].value = None
 
     # Preencher posts do JSON nos dias corretos
     total_posts_filled = 0
@@ -255,21 +301,21 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
                 continue
 
             header_row, col = slot
-            tipo_row = header_row + 1
-            desc_row = header_row + 2
 
-            formato = post.get('formato', 'Static')
-            ws[f'{col}{tipo_row}'] = format_to_excel(formato)
+            formato_excel = format_to_excel(post.get('formato', 'Static'))
+            short_title = build_post_title(post)
 
-            # Preencher descrição (resumida)
-            title = post.get('title', '')
-            # Limitar descrição a ~100 caracteres para caber na célula
-            desc = title[:100] + '...' if len(title) > 100 else title
-            ws[f'{col}{desc_row}'] = desc
-            
+            # A área de conteúdo (tipo + descrição) no template costuma ser uma célula mesclada vertical
+            # (ex.: B16:B18). Então escrevemos tudo no topo do bloco mesclado.
+            content_cell = _top_left_of_merged(f"{col}{header_row + 1}")
+            content_text = formato_excel
+            if short_title:
+                content_text = f"{formato_excel}\n{short_title}"
+            ws[content_cell].value = content_text
             total_posts_filled += 1
         except Exception as e:
-            print(f"[WARN] Erro ao preencher post: {e}")
+            print(f"Erro ao processar post: {e}")
+            continue
 
     return total_posts_filled
 
