@@ -381,7 +381,13 @@ export default function CalendarPage() {
       });
 
       console.log('✅ Calendário gerado:', response.data);
-      alert('Calendário gerado com sucesso!');
+      
+      const calendarsGenerated = response.data?.calendars?.length || 1;
+      const successMessage = calendarsGenerated > 1 
+        ? `✅ ${calendarsGenerated} calendários gerados com sucesso!`
+        : '✅ Calendário gerado com sucesso!';
+      
+      alert(successMessage);
       setShowGenerateModal(false);
       setBriefing('');
       setGenerationPrompt('');
@@ -397,7 +403,18 @@ export default function CalendarPage() {
       loadCalendar();
     } catch (error: any) {
       console.error('❌ Erro ao gerar calendário:', error);
-      alert('Erro ao gerar calendário: ' + (error.response?.data?.error || error.message));
+      
+      // Tratamento específico para timeout
+      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        alert(
+          '⏳ A geração está demorando mais que o esperado.\n\n' +
+          'Isso é normal para calendários com muitos posts ou múltiplos meses.\n\n' +
+          '✅ A IA continua processando em segundo plano.\n' +
+          'Aguarde 1-2 minutos e recarregue a página para verificar se o calendário foi gerado.'
+        );
+      } else {
+        alert('Erro ao gerar calendário: ' + (error.response?.data?.error || error.message));
+      }
     } finally {
       setIsGenerating(false);
     }
@@ -1724,9 +1741,18 @@ function GenerateModal({
           <button
             onClick={onGenerate}
             disabled={isGenerating}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-medium transition-colors disabled:opacity-50"
+            className="flex-1 bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isGenerating ? '⏳ Gerando com IA...' : '🚀 Gerar Calendário'}
+            {isGenerating ? (
+              <div className="flex flex-col items-center gap-1">
+                <span className="text-base">⏳ Gerando {monthsCountToGenerate > 1 ? `${monthsCountToGenerate} meses` : 'calendário'}...</span>
+                <span className="text-xs text-blue-200 opacity-80">
+                  {monthsCountToGenerate > 1 
+                    ? `Isso pode levar ${Math.ceil(monthsCountToGenerate * 1.5)}-${Math.ceil(monthsCountToGenerate * 3)} minutos`
+                    : 'Aguarde alguns instantes'}
+                </span>
+              </div>
+            ) : '🚀 Gerar Calendário'}
           </button>
         </div>
       </div>

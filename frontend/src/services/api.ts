@@ -6,7 +6,7 @@ console.log('🔧 API Base URL configurada:', baseURL);
 
 const api = axios.create({
   baseURL,
-  timeout: 30000,
+  timeout: 600000,
   headers: {
     'Content-Type': 'application/json',
   },
