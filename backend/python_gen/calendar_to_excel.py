@@ -187,8 +187,12 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
     # Criar estrutura fixa (linhas 1-8)
     create_fixed_structure(ws, month_label, client_name)
 
-    # Blocos semanais começam na linha 9, cada bloco tem 6 linhas
-    week_start_rows = [9, 15, 21, 27, 33, 39]  # até 6 semanas
+    # Blocos semanais do template: cabeçalho do dia, linha do tipo e bloco de resumo.
+    # Padrão observado:
+    # - header: 9, 14, 20, 26, 32, 38
+    # - tipo:   10,15, 21, 27, 33, 39
+    # - resumo: (header+2..+4)
+    week_start_rows = [9, 14, 20, 26, 32, 38]  # até 6 semanas
     col_letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
 
     _, days_in_month = calendar.monthrange(year_num, month_num)
@@ -283,10 +287,33 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
             pass
         return cell_ref
 
-    # Limpar apenas as células de post (tipo + descrição) mantendo estilos/mesclas
+    def _clear_week_content(header_row: int) -> None:
+        # O template tem blocos com conteúdo logo abaixo do cabeçalho.
+        # Limpamos apenas VALORES (não estilos/mesclas):
+        # - header_row+1: tipo
+        # - resumo: semana 1 usa 2 linhas; semanas seguintes usam 3 linhas
+        # Observação: há uma linha separadora do bloco (ex.: 13, 19, 25...),
+        # então não devemos limpá-la para preservar o espaçamento/estrutura do template.
+        for col in col_letters:
+            # Semana 1: header=9, tipo=10, resumo=11-12, separador=13
+            if header_row == 9:
+                last_row_to_clear = header_row + 3
+            else:
+                # Demais semanas: header=14/20/26/..., tipo=+1, resumo=+2..+4, separador=+5
+                last_row_to_clear = header_row + 4
+
+            for r in range(header_row + 1, last_row_to_clear + 1):
+                try:
+                    ws[f"{col}{r}"].value = None
+                except Exception:
+                    pass
+
+    # Limpar células de post (tipo + resumo) mantendo estilos/mesclas
+    cleared_weeks = set()
     for d, (header_row, col) in day_to_slot.items():
-        content_cell = _top_left_of_merged(f"{col}{header_row + 1}")
-        ws[content_cell].value = None
+        if header_row not in cleared_weeks:
+            _clear_week_content(header_row)
+            cleared_weeks.add(header_row)
 
     # Preencher posts do JSON nos dias corretos
     total_posts_filled = 0
@@ -305,13 +332,13 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
             formato_excel = format_to_excel(post.get('formato', 'Static'))
             short_title = build_post_title(post)
 
-            # A área de conteúdo (tipo + descrição) no template costuma ser uma célula mesclada vertical
-            # (ex.: B16:B18). Então escrevemos tudo no topo do bloco mesclado.
-            content_cell = _top_left_of_merged(f"{col}{header_row + 1}")
-            content_text = formato_excel
-            if short_title:
-                content_text = f"{formato_excel}\n{short_title}"
-            ws[content_cell].value = content_text
+            # Linha do tipo (formato)
+            tipo_cell = _top_left_of_merged(f"{col}{header_row + 1}")
+            ws[tipo_cell].value = formato_excel
+
+            # Bloco do resumo (3 linhas no template). Normalmente é mesclado verticalmente.
+            resumo_cell = _top_left_of_merged(f"{col}{header_row + 2}")
+            ws[resumo_cell].value = short_title
             total_posts_filled += 1
         except Exception as e:
             print(f"Erro ao processar post: {e}")
