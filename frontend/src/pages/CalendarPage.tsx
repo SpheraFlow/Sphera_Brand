@@ -271,6 +271,14 @@ export default function CalendarPage() {
     return Array.from(months).sort((a, b) => a - b);
   };
 
+  const getMonthName = (monthNum: number): string => {
+    const monthNames = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    return monthNames[monthNum - 1] || `Mês ${monthNum}`;
+  };
+
   const openExportModal = () => {
     if (!calendar) {
       alert('Nenhum calendário carregado.');
@@ -962,12 +970,12 @@ export default function CalendarPage() {
 
         {showExportModal && calendar && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-800 rounded-xl p-6 w-full max-w-lg border border-gray-700">
+            <div className="bg-gray-800 rounded-xl p-6 w-full max-w-2xl border border-gray-700">
               <div className="flex items-start justify-between gap-4 mb-4">
                 <div>
-                  <h3 className="text-xl font-bold text-white">Exportar Excel</h3>
+                  <h3 className="text-xl font-bold text-white">📊 Exportar Excel</h3>
                   <p className="text-xs text-gray-400 mt-1">
-                    Selecione os meses detectados no calendário.
+                    Selecione os meses que deseja incluir na exportação
                   </p>
                 </div>
                 <button
@@ -979,36 +987,72 @@ export default function CalendarPage() {
                 </button>
               </div>
 
-              <div className="space-y-3 mb-5">
+              <div className="space-y-4 mb-5">
                 {detectMonthsFromCalendar(calendar).length === 0 ? (
-                  <div className="text-sm text-gray-300">
-                    Nenhum mês detectado (posts sem data no formato dd/MM).
+                  <div className="text-sm text-gray-300 bg-gray-900/50 border border-gray-700 rounded-lg p-4 text-center">
+                    ⚠️ Nenhum mês detectado (posts sem data no formato dd/MM).
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 gap-2">
-                    {detectMonthsFromCalendar(calendar).map((m) => {
-                      const checked = exportMonthsSelected.includes(m);
-                      return (
-                        <label
-                          key={m}
-                          className="flex items-center gap-2 bg-gray-900/50 border border-gray-700 rounded-lg px-3 py-2 cursor-pointer hover:border-blue-500 transition-colors"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setExportMonthsSelected((prev) => Array.from(new Set([...prev, m])).sort((a, b) => a - b));
-                              } else {
+                  <>
+                    <div className="flex gap-2 justify-end">
+                      <button
+                        onClick={() => {
+                          const allMonths = detectMonthsFromCalendar(calendar);
+                          setExportMonthsSelected(allMonths);
+                        }}
+                        className="text-xs px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-lg transition-colors"
+                      >
+                        ✓ Selecionar Todos
+                      </button>
+                      <button
+                        onClick={() => setExportMonthsSelected([])}
+                        className="text-xs px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors"
+                      >
+                        ✕ Limpar Seleção
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      {detectMonthsFromCalendar(calendar).map((m) => {
+                        const checked = exportMonthsSelected.includes(m);
+                        return (
+                          <button
+                            key={m}
+                            onClick={() => {
+                              if (checked) {
                                 setExportMonthsSelected((prev) => prev.filter((x) => x !== m));
+                              } else {
+                                setExportMonthsSelected((prev) => Array.from(new Set([...prev, m])).sort((a, b) => a - b));
                               }
                             }}
-                          />
-                          <span className="text-sm text-gray-200">Mês {m}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
+                            className={`
+                              relative px-4 py-3 rounded-lg font-medium transition-all text-sm
+                              ${
+                                checked
+                                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 border-2 border-blue-400'
+                                  : 'bg-gray-900/50 text-gray-300 border-2 border-gray-700 hover:border-blue-500/50 hover:bg-gray-900'
+                              }
+                            `}
+                          >
+                            {checked && (
+                              <span className="absolute top-1 right-1 text-xs">✓</span>
+                            )}
+                            <div className="text-center">
+                              {getMonthName(m)}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="text-xs text-gray-400 text-center">
+                      {exportMonthsSelected.length === 0 ? (
+                        'Nenhum mês selecionado'
+                      ) : exportMonthsSelected.length === 1 ? (
+                        `1 mês selecionado: ${getMonthName(exportMonthsSelected[0])}`
+                      ) : (
+                        `${exportMonthsSelected.length} meses selecionados: ${exportMonthsSelected.map(m => getMonthName(m)).join(', ')}`
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -1023,9 +1067,18 @@ export default function CalendarPage() {
                 <button
                   onClick={handleExportExcel}
                   disabled={isGenerating || exportMonthsSelected.length === 0}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-900 px-5 py-2 rounded-lg font-semibold transition-colors text-sm disabled:opacity-50"
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-900 px-5 py-2 rounded-lg font-semibold transition-colors text-sm disabled:opacity-50 flex items-center gap-2"
                 >
-                  {isGenerating ? 'Gerando...' : 'Exportar'}
+                  {isGenerating ? (
+                    <>
+                      <span className="animate-spin">⏳</span>
+                      Gerando...
+                    </>
+                  ) : (
+                    <>
+                      📊 Exportar Excel
+                    </>
+                  )}
                 </button>
               </div>
             </div>
