@@ -138,7 +138,7 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
   console.log(`📦 [DEBUG] Payload completo:`, JSON.stringify(req.body, null, 2));
 
   try {
-    const { clienteId, briefing, mes, periodo, mix, generationPrompt, chainId, formatInstructions, monthReferences } = req.body;
+    const { clienteId, briefing, mes, periodo, mix, generationPrompt, chainId, formatInstructions, monthReferences, monthsCount } = req.body;
 
     console.log(`➡️ [DEBUG] Cliente ID: ${clienteId}`);
     console.log(`➡️ [DEBUG] Briefing: ${briefing}`);
@@ -267,29 +267,20 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
 
     const periodoFinal = typeof periodo === 'number' ? periodo : 30;
 
-    // 1.1 Buscar datas comemorativas do mês (se mês for fornecido em formato 'MMMM yyyy')
-    let datasResumoTexto = "";
-    if (mes && typeof mes === "string") {
+    const monthsCountNum = (() => {
+      const n = parseInt(String(monthsCount ?? "1"), 10);
+      if (!isNaN(n) && n >= 1 && n <= 12) return n;
+      return 1;
+    })();
+
+    const buildMonthLabelList = (startMesLabel: string, count: number): string[] => {
+      const labels: string[] = [];
       try {
-        // Extrair mês numérico e ano a partir de 'MMMM yyyy'
-        const parts = mes.trim().split(" ");
-
-        // Garantir que temos pelo menos duas partes (nome do mês + ano)
-        if (parts.length < 2) {
-          console.warn("⚠️ [DEBUG] Formato de 'mes' inesperado para datas comemorativas:", mes);
-          throw new Error("Formato de mês inválido para extração de ano.");
-        }
-
+        const parts = startMesLabel.trim().split(" ");
+        if (parts.length < 2) return [startMesLabel];
         const possibleYear = parts[parts.length - 1] ?? "";
         const anoNum = parseInt(possibleYear, 10);
-
-        if (isNaN(anoNum)) {
-          console.warn("⚠️ [DEBUG] Ano inválido em 'mes' ao buscar datas comemorativas:", possibleYear);
-          throw new Error("Ano inválido em 'mes'.");
-        }
-
         const mesNome = parts.slice(0, -1).join(" ").toLowerCase();
-
         const mapaMeses: Record<string, number> = {
           janeiro: 1,
           fevereiro: 2,
@@ -305,81 +296,147 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
           novembro: 11,
           dezembro: 12,
         };
+        const mesNum = mapaMeses[mesNome] || 1;
 
-        const mesNum = mapaMeses[mesNome];
-
-        const keywordsTextForNiche = Array.isArray(branding?.keywords)
-          ? branding.keywords.join(", ")
-          : branding?.keywords || "";
-        const nicheText = `${briefing || ""} ${branding.tone_of_voice || ""} ${branding.audience || ""} ${keywordsTextForNiche}`;
-
-        // Fallback: se o cliente não tiver nicho definido, inferir algumas categorias simples pelas keywords/briefing
-        const categoriasInferidas: string[] = [];
-        const nicheLower = nicheText.toLowerCase();
-        if (nicheLower.includes("saude") || nicheLower.includes("saúde") || nicheLower.includes("clinica") || nicheLower.includes("clínica") || nicheLower.includes("medic") || nicheLower.includes("nutri")) {
-          categoriasInferidas.push("saude");
+        for (let i = 0; i < count; i++) {
+          const m = mesNum + i;
+          const y = anoNum + Math.floor((m - 1) / 12);
+          const mm = ((m - 1) % 12) + 1;
+          const monthNamePt = {
+            1: "Janeiro",
+            2: "Fevereiro",
+            3: "Março",
+            4: "Abril",
+            5: "Maio",
+            6: "Junho",
+            7: "Julho",
+            8: "Agosto",
+            9: "Setembro",
+            10: "Outubro",
+            11: "Novembro",
+            12: "Dezembro",
+          }[mm];
+          labels.push(`${monthNamePt} ${y}`);
         }
-        if (nicheLower.includes("fitness") || nicheLower.includes("academ") || nicheLower.includes("treino") || nicheLower.includes("corrida") || nicheLower.includes("cross") || nicheLower.includes("pilates")) {
-          categoriasInferidas.push("fitness");
-        }
-        if (nicheLower.includes("kids") || nicheLower.includes("crian") || nicheLower.includes("pediatr") || nicheLower.includes("escola") || nicheLower.includes("infantil")) {
-          categoriasInferidas.push("kids");
-        }
-        if (nicheLower.includes("psico") || nicheLower.includes("terapia") || nicheLower.includes("saude mental") || nicheLower.includes("saúde mental")) {
-          categoriasInferidas.push("psicologia");
-        }
-
-        const categoriasParaBusca = Array.from(
-          new Set([
-            ...(categoriasNicho || []),
-            ...(categoriasInferidas || []),
-            "geral",
-            "feriado",
-          ])
-        ).filter(Boolean);
-
-        if (mesNum && anoNum) {
-          // 0) Melhor esforço: busca na internet (cache no banco)
-          await syncFeriadosBrasilApi(anoNum);
-
-          console.log(`📅 [DEBUG] Buscando datas comemorativas para ${mesNum}/${anoNum}...`);
-          try {
-            const whereCategorias = categoriasParaBusca.length > 0 ? "AND categorias ?| $3" : "";
-            const params: any[] = [mesNum, anoNum];
-            if (categoriasParaBusca.length > 0) params.push(categoriasParaBusca);
-
-            const datasResult = await db.query(
-              `SELECT data, titulo, categorias, relevancia FROM datas_comemorativas
-               WHERE EXTRACT(MONTH FROM data) = $1 AND EXTRACT(YEAR FROM data) = $2
-               ${whereCategorias}
-               ORDER BY data ASC, relevancia DESC`,
-              params
-            );
-
-            if (datasResult.rows.length > 0) {
-              datasResumoTexto = datasResult.rows
-                .map((d: any) => {
-                  const dt = new Date(d.data);
-                  const dia = dt.getDate().toString().padStart(2, "0");
-                  const mesNumStr = (dt.getMonth() + 1).toString().padStart(2, "0");
-                  const cats = Array.isArray(d.categorias) ? d.categorias.join(", ") : "";
-                  return `- ${dia}/${mesNumStr}/${anoNum}: ${d.titulo}${cats ? ` (categorias: ${cats})` : ""}`;
-                })
-                .join("\n");
-              console.log(`✅ [DEBUG] ${datasResult.rows.length} datas comemorativas encontradas para o mês.`);
-            }
-          } catch (dbDatasError: any) {
-            datasResumoTexto = "";
-          }
-
-          if (!datasResumoTexto) {
-            datasResumoTexto = buildFallbackDatasResumoTexto(mesNum, anoNum, nicheText);
-          }
-        }
-      } catch (e) {
-        console.warn("⚠️ [DEBUG] Falha ao buscar datas comemorativas:", e);
+        return labels;
+      } catch (_e) {
+        return [startMesLabel];
       }
-    }
+    };
+
+    const monthsToGenerate = (mes && typeof mes === "string")
+      ? buildMonthLabelList(mes, monthsCountNum)
+      : ["Geral"];
+
+    const buildDatasResumoTextoForMes = async (mesLabel: string): Promise<string> => {
+      let datasResumoTexto = "";
+      if (mesLabel && typeof mesLabel === "string") {
+        try {
+          const parts = mesLabel.trim().split(" ");
+
+          if (parts.length < 2) {
+            throw new Error("Formato de mês inválido para extração de ano.");
+          }
+
+          const possibleYear = parts[parts.length - 1] ?? "";
+          const anoNum = parseInt(possibleYear, 10);
+
+          if (isNaN(anoNum)) {
+            throw new Error("Ano inválido em 'mes'.");
+          }
+
+          const mesNome = parts.slice(0, -1).join(" ").toLowerCase();
+
+          const mapaMeses: Record<string, number> = {
+            janeiro: 1,
+            fevereiro: 2,
+            marco: 3,
+            março: 3,
+            abril: 4,
+            maio: 5,
+            junho: 6,
+            julho: 7,
+            agosto: 8,
+            setembro: 9,
+            outubro: 10,
+            novembro: 11,
+            dezembro: 12,
+          };
+
+          const mesNum = mapaMeses[mesNome];
+
+          const keywordsTextForNiche = Array.isArray(branding?.keywords)
+            ? branding.keywords.join(", ")
+            : branding?.keywords || "";
+          const nicheText = `${briefing || ""} ${branding.tone_of_voice || ""} ${branding.audience || ""} ${keywordsTextForNiche}`;
+
+          // Fallback: se o cliente não tiver nicho definido, inferir algumas categorias simples pelas keywords/briefing
+          const categoriasInferidas: string[] = [];
+          const nicheLower = nicheText.toLowerCase();
+          if (nicheLower.includes("saude") || nicheLower.includes("saúde") || nicheLower.includes("clinica") || nicheLower.includes("clínica") || nicheLower.includes("medic") || nicheLower.includes("nutri")) {
+            categoriasInferidas.push("saude");
+          }
+          if (nicheLower.includes("fitness") || nicheLower.includes("academ") || nicheLower.includes("treino") || nicheLower.includes("corrida") || nicheLower.includes("esporte")) {
+            categoriasInferidas.push("fitness");
+          }
+          if (nicheLower.includes("kids") || nicheLower.includes("crian") || nicheLower.includes("pediatr") || nicheLower.includes("escola") || nicheLower.includes("infantil")) {
+            categoriasInferidas.push("kids");
+          }
+          if (nicheLower.includes("psico") || nicheLower.includes("terapia") || nicheLower.includes("saude mental") || nicheLower.includes("saúde mental")) {
+            categoriasInferidas.push("psicologia");
+          }
+
+          const categoriasParaBusca = Array.from(
+            new Set([
+              ...(categoriasNicho || []),
+              ...(categoriasInferidas || []),
+              "geral",
+              "feriado",
+            ])
+          ).filter(Boolean);
+
+          if (mesNum && anoNum) {
+            await syncFeriadosBrasilApi(anoNum);
+
+            console.log(`📅 [DEBUG] Buscando datas comemorativas para ${mesNum}/${anoNum}...`);
+            try {
+              const whereCategorias = categoriasParaBusca.length > 0 ? "AND categorias ?| $3" : "";
+              const params: any[] = [mesNum, anoNum];
+              if (categoriasParaBusca.length > 0) params.push(categoriasParaBusca);
+
+              const datasResult = await db.query(
+                `SELECT data, titulo, categorias, relevancia FROM datas_comemorativas
+                 WHERE EXTRACT(MONTH FROM data) = $1 AND EXTRACT(YEAR FROM data) = $2
+                 ${whereCategorias}
+                 ORDER BY data ASC, relevancia DESC`,
+                params
+              );
+
+              if (datasResult.rows.length > 0) {
+                datasResumoTexto = datasResult.rows
+                  .map((d: any) => {
+                    const dt = new Date(d.data);
+                    const dia = dt.getDate().toString().padStart(2, "0");
+                    const mesNumStr = (dt.getMonth() + 1).toString().padStart(2, "0");
+                    const cats = Array.isArray(d.categorias) ? d.categorias.join(", ") : "";
+                    return `- ${dia}/${mesNumStr}/${anoNum}: ${d.titulo}${cats ? ` (categorias: ${cats})` : ""}`;
+                  })
+                  .join("\n");
+              }
+            } catch (dbDatasError: any) {
+              datasResumoTexto = "";
+            }
+
+            if (!datasResumoTexto) {
+              datasResumoTexto = buildFallbackDatasResumoTexto(mesNum, anoNum, nicheText);
+            }
+          }
+        } catch (_e) {
+          datasResumoTexto = "";
+        }
+      }
+      return datasResumoTexto;
+    };
 
     // 1. Validar API Key
     if (!process.env.GOOGLE_API_KEY) {
@@ -422,16 +479,38 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
       ? branding.keywords.join(", ")
       : branding.keywords || "";
 
-    // 5.1 Construir generationPrompt efetivo combinando Prompt Chain (se houver)
     let effectiveGenerationPrompt = generationPrompt || "";
     if (chainOutputFinal) {
       effectiveGenerationPrompt = `${effectiveGenerationPrompt}\n\n# Contexto gerado pela Prompt Chain:\n${chainOutputFinal}`;
     }
 
-    // 6. Montar Prompt
-    console.log("🤖 [DEBUG] Montando prompt determinístico para o Gemini com DNA de marca enriquecido...");
     const hojeISO = new Date().toISOString().slice(0, 10);
-    const prompt = `
+
+    const cleanAndParseJSON = (text: string) => {
+      const firstBracket = text.indexOf('[');
+      const lastBracket = text.lastIndexOf(']');
+      if (firstBracket !== -1 && lastBracket !== -1) {
+        const jsonCandidate = text.substring(firstBracket, lastBracket + 1);
+        try {
+          return JSON.parse(jsonCandidate);
+        } catch (e) {
+          console.error("⚠️ [DEBUG] Erro ao fazer parse do trecho extraído:", e);
+        }
+      }
+      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
+      return JSON.parse(cleaned);
+    };
+
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
+    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+
+    const resultsByMonth: any[] = [];
+    let continuityContext = "";
+
+    for (const mesToGenerate of monthsToGenerate) {
+      const datasResumoTexto = await buildDatasResumoTextoForMes(mesToGenerate);
+
+      const prompt = `
       Atue como Strategist Planner.
 
       Crie um Planejamento de Conteúdo contendo EXATAMENTE esta quantidade de posts (nem mais, nem menos):
@@ -445,7 +524,7 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
       Total de itens: ${totalPosts}.
 
       INSTRUÇÃO DE DISTRIBUIÇÃO:
-      Distribua esses ${totalPosts} posts ao longo do mês de ${mes || "Próximo Mês"} de forma lógica e espaçada (ex: terças e quintas, ou a cada 2 dias). Não agrupe tudo no dia 1.
+      Distribua esses ${totalPosts} posts ao longo do mês de ${mesToGenerate || mes || "Próximo Mês"} de forma lógica e espaçada (ex: terças e quintas, ou a cada 2 dias). Não agrupe tudo no dia 1.
 
       DNA DA MARCA (use isso como referência principal, acima de qualquer suposição genérica):
       - Tom de Voz (detalhado): ${toneText}
@@ -465,17 +544,6 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
 
       DATA ATUAL (referência): ${hojeISO}
 
-      REGRA DE PRIORIZAÇÃO (muito importante):
-      - Priorize datas relevantes que ocorram nas próximas 2-3 semanas a partir da DATA ATUAL, quando isso fizer sentido para o mês alvo.
-      - Se o mês alvo não for o mês atual, priorize as datas relevantes dentro do mês alvo e distribua os posts de forma equilibrada.
-
-      REGRA OBRIGATÓRIA SOBRE DATAS:
-      - Inclua no mínimo 4 posts ancorados em datas comemorativas/relevantes reais do mês e coerentes com o nicho do cliente.
-      - O campo "tema" deve mencionar a data/evento (ex: "Janeiro Branco: ..." / "Dia Mundial da Saúde: ...").
-
-      DOCUMENTOS DA MARCA (resumo de guias, posicionamento, manifesto, etc):
-      ${docsResumo || 'Nenhum documento adicional cadastrado. Use apenas o DNA e o briefing acima.'}
-
       REGRAS OBRIGATÓRIAS (Não viole em hipótese alguma):
       ${rules}
 
@@ -485,8 +553,14 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
       REFERÊNCIAS GERAIS PARA ESTE MÊS (links, campanhas anteriores, benchmarks, etc.):
       ${monthReferences || 'Nenhuma referência específica fornecida para este mês.'}
 
+      CONTINUIDADE ENTRE MESES (mantenha consistência estratégica e aproveite campanhas em andamento):
+      ${continuityContext || 'Primeiro mês da geração. Ainda não há meses anteriores gerados nesta execução.'}
+
       INSTRUÇÕES AVANÇADAS DO ESTRATEGISTA (se fornecidas pelo usuário ou pela Prompt Chain):
       ${effectiveGenerationPrompt || 'Use seu melhor julgamento estratégico mantendo consistência com o DNA de marca e as regras acima.'}
+
+      DOCUMENTOS DA MARCA (resumo de guias, posicionamento, manifesto, etc):
+      ${docsResumo || 'Nenhum documento adicional cadastrado. Use apenas o DNA e o briefing acima.'}
 
       INSTRUÇÃO ESPECIAL PARA PROMPTS DE ARTE:
       Para cada post, gere também um campo 'image_generation_prompt' técnico para ferramentas de IA generativa (Midjourney, DALL-E, etc.).
@@ -512,137 +586,97 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
       IMPORTANTE: Para formato 'Photos', seja ainda mais detalhado no campo 'ideia_visual' incluindo: locação, ângulo, iluminação, composição, props, vestuário e mood desejado.
     `;
 
-    // 5. Chamar Gemini (com fallback robusto)
-    console.log("🚀 [DEBUG] Enviando para Gemini...");
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
-    
-    let result;
-    let responseText = ""; // Inicializado para evitar erro de TS
-
-    // Lista de modelos para tentar em ordem
-    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
-    
-    for (const modelName of modelsToTry) {
-      try {
-        console.log(`🤖 [DEBUG] Tentando modelo: ${modelName}...`);
-        const model = genAI.getGenerativeModel({ model: modelName });
-        result = await model.generateContent(prompt);
-        responseText = result.response.text();
-        
-        // Log de uso de tokens
-        const usageMetadata = result.response.usageMetadata;
-        if (usageMetadata) {
-          console.log(`📊 [TOKENS] Modelo: ${modelName}`);
-          console.log(`📊 [TOKENS] Prompt Tokens: ${usageMetadata.promptTokenCount || 0}`);
-          console.log(`📊 [TOKENS] Completion Tokens: ${usageMetadata.candidatesTokenCount || 0}`);
-          console.log(`📊 [TOKENS] Total Tokens: ${usageMetadata.totalTokenCount || 0}`);
-          
-          // Atualizar contador de tokens do cliente
-          await updateTokenUsage(clienteId, usageMetadata, "calendar_generation", modelName);
-        }
-        
-        console.log(`✅ [DEBUG] Resposta recebida do ${modelName} (tamanho: ${responseText.length})`);
-        break; // Sucesso, sair do loop
-      } catch (modelError: any) {
-        console.warn(`⚠️ [DEBUG] ${modelName} falhou:`, modelError.message);
-        
-        // Se for o último modelo, lançar o erro
-        if (modelName === modelsToTry[modelsToTry.length - 1]) {
-          throw new Error(`Todos os modelos falharam. Erro final: ${modelError.message}`);
-        }
-        
-        console.log("⏳ [DEBUG] Aguardando 2s antes do próximo modelo...");
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      }
-    }
-
-    // 6. Limpar e fazer parse do JSON (função robusta)
-    const cleanAndParseJSON = (text: string) => {
-      // 1. Tenta encontrar o primeiro '[' e o último ']'
-      const firstBracket = text.indexOf('[');
-      const lastBracket = text.lastIndexOf(']');
-      
-      if (firstBracket !== -1 && lastBracket !== -1) {
-        const jsonCandidate = text.substring(firstBracket, lastBracket + 1);
+      console.log("🚀 [DEBUG] Enviando para Gemini...");
+      let responseText = "";
+      let usedModelName: string | null = null;
+      for (const modelName of modelsToTry) {
         try {
-          return JSON.parse(jsonCandidate);
-        } catch (e) {
-          console.error("⚠️ [DEBUG] Erro ao fazer parse do trecho extraído:", e);
+          console.log(`🤖 [DEBUG] Tentando modelo: ${modelName}...`);
+          const model = genAI.getGenerativeModel({ model: modelName });
+          const result = await model.generateContent(prompt);
+          responseText = result.response.text();
+          usedModelName = modelName;
+
+          const usageMetadata = result.response.usageMetadata;
+          if (usageMetadata) {
+            await updateTokenUsage(clienteId, usageMetadata, "calendar_generation", modelName);
+          }
+          break;
+        } catch (modelError: any) {
+          if (modelName === modelsToTry[modelsToTry.length - 1]) {
+            throw new Error(`Todos os modelos falharam. Erro final: ${modelError.message}`);
+          }
+          await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
-      
-      // 2. Fallback: Tenta limpar markdown comum
-      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      return JSON.parse(cleaned);
-    };
 
-    console.log("🧹 [DEBUG] Limpando resposta do Gemini...");
-    const rawCalendarData = cleanAndParseJSON(responseText);
-    
-    // Remover duplicatas e limitar ao total de posts
-    let calendarData = rawCalendarData;
-    if (Array.isArray(rawCalendarData)) {
-      // Remover posts duplicados (mesma data + tema + formato)
-      const seen = new Set();
-      const uniquePosts = rawCalendarData.filter((post: any) => {
-        const key = `${post.data}|${post.tema}|${post.formato}`;
-        if (seen.has(key)) {
-          console.log(`⚠️ [DEBUG] Post duplicado removido: ${post.data} - ${post.tema}`);
-          return false;
+      console.log("🧹 [DEBUG] Limpando resposta do Gemini...");
+      const rawCalendarData = cleanAndParseJSON(responseText);
+
+      let calendarData = rawCalendarData;
+      if (Array.isArray(rawCalendarData)) {
+        const seen = new Set<string>();
+        const uniquePosts = rawCalendarData.filter((post: any) => {
+          const key = `${post.data}|${post.tema}|${post.formato}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        calendarData = uniquePosts.slice(0, totalPosts);
+      }
+
+      console.log("💾 [DEBUG] Salvando no banco...");
+      const mesFinal = mesToGenerate || "Geral";
+      const metadata = {
+        month_references: monthReferences || null,
+        format_instructions: formatInstructions || null,
+      };
+
+      const saved = await db.query(
+        "INSERT INTO calendarios (cliente_id, mes, calendario_json, periodo, metadata) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+        [clienteId, mesFinal, JSON.stringify(calendarData), periodoFinal, metadata]
+      );
+
+      try {
+        if (Array.isArray(calendarData)) {
+          const temas = calendarData
+            .slice(0, 12)
+            .map((p: any) => String(p?.tema || "").trim())
+            .filter(Boolean);
+          continuityContext = `${continuityContext}\n\nMÊS JÁ GERADO: ${mesFinal}\nTEMAS (amostra):\n${temas.slice(0, 8).map((t: string) => `- ${t}`).join("\n")}`;
         }
-        seen.add(key);
-        return true;
+      } catch (_e) {
+        // ignore
+      }
+
+      resultsByMonth.push({
+        calendarId: saved.rows[0].id,
+        mes: mesFinal,
+        model: usedModelName,
+        postsCount: Array.isArray(calendarData) ? calendarData.length : 0,
       });
-      
-      // Limitar ao total de posts solicitado
-      calendarData = uniquePosts.slice(0, totalPosts);
-      
-      console.log(`✅ [DEBUG] Posts após remoção de duplicatas: ${uniquePosts.length}`);
-      console.log(`✅ [DEBUG] Posts após limite (${totalPosts}): ${calendarData.length}`);
-    } else {
-      console.log("✅ [DEBUG] JSON parseado (não é array)");
     }
 
-    // 7. Salvar no Banco
-    console.log("💾 [DEBUG] Salvando no banco...");
-    const mesFinal = mes || "Geral";
-    console.log(`💾 [DEBUG] Mês que será salvo: "${mesFinal}"`);
-    const metadata = {
-      month_references: monthReferences || null,
-      format_instructions: formatInstructions || null,
-    };
-
-    const saved = await db.query(
-      "INSERT INTO calendarios (cliente_id, mes, calendario_json, periodo, metadata) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-      [clienteId, mesFinal, JSON.stringify(calendarData), periodoFinal, metadata]
-    );
-
-    console.log("🎉 [SUCESSO] Calendário gerado! ID: " + saved.rows[0].id);
-    return res.json({ success: true, calendarId: saved.rows[0].id, data: calendarData });
-
+    return res.json({
+      success: true,
+      calendars: resultsByMonth,
+    });
   } catch (error: any) {
-    console.error("❌ [ERRO FATAL DETALHADO]:", error);
-    // Se for erro do Google, mostra detalhes
-    if (error.response) console.error("Google Error Details:", error.response);
-    
-    return res.status(500).json({ 
-      error: "Falha interna ao gerar calendário.", 
-      details: error.message 
+    console.error("❌ Erro ao gerar calendário:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Erro ao gerar calendário.",
+      details: error.message,
     });
   }
 });
 
-// POST /api/calendars/regenerate-post - Regenera um único post com IA
-router.post("/calendars/regenerate-post", async (req: Request, res: Response) => {
-  console.log("\n🤖 [DEBUG] ROTA /calendars/regenerate-post ACIONADA");
-  console.log("📦 [DEBUG] Payload:", JSON.stringify(req.body, null, 2));
-
+// PUT /api/calendars/regenerate-post - Regenera um post específico do calendário
+router.put("/calendars/regenerate-post", async (req: Request, res: Response) => {
   try {
-    const { calendarId, postIndex, newFormato, customPrompt } = req.body as {
+    const { calendarId, postIndex } = req.body as {
       calendarId: string;
       postIndex: number;
-      newFormato?: string;
-      customPrompt?: string;
     };
 
     if (!calendarId || typeof postIndex !== "number") {
@@ -650,11 +684,6 @@ router.post("/calendars/regenerate-post", async (req: Request, res: Response) =>
         success: false,
         error: "calendarId e postIndex são obrigatórios.",
       });
-    }
-
-    if (!process.env.GOOGLE_API_KEY) {
-      console.error("❌ [ERRO] API Key do Google não encontrada no .env");
-      return res.status(500).json({ error: "Configuração de IA ausente." });
     }
 
     // Buscar calendário e cliente associado
@@ -705,13 +734,11 @@ router.post("/calendars/regenerate-post", async (req: Request, res: Response) =>
     );
     const rules = rulesResult.rows.map((r: any) => `- ${r.regra}`).join("\n");
 
-    const targetFormato = newFormato || originalPost.formato;
-
     // Montar prompt para regenerar um único post
     const regenPrompt = `
       Você é um estrategista de social media especialista em adaptação de conteúdo.
 
-      Regere UM ÚNICO post para um calendário editorial, adaptando o conteúdo abaixo para o FORMATO: "${targetFormato}".
+      Regere UM ÚNICO post para um calendário editorial, adaptando o conteúdo abaixo para o FORMATO: "${originalPost.formato}".
 
       CONTEXTO DA MARCA:
       - Tom de Voz: ${branding.tone_of_voice}
@@ -733,14 +760,14 @@ router.post("/calendars/regenerate-post", async (req: Request, res: Response) =>
       }
 
       INSTRUÇÕES DO ESTRATEGISTA (opcional):
-      ${customPrompt || "Adapte o conteúdo para o novo formato mantendo a essência estratégica, mas otimizando copy, ideia visual e objetivo para aumentar desempenho."}
+      Adapte o conteúdo para o novo formato mantendo a essência estratégica, mas otimizando copy, ideia visual e objetivo para aumentar desempenho.
 
       SAÍDA ESPERADA:
       - Crie UMA ÚNICA SUGESTÃO DE POST no formato JSON, sem markdown, com exatamente estes campos:
       {
         "data": "DD/MM", // mantenha a mesma data do post original
         "tema": "...",
-        "formato": "${targetFormato}",
+        "formato": "${originalPost.formato}",
         "ideia_visual": "...",
         "copy_sugestao": "...",
         "objetivo": "...",
@@ -757,14 +784,14 @@ router.post("/calendars/regenerate-post", async (req: Request, res: Response) =>
 
     // Lista de modelos para tentar em ordem (Fallback Robusto)
     const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
-    
+
     for (const modelName of modelsToTry) {
       try {
         console.log(`🤖 [DEBUG] Tentando modelo (regen): ${modelName}...`);
         const model = genAI.getGenerativeModel({ model: modelName });
         result = await model.generateContent(regenPrompt);
         responseText = result.response.text();
-        
+
         // Log de uso de tokens
         const usageMetadata = result.response.usageMetadata;
         if (usageMetadata) {
@@ -772,21 +799,21 @@ router.post("/calendars/regenerate-post", async (req: Request, res: Response) =>
           console.log(`📊 [TOKENS REGEN] Prompt Tokens: ${usageMetadata.promptTokenCount || 0}`);
           console.log(`📊 [TOKENS REGEN] Completion Tokens: ${usageMetadata.candidatesTokenCount || 0}`);
           console.log(`📊 [TOKENS REGEN] Total Tokens: ${usageMetadata.totalTokenCount || 0}`);
-          
+
           // Atualizar contador de tokens do cliente
           await updateTokenUsage(calendar.cliente_id, usageMetadata, "post_regeneration", modelName);
         }
-        
+
         console.log(`✅ [DEBUG] Resposta recebida do ${modelName} (tamanho: ${responseText.length})`);
         break; // Sucesso
       } catch (modelError: any) {
         console.warn(`⚠️ [DEBUG] ${modelName} falhou em regen:`, modelError.message);
-        
+
         if (modelName === modelsToTry[modelsToTry.length - 1]) {
-           // Se foi o último, não tem mais o que fazer
-           throw new Error(`Todos os modelos falharam em regen. Erro final: ${modelError.message}`);
+          // Se foi o último, não tem mais o que fazer
+          throw new Error(`Todos os modelos falharam em regen. Erro final: ${modelError.message}`);
         }
-        
+
         console.log("⏳ [DEBUG] Aguardando 2s antes do próximo modelo...");
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
@@ -820,10 +847,7 @@ router.post("/calendars/regenerate-post", async (req: Request, res: Response) =>
     }
 
     // Atualizar o post no array local
-    posts[index] = {
-      ...originalPost,
-      ...regeneratedPost,
-    };
+    posts[index] = { ...originalPost, ...regeneratedPost };
 
     // Persistir no banco
     await db.query(
@@ -833,6 +857,8 @@ router.post("/calendars/regenerate-post", async (req: Request, res: Response) =>
        WHERE id = $2`,
       [JSON.stringify(posts), calendarId]
     );
+
+    console.log("✅ Post atualizado com sucesso");
 
     return res.json({
       success: true,
@@ -847,7 +873,6 @@ router.post("/calendars/regenerate-post", async (req: Request, res: Response) =>
     });
   }
 });
-
 
 // GET /api/calendars/:clientId - Retorna calendário do mês atual ou o último
 router.get("/calendars/:clientId", async (req: Request, res: Response) => {

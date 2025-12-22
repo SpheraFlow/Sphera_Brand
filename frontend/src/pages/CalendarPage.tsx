@@ -66,6 +66,7 @@ export default function CalendarPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [periodoDias, setPeriodoDias] = useState<number>(30);
+  const [monthsCountToGenerate, setMonthsCountToGenerate] = useState<number>(1);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDeletingPost, setIsDeletingPost] = useState(false);
@@ -286,6 +287,7 @@ export default function CalendarPage() {
     setBriefing('');
     setGenerationPrompt('');
     setPeriodoDias(30);
+    setMonthsCountToGenerate(1);
     setShowGenerateModal(true);
   };
 
@@ -370,6 +372,7 @@ export default function CalendarPage() {
         periodo: periodoDias,
         briefing,
         mes: format(currentMonth, 'MMMM yyyy', { locale: ptBR }),
+        monthsCount: monthsCountToGenerate,
         mix,
         generationPrompt,
         formatInstructions,
@@ -664,6 +667,8 @@ export default function CalendarPage() {
             setGenerationPrompt={setGenerationPrompt}
             periodoDias={periodoDias}
             setPeriodoDias={setPeriodoDias}
+            monthsCountToGenerate={monthsCountToGenerate}
+            setMonthsCountToGenerate={setMonthsCountToGenerate}
             formatInstructions={formatInstructions}
             setFormatInstructions={setFormatInstructions}
             promptChains={promptChains}
@@ -1451,6 +1456,8 @@ interface GenerateModalProps {
   setBriefing: (v: string) => void;
   periodoDias: number;
   setPeriodoDias: (v: number) => void;
+  monthsCountToGenerate: number;
+  setMonthsCountToGenerate: (v: number) => void;
   generationPrompt: string;
   setGenerationPrompt: (v: string) => void;
   formatInstructions: FormatInstructions;
@@ -1467,6 +1474,7 @@ function GenerateModal({
   mix, setMix,
   briefing, setBriefing,
   periodoDias, setPeriodoDias,
+  monthsCountToGenerate, setMonthsCountToGenerate,
   generationPrompt, setGenerationPrompt,
   formatInstructions, setFormatInstructions,
   promptChains,
@@ -1492,6 +1500,22 @@ function GenerateModal({
             >
               <option value="30">Mensal (30 dias)</option>
               <option value="90">Trimestral (90 dias)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-2">Quantos meses gerar</label>
+            <select
+              value={String(monthsCountToGenerate)}
+              onChange={(e) => setMonthsCountToGenerate(parseInt(e.target.value, 10))}
+              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500"
+            >
+              <option value="1">1 mês</option>
+              <option value="2">2 meses</option>
+              <option value="3">3 meses</option>
+              <option value="4">4 meses</option>
+              <option value="5">5 meses</option>
+              <option value="6">6 meses</option>
             </select>
           </div>
 
