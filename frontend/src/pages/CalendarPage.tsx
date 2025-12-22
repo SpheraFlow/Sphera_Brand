@@ -411,8 +411,18 @@ export default function CalendarPage() {
     } catch (error: any) {
       console.error('❌ Erro ao gerar calendário:', error);
       
+      // Tratamento específico para 504 (Gateway Timeout) - geralmente proxy (Nginx/Cloudflare)
+      if (error.response?.status === 504) {
+        alert(
+          '⏳ A geração demorou mais que o limite do servidor (erro 504).\n\n' +
+          'Isso é comum quando você gera muitos posts ou múltiplos meses.\n\n' +
+          '✅ O processamento pode ainda estar ocorrendo no backend.\n' +
+          'Aguarde alguns minutos e recarregue a página para verificar se os calendários apareceram.'
+        );
+      }
+
       // Tratamento específico para timeout
-      if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
         alert(
           '⏳ A geração está demorando mais que o esperado.\n\n' +
           'Isso é normal para calendários com muitos posts ou múltiplos meses.\n\n' +

@@ -495,10 +495,12 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
     const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
 
     const resultsByMonth: any[] = [];
+    const failedMonths: any[] = [];
     let continuityContext = "";
 
     for (const mesToGenerate of monthsToGenerate) {
-      const datasResumoTexto = await buildDatasResumoTextoForMes(mesToGenerate);
+      try {
+        const datasResumoTexto = await buildDatasResumoTextoForMes(mesToGenerate);
 
       const prompt = `
       Atue como Strategist Planner.
@@ -645,11 +647,29 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
         model: usedModelName,
         postsCount: Array.isArray(calendarData) ? calendarData.length : 0,
       });
+
+        console.log(`✅ [DEBUG] Mês ${mesFinal} gerado com sucesso!`);
+      } catch (monthError: any) {
+        console.error(`❌ [DEBUG] Erro ao gerar mês ${mesToGenerate}:`, monthError.message);
+        failedMonths.push({
+          mes: mesToGenerate,
+          error: monthError.message,
+        });
+      }
+    }
+
+    if (resultsByMonth.length === 0 && failedMonths.length > 0) {
+      return res.status(500).json({
+        success: false,
+        error: "Todos os meses falharam na geração.",
+        failedMonths,
+      });
     }
 
     return res.json({
       success: true,
       calendars: resultsByMonth,
+      failedMonths: failedMonths.length > 0 ? failedMonths : undefined,
     });
   } catch (error: any) {
     console.error("❌ Erro ao gerar calendário:", error);

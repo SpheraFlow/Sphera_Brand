@@ -32,6 +32,7 @@ import presentationRouter from "./routes/presentation";
 import photoIdeasRouter from "./routes/photoIdeas";
 import tokenUsageRouter from "./routes/tokenUsage";
 import db from "./config/database";
+ import http from "http";
 
 // Inicialização do Express
 const app = express();
@@ -194,7 +195,15 @@ const checkEnvironment = async () => {
 };
 
 // Inicialização do servidor
-app.listen(PORT, () => {
+const server = http.createServer(app);
+
+// Aumentar timeouts do Node para requests longas (IA pode demorar)
+// Obs: ainda pode ser necessário ajustar timeouts do Nginx/Proxy na VPS.
+server.requestTimeout = 15 * 60 * 1000; // 15min
+server.headersTimeout = 16 * 60 * 1000; // deve ser > requestTimeout
+server.keepAliveTimeout = 65 * 1000;
+
+server.listen(PORT, () => {
   console.log(`\n🚀 ============================================`);
   console.log(`🚀 Backend ONLINE na porta ${PORT}`);
   console.log(`🚀 Startup ID: ${STARTUP_ID}`);
