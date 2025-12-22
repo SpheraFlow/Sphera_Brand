@@ -13,6 +13,7 @@ from copy import copy
 import os
 import calendar
 import re
+from openpyxl.styles import Alignment
 
 def get_day_of_week(day, month, year):
     """
@@ -282,7 +283,7 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
         if week_index == 0 and first_weekday_sun0 != 0:
             usable_cols = 7 - first_weekday_sun0  # ex.: segunda(1) -> 6 cols
             for offset in range(usable_cols):
-                col = col_letters[offset]
+                col = col_letters[first_weekday_sun0 + offset]
                 dow = first_weekday_sun0 + offset
                 if current_day <= days_in_month:
                     ws[f"{col}{header_row}"].value = f"{day_labels[dow]} ({current_day})"
@@ -422,7 +423,15 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
 
             # Bloco do resumo (3 linhas no template). Normalmente é mesclado verticalmente.
             resumo_cell = _top_left_of_merged(f"{col}{header_row + 2}")
-            ws[resumo_cell].value = short_title
+            description = (post.get('descricao') or post.get('description') or post.get('copy_sugestao') or '').strip()
+            if description and short_title and description != short_title:
+                ws[resumo_cell].value = f"{short_title}\n{description}"
+            else:
+                ws[resumo_cell].value = description if description else short_title
+            try:
+                ws[resumo_cell].alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            except Exception:
+                pass
             total_posts_filled += 1
         except Exception as e:
             print(f"Erro ao processar post: {e}")
