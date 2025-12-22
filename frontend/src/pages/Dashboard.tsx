@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../services/api';
 import PresentationGenerator from '../components/PresentationGenerator';
+import TokenUsageDisplay from '../components/TokenUsageDisplay';
 
 interface ClientInfo {
   id: string;
@@ -360,6 +361,8 @@ export default function Dashboard() {
               </span>
             </div>
           </div>
+
+          <TokenUsageDisplay clienteId={clientId || ''} />
 
           {/* Card Próximos Posts */}
           <div className="bg-gray-800/80 border border-gray-700 rounded-xl p-4">

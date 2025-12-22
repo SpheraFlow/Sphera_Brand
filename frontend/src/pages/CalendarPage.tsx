@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ContentMixSelector from '../components/ContentMixSelector';
 import PhotoIdeasModal from '../components/PhotoIdeasModal';
-import TokenUsageDisplay from '../components/TokenUsageDisplay';
+ 
 import api from '../services/api';
 import {
   format,
@@ -71,6 +71,9 @@ export default function CalendarPage() {
   const [isDeletingPost, setIsDeletingPost] = useState(false);
   const [isRegeneratingPost, setIsRegeneratingPost] = useState(false);
   const [showPhotoIdeasModal, setShowPhotoIdeasModal] = useState(false);
+
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportMonthsSelected, setExportMonthsSelected] = useState<number[]>([]);
 
   // Estados para geração
   const [briefing, setBriefing] = useState('');
@@ -209,7 +212,7 @@ export default function CalendarPage() {
     }
   };
 
-  const handlePrintCalendar = async () => {
+  const handleExportExcel = async () => {
     if (!calendar) {
       alert('Nenhum calendário carregado.');
       return;
@@ -225,7 +228,8 @@ export default function CalendarPage() {
         '/calendars/export-excel',
         {
           calendarId: calendar.id,
-          clientName: downloadClientName
+          clientName: downloadClientName,
+          monthsSelected: exportMonthsSelected
         },
         {
           responseType: 'blob'
@@ -248,7 +252,32 @@ export default function CalendarPage() {
       alert('Erro ao gerar Excel: ' + (err.response?.data?.error || err.message));
     } finally {
       setIsGenerating(false);
+      setShowExportModal(false);
     }
+  };
+
+  const detectMonthsFromCalendar = (cal: Calendar): number[] => {
+    const months = new Set<number>();
+    for (const p of cal.posts || []) {
+      const dateStr = String((p as any)?.data || '');
+      const m = dateStr.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+      if (!m) continue;
+      const monthNum = parseInt(m[2], 10);
+      if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
+        months.add(monthNum);
+      }
+    }
+    return Array.from(months).sort((a, b) => a - b);
+  };
+
+  const openExportModal = () => {
+    if (!calendar) {
+      alert('Nenhum calendário carregado.');
+      return;
+    }
+    const detected = detectMonthsFromCalendar(calendar);
+    setExportMonthsSelected(detected);
+    setShowExportModal(true);
   };
 
   const openGenerateModal = () => {
@@ -633,6 +662,8 @@ export default function CalendarPage() {
             setBriefing={setBriefing}
             generationPrompt={generationPrompt}
             setGenerationPrompt={setGenerationPrompt}
+            periodoDias={periodoDias}
+            setPeriodoDias={setPeriodoDias}
             formatInstructions={formatInstructions}
             setFormatInstructions={setFormatInstructions}
             promptChains={promptChains}
@@ -676,10 +707,10 @@ export default function CalendarPage() {
               <span className="text-red-400 text-sm animate-pulse">🗑️ Excluindo...</span>
             )}
             <button
-              onClick={handlePrintCalendar}
+              onClick={openExportModal}
               className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-semibold transition-colors text-sm"
             >
-              📄 Gerar PDF
+              📊 Exportar Excel
             </button>
             <button
               onClick={deleteCalendar}
@@ -698,9 +729,9 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* Navegação do Mês e Token Usage */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-          <div className="lg:col-span-2 flex items-center justify-between bg-gray-800/50 rounded-xl p-4 no-print">
+        {/* Navegação do Mês */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+          <div className="flex items-center justify-between bg-gray-800/50 rounded-xl p-4 no-print">
             <button
               onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
               className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
@@ -718,11 +749,6 @@ export default function CalendarPage() {
             >
               Próximo →
             </button>
-          </div>
-
-          {/* Token Usage Display */}
-          <div className="no-print">
-            <TokenUsageDisplay clienteId={clientId || ''} />
           </div>
         </div>
 
@@ -894,6 +920,78 @@ export default function CalendarPage() {
           </div>
         </DragDropContext>
 
+        {showExportModal && calendar && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-gray-800 rounded-xl p-6 w-full max-w-lg border border-gray-700">
+              <div className="flex items-start justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="text-xl font-bold text-white">Exportar Excel</h3>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Selecione os meses detectados no calendário.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="text-gray-400 hover:text-white transition-colors"
+                  title="Fechar"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-3 mb-5">
+                {detectMonthsFromCalendar(calendar).length === 0 ? (
+                  <div className="text-sm text-gray-300">
+                    Nenhum mês detectado (posts sem data no formato dd/MM).
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {detectMonthsFromCalendar(calendar).map((m) => {
+                      const checked = exportMonthsSelected.includes(m);
+                      return (
+                        <label
+                          key={m}
+                          className="flex items-center gap-2 bg-gray-900/50 border border-gray-700 rounded-lg px-3 py-2 cursor-pointer hover:border-blue-500 transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setExportMonthsSelected((prev) => Array.from(new Set([...prev, m])).sort((a, b) => a - b));
+                              } else {
+                                setExportMonthsSelected((prev) => prev.filter((x) => x !== m));
+                              }
+                            }}
+                          />
+                          <span className="text-sm text-gray-200">Mês {m}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="px-4 py-2 text-gray-400 hover:text-white transition-colors"
+                  disabled={isGenerating}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleExportExcel}
+                  disabled={isGenerating || exportMonthsSelected.length === 0}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-900 px-5 py-2 rounded-lg font-semibold transition-colors text-sm disabled:opacity-50"
+                >
+                  {isGenerating ? 'Gerando...' : 'Exportar'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Modal de Edição */}
         {selectedPost && (
           <EditModal
@@ -935,6 +1033,8 @@ export default function CalendarPage() {
             setBriefing={setBriefing}
             generationPrompt={generationPrompt}
             setGenerationPrompt={setGenerationPrompt}
+            periodoDias={periodoDias}
+            setPeriodoDias={setPeriodoDias}
             formatInstructions={formatInstructions}
             setFormatInstructions={setFormatInstructions}
             promptChains={promptChains}

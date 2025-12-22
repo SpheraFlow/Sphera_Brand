@@ -92,7 +92,7 @@ export default function TokenUsageDisplay({ clienteId }: TokenUsageProps) {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <span className="text-2xl">📊</span>
-          <h3 className="text-lg font-semibold text-white">Uso de Tokens IA</h3>
+          <h3 className="text-lg font-semibold text-white">Uso de Tokens (métrica)</h3>
         </div>
         {usage.history && usage.history.length > 0 && (
           <button
@@ -165,7 +165,7 @@ export default function TokenUsageDisplay({ clienteId }: TokenUsageProps) {
       <div className="mt-3 pt-3 border-t border-gray-700/50">
         <div className="text-xs text-gray-500 flex items-center gap-1">
           <span>💡</span>
-          <span>Tokens são contabilizados automaticamente em cada geração de IA</span>
+          <span>Indicador informativo de consumo em funcionalidades com IA</span>
         </div>
       </div>
     </div>

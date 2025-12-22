@@ -1145,14 +1145,17 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
       return;
     }
 
-    const { calendarId, clientName } = (req.body ?? {}) as { calendarId?: string; clientName?: string };
+    const { calendarId, clientName, monthsSelected } = (req.body ?? {}) as {
+      calendarId?: string;
+      clientName?: string;
+      monthsSelected?: number[];
+    };
 
     if (!calendarId) {
       res.status(400).json({ error: "calendarId é obrigatório." });
       return;
     }
 
-    // 1. Buscar calendário do banco
     console.log(`🔍 [DEBUG] Buscando calendário ID: ${calendarId}`);
     const result = await db.query(
       "SELECT calendario_json, mes, cliente_id, periodo FROM calendarios WHERE id = $1",
@@ -1165,7 +1168,6 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     }
 
     const calendar = result.rows[0];
-
     const posts = calendar.calendario_json;
     const monthLabel = calendar.mes || "Janeiro";
     const periodo = calendar.periodo;
@@ -1183,14 +1185,13 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
         }
       }
     } catch (e) {
-      // fallback: mantém o clientName do payload
+      // fallback
     }
 
     const yearMatch = String(monthLabel).match(/(\d{4})/);
     const year = yearMatch?.[1] || String(new Date().getFullYear());
 
     const sanitizeFilePart = (value: string): string => {
-      // Remove acentos, espaços e caracteres inválidos para nome de arquivo
       return value
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
@@ -1198,21 +1199,17 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
         .trim();
     };
 
-    // 2. Preparar caminhos
-    // Em produção o backend roda com cwd em /var/www/mvp-system/backend
-    // O template fica em /var/www/mvp-system/calendario
     const backendDir = process.cwd();
     const projectDir = path.resolve(backendDir, "..");
 
     const pythonScript = path.resolve(backendDir, "python_gen", "calendar_to_excel.py");
-    const templatePath = path.resolve(projectDir, "calendario", "modelo final.xlsx");
+    const templatePath = path.resolve(projectDir, "calendario", "CoreSport_Tri_2026.xlsx");
     const outputDir = path.resolve(projectDir, "calendario", "output");
     const safeClient = sanitizeFilePart(resolvedClientName || "Cliente") || "Cliente";
     const safeMonth = sanitizeFilePart(String(monthLabel).replace(/\s+/g, "_")) || "Mes";
     const outputFileName = `${safeClient}_${safeMonth}.xlsx`;
     const outputPath = path.join(outputDir, outputFileName);
 
-    // Criar diretório de saída se não existir
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
       console.log(`📁 [DEBUG] Diretório criado: ${outputDir}`);
@@ -1223,7 +1220,25 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     console.log(`  Template: ${templatePath}`);
     console.log(`  Output: ${outputPath}`);
 
-    // 3. Chamar script Python
+    const detectMonths = (calendarPosts: any[]): number[] => {
+      const months = new Set<number>();
+      for (const p of calendarPosts || []) {
+        const dateStr = String((p as any)?.data || "");
+        const m = dateStr.match(/\b(\d{1,2})\/(\d{1,2})\b/);
+        if (!m) continue;
+        const monthNum = parseInt(m[2], 10);
+        if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
+          months.add(monthNum);
+        }
+      }
+      return Array.from(months).sort((a, b) => a - b);
+    };
+
+    const monthsDetected = detectMonths(posts);
+    const monthsToExport = Array.isArray(monthsSelected) && monthsSelected.length > 0
+      ? monthsSelected
+      : monthsDetected;
+
     const pythonProcess = spawn("python3", [
       pythonScript,
       JSON.stringify(posts),
@@ -1232,34 +1247,33 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
       resolvedClientName,
       String(monthLabel),
       year,
-      String(periodo || "")
+      String(periodo || ""),
+      JSON.stringify(monthsToExport)
     ]);
 
     let pythonOutput = "";
     let pythonError = "";
 
-    pythonProcess.stdout.on("data", (data) => {
+    pythonProcess.stdout.on("data", (data: any) => {
       const output = data.toString();
       pythonOutput += output;
       console.log(`[PYTHON] ${output.trim()}`);
     });
 
-    pythonProcess.stderr.on("data", (data) => {
+    pythonProcess.stderr.on("data", (data: any) => {
       const error = data.toString();
       pythonError += error;
       console.error(`[PYTHON ERROR] ${error.trim()}`);
     });
 
-    pythonProcess.on("close", (code) => {
+    pythonProcess.on("close", (code: any) => {
       if (code === 0) {
         console.log(`✅ [SUCCESS] Python script executado com sucesso`);
 
-        // Verificar se arquivo foi criado
         if (fs.existsSync(outputPath)) {
           console.log(`📄 [DEBUG] Arquivo Excel criado: ${outputPath}`);
 
-          // Retornar arquivo para download
-          res.download(outputPath, outputFileName, (err) => {
+          res.download(outputPath, outputFileName, (err: any) => {
             if (err) {
               console.error(`❌ [ERROR] Erro ao enviar arquivo: ${err}`);
               if (!res.headersSent) {
@@ -1271,28 +1285,26 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
           });
         } else {
           console.error(`❌ [ERROR] Arquivo não foi criado: ${outputPath}`);
-          res.status(500).json({ 
+          res.status(500).json({
             error: "Arquivo Excel não foi gerado",
-            details: pythonOutput 
+            details: pythonOutput
           });
         }
       } else {
         console.error(`❌ [ERROR] Python script falhou com código: ${code}`);
-        res.status(500).json({ 
+        res.status(500).json({
           error: "Erro ao gerar Excel",
-          details: pythonError || pythonOutput 
+          details: pythonError || pythonOutput
         });
       }
     });
 
-    // A resposta é enviada dentro do callback do pythonProcess.on('close')
     return;
-
   } catch (error: any) {
     console.error("❌ [ERRO FATAL] Erro ao exportar Excel:", error);
-    res.status(500).json({ 
-      error: "Falha interna ao exportar Excel.", 
-      details: error.message 
+    res.status(500).json({
+      error: "Falha interna ao exportar Excel.",
+      details: error.message
     });
     return;
   }
