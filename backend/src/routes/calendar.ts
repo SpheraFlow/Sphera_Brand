@@ -1203,7 +1203,10 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     const projectDir = path.resolve(backendDir, "..");
 
     const pythonScript = path.resolve(backendDir, "python_gen", "calendar_to_excel.py");
-    const templatePath = path.resolve(projectDir, "calendario", "CoreSport_Tri_2026.xlsx");
+    const templatePreferred = path.resolve(projectDir, "calendario", "modelo final.xlsx");
+    const templateFallback = path.resolve(projectDir, "calendario", "CoreSport_Tri_2026.xlsx");
+    const templatePath = fs.existsSync(templatePreferred) ? templatePreferred : templateFallback;
+    console.log(`📁 [DEBUG] Template escolhido: ${templatePath}`);
     const outputDir = path.resolve(projectDir, "calendario", "output");
     const safeClient = sanitizeFilePart(resolvedClientName || "Cliente") || "Cliente";
     const safeMonth = sanitizeFilePart(String(monthLabel).replace(/\s+/g, "_")) || "Mes";

@@ -43,8 +43,10 @@ def format_to_excel(formato):
     mapping = {
         'Static': 'Arte | Conteúdo',
         'Reels': 'Reels',
-        'Carrossel': 'Carrossel',
-        'Stories': 'Stories',
+        # No "modelo final.xlsx" o dropdown/CF usa categorias (sem 'Carrossel'/'Stories').
+        # Para manter cores/validação funcionando, mapeamos para as opções do template.
+        'Carrossel': 'Arte | Conteúdo',
+        'Stories': 'Outros',
         'Photos': 'Foto | Institucional'
     }
     return mapping.get(formato, 'Arte | Conteúdo')
@@ -174,7 +176,17 @@ def prepare_month_sheet(wb, base_ws, sheet_title):
 
 def create_fixed_structure(ws, month_label, client_name):
     title_value = f"{month_label} | {client_name}".strip(" |")
-    ws["A1"] = title_value
+    # Alguns templates têm o título em A1 (ex.: A1:F7), outros em B1 (ex.: B1:G7).
+    # Para não deslocar layout, escrevemos no local que já contém o título do template.
+    try:
+        if ws["A1"].value:
+            ws["A1"] = title_value
+        elif ws["B1"].value:
+            ws["B1"] = title_value
+        else:
+            ws["A1"] = title_value
+    except Exception:
+        ws["A1"] = title_value
 
     # Não sobrescrever a posição do cabeçalho "CHAVE" do template.
     # Alguns templates usam "CHAVE" em outra coluna (ex.: G1) e qualquer escrita fixa aqui pode deslocar o layout.
@@ -187,95 +199,106 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
     # Criar estrutura fixa (linhas 1-8)
     create_fixed_structure(ws, month_label, client_name)
 
-    # Blocos semanais do template: cabeçalho do dia, linha do tipo e bloco de resumo.
-    # Padrão observado:
-    # - header: 9, 14, 20, 26, 32, 38
-    # - tipo:   10,15, 21, 27, 33, 39
-    # - resumo: (header+2..+4)
-    week_start_rows = [9, 14, 20, 26, 32, 38]  # até 6 semanas
-    col_letters = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+    # Blocos semanais do template: detectamos automaticamente as linhas de cabeçalho das semanas.
+    # Isso evita quebrar quando o template muda (offsets/mesclas).
+
+    def _detect_grid_cols():
+        # Alguns templates têm grade em A..G, outros em B..H.
+        # Detectar olhando a linha de cabeçalho (row 9): se A9 está vazio mas B9 tem texto de dia, usamos B..H.
+        try:
+            a9 = str(ws["A9"].value or "").strip()
+            b9 = str(ws["B9"].value or "").strip()
+            if not a9 and b9:
+                return ['B', 'C', 'D', 'E', 'F', 'G', 'H']
+        except Exception:
+            pass
+        return ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+
+    col_letters = _detect_grid_cols()
+
+    def _detect_week_start_rows(max_scan_row: int = 80) -> list:
+        # Procura por linhas que tenham cabeçalhos no formato "... (n)".
+        # Ex.: "SEGUNDA (1)". Funciona tanto para A..G quanto para B..H.
+        rows = []
+        try:
+            day_header_re = re.compile(r"\((\d{1,2})\)")
+            for r in range(1, max_scan_row + 1):
+                hits = 0
+                for col in col_letters:
+                    v = ws[f"{col}{r}"].value
+                    if not v:
+                        continue
+                    s = str(v)
+                    if day_header_re.search(s):
+                        hits += 1
+                # Cabeçalho de semana normalmente tem vários dias na mesma linha
+                if hits >= 2:
+                    rows.append(r)
+        except Exception:
+            return []
+
+        # Deduplicar e manter somente o primeiro bloco de 6 semanas (ordem)
+        rows = sorted(set(rows))
+        # Alguns templates podem ter hits em linhas que não são calendário; limitar para 10 <= r <= 60
+        rows = [r for r in rows if 6 <= r <= 80]
+        return rows[:6]
+
+    week_start_rows = _detect_week_start_rows()
+    if not week_start_rows:
+        week_start_rows = [9, 14, 20, 26, 32, 38]
 
     _, days_in_month = calendar.monthrange(year_num, month_num)
 
+    # Sempre regenerar os cabeçalhos e o mapeamento dia->slot de forma determinística.
+    # O template pode vir com textos/posicionamentos diferentes por aba/mês; se tentarmos inferir do texto,
+    # qualquer divergência desloca os posts (ex.: dia 2 cai na segunda).
+    day_labels = {
+        0: 'DOMINGO',
+        1: 'SEGUNDA',
+        2: 'TERÇA',
+        3: 'QUARTA',
+        4: 'QUINTA',
+        5: 'SEXTA',
+        6: 'SÁBADO'
+    }
+
+    first_weekday_mon0 = datetime(year_num, month_num, 1).weekday()  # 0=Seg ... 6=Dom
+    first_weekday_sun0 = (first_weekday_mon0 + 1) % 7  # 0=Dom ... 6=Sáb
+
     day_to_slot = {}
-    for header_row in week_start_rows:
+    current_day = 1
+    for week_index, header_row in enumerate(week_start_rows):
+        # Limpar cabeçalhos existentes (valores apenas)
         for col in col_letters:
-            v = ws[f"{col}{header_row}"].value
-            if not v:
-                continue
-            s = str(v)
-            m = re.search(r"\((\d{1,2})\)", s)
-            if not m:
-                continue
-            d = int(m.group(1))
-            if 1 <= d <= days_in_month:
-                day_to_slot[d] = (header_row, col)
+            try:
+                ws[f"{col}{header_row}"].value = None
+            except Exception:
+                pass
 
-    # Validar alinhamento do layout:
-    # - Se o mês começa no domingo, o dia 1 deve estar em A na primeira linha.
-    # - Se o mês NÃO começa no domingo, o template esperado (como no print) é a 1ª semana "encaixada" na esquerda,
-    #   então o dia 1 também deve estar em A (com o dia da semana real).
-    try:
-        first_weekday_mon0 = datetime(year_num, month_num, 1).weekday()  # 0=Seg ... 6=Dom
-        first_weekday_sun0 = (first_weekday_mon0 + 1) % 7  # 0=Dom ... 6=Sáb
-        slot_day1 = day_to_slot.get(1)
-        if slot_day1 is not None:
-            _, col1 = slot_day1
-            if col1 != 'A':
-                # Ex.: planilha com SEGUNDA(1) em B. Forçar regeneração.
-                day_to_slot = {}
-    except Exception:
-        pass
+        if current_day > days_in_month:
+            continue
 
-    if len(day_to_slot) != days_in_month:
-        day_labels = {
-            0: 'DOMINGO',
-            1: 'SEGUNDA',
-            2: 'TERÇA',
-            3: 'QUARTA',
-            4: 'QUINTA',
-            5: 'SEXTA',
-            6: 'SÁBADO'
-        }
-
-        # O template usa a 1ª semana "encaixada" na esquerda: o dia 1 começa na coluna A,
-        # e preenche até sábado, sem criar a coluna de domingo nessa primeira linha.
-        first_weekday_mon0 = datetime(year_num, month_num, 1).weekday()  # 0=Seg ... 6=Dom
-        first_weekday_sun0 = (first_weekday_mon0 + 1) % 7  # 0=Dom ... 6=Sáb
-
-        day_to_slot = {}
-        current_day = 1
-
-        for week_index, header_row in enumerate(week_start_rows):
-            # Semana 0: começa no dia da semana do dia 1 e vai até sábado, começando na col A
-            if week_index == 0 and first_weekday_sun0 != 0:
-                cols_in_week = []
-                # mapeia: coluna A corresponde ao first_weekday_sun0 (ex.: SEGUNDA), coluna B ao próximo, ... até sábado
-                for offset in range(0, 7 - first_weekday_sun0):
-                    cols_in_week.append((col_letters[offset], first_weekday_sun0 + offset))
-                for col, dow in cols_in_week:
-                    if current_day <= days_in_month:
-                        ws[f"{col}{header_row}"].value = f"{day_labels[dow]} ({current_day})"
-                        day_to_slot[current_day] = (header_row, col)
-                        current_day += 1
-                # limpar as colunas restantes na linha (se houver)
-                for c in col_letters[len(cols_in_week):]:
-                    ws[f"{c}{header_row}"].value = None
-                continue
-
-            # Demais semanas: grade normal (domingo..sábado) em A..G
-            for dow in range(7):
-                col = col_letters[dow]
+        # Semana 0: encaixada (sem o domingo) quando o dia 1 não é domingo.
+        if week_index == 0 and first_weekday_sun0 != 0:
+            usable_cols = 7 - first_weekday_sun0  # ex.: segunda(1) -> 6 cols
+            for offset in range(usable_cols):
+                col = col_letters[offset]
+                dow = first_weekday_sun0 + offset
                 if current_day <= days_in_month:
                     ws[f"{col}{header_row}"].value = f"{day_labels[dow]} ({current_day})"
                     day_to_slot[current_day] = (header_row, col)
                     current_day += 1
-                else:
-                    ws[f"{col}{header_row}"].value = None
+            continue
 
-            if current_day > days_in_month:
-                # já preencheu todo o mês; pode parar de escrever cabeçalhos
-                pass
+        # Demais semanas (e também semana 0 quando começa no domingo): domingo..sábado em A..G
+        for dow in range(7):
+            col = col_letters[dow]
+            if current_day <= days_in_month:
+                ws[f"{col}{header_row}"].value = f"{day_labels[dow]} ({current_day})"
+                day_to_slot[current_day] = (header_row, col)
+                current_day += 1
+            else:
+                ws[f"{col}{header_row}"].value = None
 
     def _top_left_of_merged(cell_ref: str) -> str:
         # Retorna a coordenada top-left do range mesclado que contém cell_ref, ou a própria cell_ref.
@@ -287,22 +310,69 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
             pass
         return cell_ref
 
-    def _clear_week_content(header_row: int) -> None:
-        # O template tem blocos com conteúdo logo abaixo do cabeçalho.
-        # Limpamos apenas VALORES (não estilos/mesclas):
-        # - header_row+1: tipo
-        # - resumo: semana 1 usa 2 linhas; semanas seguintes usam 3 linhas
-        # Observação: há uma linha separadora do bloco (ex.: 13, 19, 25...),
-        # então não devemos limpá-la para preservar o espaçamento/estrutura do template.
-        for col in col_letters:
-            # Semana 1: header=9, tipo=10, resumo=11-12, separador=13
-            if header_row == 9:
-                last_row_to_clear = header_row + 3
-            else:
-                # Demais semanas: header=14/20/26/..., tipo=+1, resumo=+2..+4, separador=+5
-                last_row_to_clear = header_row + 4
+    def _merged_range_for(cell_ref: str):
+        # Retorna o range mesclado (objeto) que contém a célula, ou None.
+        try:
+            for rng in ws.merged_cells.ranges:
+                if cell_ref in rng:
+                    return rng
+        except Exception:
+            return None
+        return None
 
-            for r in range(header_row + 1, last_row_to_clear + 1):
+    def _content_rows_for_week(header_row: int) -> tuple:
+        # Determina dinamicamente as linhas do bloco para:
+        # - tipo: header_row+1
+        # - resumo: começa em header_row+2 e vai até o fim do merge vertical (se existir)
+        # Não retorna a linha separadora (a próxima linha), que deve ser preservada.
+        tipo_row = header_row + 1
+        resumo_start = header_row + 2
+
+        # Usar a primeira coluna da grade como amostra (o template mescla verticalmente por coluna).
+        sample_col = col_letters[0] if col_letters else 'A'
+        rng = _merged_range_for(f"{sample_col}{resumo_start}")
+        if rng is not None:
+            resumo_end = rng.max_row
+        else:
+            # fallback conservador: 2 linhas de resumo
+            resumo_end = resumo_start + 1
+        return (tipo_row, resumo_start, resumo_end)
+
+    def _has_conditional_formatting() -> bool:
+        try:
+            cf = getattr(ws, "conditional_formatting", None)
+            rules = getattr(cf, "_cf_rules", None)
+            return bool(rules)
+        except Exception:
+            return False
+
+    def _legend_style_for_formato(formato_excel: str):
+        # Só usado quando o template NÃO tem formatação condicional.
+        # Em templates novos (modelo final.xlsx), as cores vêm de conditional formatting.
+        try:
+            legend_col = 'G' if (col_letters and col_letters[0] == 'A') else 'H'
+            legend_map = {
+                'Reels': f'{legend_col}2',
+                'Arte | Conteúdo': f'{legend_col}3',
+                'Foto | Institucional': f'{legend_col}4',
+                'Arte | Institucional': f'{legend_col}5',
+                'Campanha': f'{legend_col}6',
+                'Outros': f'{legend_col}7',
+                'Carrossel': f'{legend_col}3',
+                'Stories': f'{legend_col}7',
+            }
+            addr = legend_map.get(formato_excel)
+            if not addr:
+                return None
+            return ws[addr]
+        except Exception:
+            return None
+
+    def _clear_week_content(header_row: int) -> None:
+        # Limpa apenas valores do bloco de conteúdo (tipo + resumo), preservando a linha separadora.
+        tipo_row, resumo_start, resumo_end = _content_rows_for_week(header_row)
+        for col in col_letters:
+            for r in range(tipo_row, resumo_end + 1):
                 try:
                     ws[f"{col}{r}"].value = None
                 except Exception:
@@ -330,11 +400,25 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
             header_row, col = slot
 
             formato_excel = format_to_excel(post.get('formato', 'Static'))
-            short_title = build_post_title(post)
+            # Posts aqui já chegam normalizados por fill_calendar_template (com a chave 'title').
+            # Se chamarmos build_post_title novamente, o resumo pode ficar vazio.
+            short_title = (post.get('title') or '').strip() or build_post_title(post)
 
             # Linha do tipo (formato)
             tipo_cell = _top_left_of_merged(f"{col}{header_row + 1}")
             ws[tipo_cell].value = formato_excel
+
+            # Em templates com conditional formatting (ex.: modelo final.xlsx), NÃO setar fill/font.
+            # A cor deve ser aplicada automaticamente pelo Excel baseado no texto.
+            if not _has_conditional_formatting():
+                try:
+                    legend_cell = _legend_style_for_formato(formato_excel)
+                    if legend_cell is not None:
+                        ws[tipo_cell].fill = copy(legend_cell.fill)
+                        ws[tipo_cell].font = copy(legend_cell.font)
+                        ws[tipo_cell].alignment = copy(legend_cell.alignment)
+                except Exception:
+                    pass
 
             # Bloco do resumo (3 linhas no template). Normalmente é mesclado verticalmente.
             resumo_cell = _top_left_of_merged(f"{col}{header_row + 2}")
