@@ -1040,6 +1040,8 @@ export default function CalendarPage() {
             setGenerationPrompt={setGenerationPrompt}
             periodoDias={periodoDias}
             setPeriodoDias={setPeriodoDias}
+            monthsCountToGenerate={monthsCountToGenerate}
+            setMonthsCountToGenerate={setMonthsCountToGenerate}
             formatInstructions={formatInstructions}
             setFormatInstructions={setFormatInstructions}
             promptChains={promptChains}
