@@ -267,66 +267,56 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
 
     const periodoFinal = typeof periodo === 'number' ? periodo : 30;
 
-    const monthsCountNum = (() => {
-      const n = parseInt(String(monthsCount ?? "1"), 10);
-      if (!isNaN(n) && n >= 1 && n <= 12) return n;
-      return 1;
-    })();
+    // Lógica de Seleção de Meses:
+    // 1. Se vier 'specificMonths' (array de strings ex: ["Janeiro 2025", "Fevereiro 2025"]), usa direto.
+    // 2. Se não, usa a lógica antiga de 'mes' inicial + 'monthsCount'.
+    
+    let monthsToGenerate: string[] = [];
 
-    const buildMonthLabelList = (startMesLabel: string, count: number): string[] => {
-      const labels: string[] = [];
-      try {
-        const parts = startMesLabel.trim().split(" ");
-        if (parts.length < 2) return [startMesLabel];
-        const possibleYear = parts[parts.length - 1] ?? "";
-        const anoNum = parseInt(possibleYear, 10);
-        const mesNome = parts.slice(0, -1).join(" ").toLowerCase();
-        const mapaMeses: Record<string, number> = {
-          janeiro: 1,
-          fevereiro: 2,
-          marco: 3,
-          março: 3,
-          abril: 4,
-          maio: 5,
-          junho: 6,
-          julho: 7,
-          agosto: 8,
-          setembro: 9,
-          outubro: 10,
-          novembro: 11,
-          dezembro: 12,
-        };
-        const mesNum = mapaMeses[mesNome] || 1;
+    if (Array.isArray(req.body.specificMonths) && req.body.specificMonths.length > 0) {
+      monthsToGenerate = req.body.specificMonths;
+      console.log(`📅 [DEBUG] Meses específicos selecionados:`, monthsToGenerate);
+    } else {
+      const monthsCountNum = (() => {
+        const n = parseInt(String(monthsCount ?? "1"), 10);
+        if (!isNaN(n) && n >= 1 && n <= 12) return n;
+        return 1;
+      })();
 
-        for (let i = 0; i < count; i++) {
-          const m = mesNum + i;
-          const y = anoNum + Math.floor((m - 1) / 12);
-          const mm = ((m - 1) % 12) + 1;
-          const monthNamePt = {
-            1: "Janeiro",
-            2: "Fevereiro",
-            3: "Março",
-            4: "Abril",
-            5: "Maio",
-            6: "Junho",
-            7: "Julho",
-            8: "Agosto",
-            9: "Setembro",
-            10: "Outubro",
-            11: "Novembro",
-            12: "Dezembro",
-          }[mm];
-          labels.push(`${monthNamePt} ${y}`);
+      const buildMonthLabelList = (startMesLabel: string, count: number): string[] => {
+        const labels: string[] = [];
+        try {
+          const parts = startMesLabel.trim().split(" ");
+          if (parts.length < 2) return [startMesLabel];
+          const possibleYear = parts[parts.length - 1] ?? "";
+          const anoNum = parseInt(possibleYear, 10);
+          const mesNome = parts.slice(0, -1).join(" ").toLowerCase();
+          const mapaMeses: Record<string, number> = {
+            janeiro: 1, fevereiro: 2, marco: 3, março: 3, abril: 4, maio: 5, junho: 6,
+            julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
+          };
+          const mesNum = mapaMeses[mesNome] || 1;
+
+          for (let i = 0; i < count; i++) {
+            const m = mesNum + i;
+            const y = anoNum + Math.floor((m - 1) / 12);
+            const mm = ((m - 1) % 12) + 1;
+            const monthNamePt = {
+              1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
+              7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro",
+            }[mm];
+            labels.push(`${monthNamePt} ${y}`);
+          }
+          return labels;
+        } catch (_e) {
+          return [startMesLabel];
         }
-        return labels;
-      } catch (_e) {
-        return [startMesLabel];
-      }
-    };
+      };
 
-    const monthsToGenerate = (mes && typeof mes === "string")
-      ? buildMonthLabelList(mes, monthsCountNum)
-      : ["Geral"];
+      monthsToGenerate = (mes && typeof mes === "string")
+        ? buildMonthLabelList(mes, monthsCountNum)
+        : ["Geral"];
+    }
 
     const buildDatasResumoTextoForMes = async (mesLabel: string): Promise<string> => {
       let datasResumoTexto = "";

@@ -66,7 +66,7 @@ export default function CalendarPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [periodoDias, setPeriodoDias] = useState<number>(30);
-  const [monthsCountToGenerate, setMonthsCountToGenerate] = useState<number>(1);
+  const [specificMonths, setSpecificMonths] = useState<string[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isDeletingPost, setIsDeletingPost] = useState(false);
@@ -287,7 +287,7 @@ export default function CalendarPage() {
     setBriefing('');
     setGenerationPrompt('');
     setPeriodoDias(30);
-    setMonthsCountToGenerate(1);
+    setSpecificMonths([format(currentMonth, 'MMMM yyyy', { locale: ptBR })]);
     setShowGenerateModal(true);
   };
 
@@ -365,6 +365,11 @@ export default function CalendarPage() {
       return;
     }
 
+    if (!specificMonths || specificMonths.length === 0) {
+      alert('Selecione pelo menos 1 mês para gerar.');
+      return;
+    }
+
     try {
       setIsGenerating(true);
       const response = await api.post('/generate-calendar', {
@@ -372,7 +377,8 @@ export default function CalendarPage() {
         periodo: periodoDias,
         briefing,
         mes: format(currentMonth, 'MMMM yyyy', { locale: ptBR }),
-        monthsCount: monthsCountToGenerate,
+        monthsCount: specificMonths.length,
+        specificMonths,
         mix,
         generationPrompt,
         formatInstructions,
@@ -391,6 +397,7 @@ export default function CalendarPage() {
       setShowGenerateModal(false);
       setBriefing('');
       setGenerationPrompt('');
+      setSpecificMonths([]);
       setMix({
         reels: 0,
         static: 0,
@@ -684,8 +691,9 @@ export default function CalendarPage() {
             setGenerationPrompt={setGenerationPrompt}
             periodoDias={periodoDias}
             setPeriodoDias={setPeriodoDias}
-            monthsCountToGenerate={monthsCountToGenerate}
-            setMonthsCountToGenerate={setMonthsCountToGenerate}
+            baseMonthDate={currentMonth}
+            specificMonths={specificMonths}
+            setSpecificMonths={setSpecificMonths}
             formatInstructions={formatInstructions}
             setFormatInstructions={setFormatInstructions}
             promptChains={promptChains}
@@ -1057,8 +1065,9 @@ export default function CalendarPage() {
             setGenerationPrompt={setGenerationPrompt}
             periodoDias={periodoDias}
             setPeriodoDias={setPeriodoDias}
-            monthsCountToGenerate={monthsCountToGenerate}
-            setMonthsCountToGenerate={setMonthsCountToGenerate}
+            baseMonthDate={currentMonth}
+            specificMonths={specificMonths}
+            setSpecificMonths={setSpecificMonths}
             formatInstructions={formatInstructions}
             setFormatInstructions={setFormatInstructions}
             promptChains={promptChains}
@@ -1475,8 +1484,9 @@ interface GenerateModalProps {
   setBriefing: (v: string) => void;
   periodoDias: number;
   setPeriodoDias: (v: number) => void;
-  monthsCountToGenerate: number;
-  setMonthsCountToGenerate: (v: number) => void;
+  baseMonthDate: Date;
+  specificMonths: string[];
+  setSpecificMonths: (v: string[]) => void;
   generationPrompt: string;
   setGenerationPrompt: (v: string) => void;
   formatInstructions: FormatInstructions;
@@ -1493,7 +1503,8 @@ function GenerateModal({
   mix, setMix,
   briefing, setBriefing,
   periodoDias, setPeriodoDias,
-  monthsCountToGenerate, setMonthsCountToGenerate,
+  baseMonthDate,
+  specificMonths, setSpecificMonths,
   generationPrompt, setGenerationPrompt,
   formatInstructions, setFormatInstructions,
   promptChains,
@@ -1504,6 +1515,19 @@ function GenerateModal({
 }: GenerateModalProps) {
   const [showAdvancedPrompt, setShowAdvancedPrompt] = useState(false);
   const [showFormatInstructions, setShowFormatInstructions] = useState(false);
+
+  const monthsOptions = Array.from({ length: 12 }).map((_, i) => {
+    const date = addMonths(baseMonthDate, i);
+    return {
+      date,
+      monthLabel: format(date, 'MMMM yyyy', { locale: ptBR }),
+      monthName: format(date, 'MMMM', { locale: ptBR }),
+      year: format(date, 'yyyy', { locale: ptBR })
+    };
+  });
+
+  const selectedCount = specificMonths.length;
+
   return (
     <div className="fixed inset-0 bg-black/70 flex items-start justify-center z-50 p-4 overflow-y-auto">
       <div className="bg-gray-800 rounded-xl p-6 w-full max-w-3xl border border-gray-700 mt-8 max-h-[90vh] overflow-y-auto">
@@ -1523,25 +1547,50 @@ function GenerateModal({
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-2">Quantos meses gerar</label>
-            <select
-              value={String(monthsCountToGenerate)}
-              onChange={(e) => setMonthsCountToGenerate(parseInt(e.target.value, 10))}
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500"
-            >
-              <option value="1">1 mês</option>
-              <option value="2">2 meses</option>
-              <option value="3">3 meses</option>
-              <option value="4">4 meses</option>
-              <option value="5">5 meses</option>
-              <option value="6">6 meses</option>
-            </select>
+            <label className="block text-sm text-gray-400 mb-2">Selecione os Meses para Gerar</label>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+              {monthsOptions.map(({ monthLabel, monthName, year }) => {
+                const isSelected = specificMonths.includes(monthLabel);
+
+                return (
+                  <button
+                    key={monthLabel}
+                    onClick={() => {
+                      if (isSelected) {
+                        setSpecificMonths(specificMonths.filter((m: string) => m !== monthLabel));
+                      } else {
+                        const next = [...specificMonths, monthLabel];
+                        const ordered = monthsOptions
+                          .map((o) => o.monthLabel)
+                          .filter((label) => next.includes(label));
+                        setSpecificMonths(ordered);
+                      }
+                    }}
+                    className={`p-3 rounded-lg border text-left transition-all flex flex-col ${
+                      isSelected
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-100'
+                        : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:border-gray-500 hover:bg-gray-700'
+                    }`}
+                  >
+                    <span className="capitalize font-bold text-sm">{monthName}</span>
+                    <span className="text-xs opacity-70">{year}</span>
+                    {isSelected && <span className="text-[10px] mt-1 text-blue-400">Selected ✅</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Selecione um ou mais meses. O sistema gerará um calendário individual para cada mês selecionado, mantendo o contexto.
+            </p>
+            <div className="mt-2 text-xs text-gray-400">
+              Selecionados: <span className="text-gray-200 font-semibold">{selectedCount || 0}</span>
+            </div>
           </div>
 
           <div>
-            <label className="block text-sm text-gray-400 mb-2">Mix de Conteúdo</label>
+            <label className="block text-sm text-gray-400 mb-2">Mix de Conteúdo (por mês)</label>
             <p className="text-xs text-gray-500 mb-4">
-              Defina quantos posts de cada tipo você deseja gerar
+              Defina quantos posts de cada tipo você deseja gerar <strong>para cada mês selecionado</strong>.
             </p>
             <ContentMixSelector mix={mix} onMixChange={setMix} />
           </div>
@@ -1745,10 +1794,10 @@ function GenerateModal({
           >
             {isGenerating ? (
               <div className="flex flex-col items-center gap-1">
-                <span className="text-base">⏳ Gerando {monthsCountToGenerate > 1 ? `${monthsCountToGenerate} meses` : 'calendário'}...</span>
+                <span className="text-base">⏳ Gerando {selectedCount > 1 ? `${selectedCount} meses` : 'calendário'}...</span>
                 <span className="text-xs text-blue-200 opacity-80">
-                  {monthsCountToGenerate > 1 
-                    ? `Isso pode levar ${Math.ceil(monthsCountToGenerate * 1.5)}-${Math.ceil(monthsCountToGenerate * 3)} minutos`
+                  {selectedCount > 1 
+                    ? `Isso pode levar ${Math.ceil(selectedCount * 1.5)}-${Math.ceil(selectedCount * 3)} minutos`
                     : 'Aguarde alguns instantes'}
                 </span>
               </div>
