@@ -1,4 +1,9 @@
 {
+  "clienteId": "80ca5fb3-0cac-44b3-8478-23bbf04f44c9",
+  "months": [
+    "fevereiro 2026",
+    "janeiro 2026"
+  ],
   "defesa": {
     "titulo": "PLANEJA\nMENTO",
     "subtitulo": "CAMPANHA MENSAL",
@@ -6,7 +11,7 @@
   },
   "grid": {
     "titulo": "METAS\nDO MÊS",
-    "mes": "MÊS VIGENTE",
+    "mes": "fevereiro 2026 | janeiro 2026",
     "texto_longo": "Descrição das metas..."
   },
   "slogan": {
@@ -23,8 +28,7 @@
     ]
   },
   "planner": {
-    "titulo": "VISÃO\nTRIMESTRAL",
-    "mes": "MÊS 1 | MÊS 2 | MÊS 3",
-    "nome_cliente": "Nome do Cliente"
+    "mes": "fevereiro 2026 | janeiro 2026",
+    "nome_cliente": "Siena Beach Club"
   }
 }
