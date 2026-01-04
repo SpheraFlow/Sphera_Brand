@@ -529,7 +529,7 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
       : monthsToGenerate.map(() => mix);
 
     for (let monthIndex = 0; monthIndex < monthsToGenerate.length; monthIndex++) {
-      const mesToGenerate = monthsToGenerate[monthIndex];
+      const mesToGenerate = monthsToGenerate[monthIndex] ?? "Geral";
       const mixForThisMonth = mixesByMonth[monthIndex] || mix;
       const totalPostsForThisMonth =
         (mixForThisMonth.reels || 0) +
