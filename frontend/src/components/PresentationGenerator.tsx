@@ -380,6 +380,8 @@ export default function PresentationGenerator() {
         }
       };
 
+      console.log('🔍 [FRONTEND] Payload sendo enviado para regenerar:', JSON.stringify(payload, null, 2));
+
       const response = await api.post('/presentation/generate', payload);
 
       if (response.data.success) {

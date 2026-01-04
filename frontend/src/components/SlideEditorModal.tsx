@@ -418,6 +418,8 @@ export default function SlideEditorModal({
       shadow: b.shadow ?? true
     }));
 
+    console.log('🔍 [EDITOR] Layout sendo salvo:', JSON.stringify(updatedSlideData.layout, null, 2));
+
     blocks.forEach((block) => {
       if (block.id === 'titulo') updatedSlideData.titulo = block.content;
       if (block.id === 'subtitulo') updatedSlideData.subtitulo = block.content;
@@ -566,8 +568,12 @@ export default function SlideEditorModal({
                         top: `${((block.y / 1080) * 100).toFixed(4)}%`,
                         width: `${((block.width / 1920) * 100).toFixed(4)}%`,
                         height: `${((block.height / 1080) * 100).toFixed(4)}%`,
-                        // Usar porcentagem da altura do canvas em vez de vh para match exato com Python
-                        fontSize: `${((block.fontSize / 1080) * 100).toFixed(4)}%`,
+                        // Escalar fontSize: usar a altura do container (que tem aspect ratio 16:9)
+                        // O container tem width:100% e aspect-ratio:16/9, então sua altura é width/16*9
+                        // fontSize em pixels absolutos * (altura_real_canvas / 1080)
+                        fontSize: canvasRef.current 
+                          ? `${(block.fontSize * canvasRef.current.clientHeight / 1080).toFixed(2)}px`
+                          : `${block.fontSize}px`,
                         color: block.color,
                         fontWeight: block.fontWeight,
                         textAlign: block.align,
