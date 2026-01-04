@@ -318,6 +318,31 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
         : ["Geral"];
     }
 
+    const distributeMixAcrossMonths = (baseMix: any, monthsCountToDistribute: number): any[] => {
+      const safeMonths = Math.max(1, monthsCountToDistribute || 1);
+      const keys = ["reels", "static", "carousel", "stories", "photos"] as const;
+
+      const result: any[] = Array.from({ length: safeMonths }, () => ({
+        reels: 0,
+        static: 0,
+        carousel: 0,
+        stories: 0,
+        photos: 0,
+      }));
+
+      for (const k of keys) {
+        const total = Math.max(0, parseInt(String(baseMix?.[k] ?? 0), 10) || 0);
+        const base = Math.floor(total / safeMonths);
+        let remainder = total % safeMonths;
+        for (let i = 0; i < safeMonths; i++) {
+          result[i][k] = base + (remainder > 0 ? 1 : 0);
+          if (remainder > 0) remainder--;
+        }
+      }
+
+      return result;
+    };
+
     const buildDatasResumoTextoForMes = async (mesLabel: string): Promise<string> => {
       let datasResumoTexto = "";
       if (mesLabel && typeof mesLabel === "string") {
@@ -498,155 +523,169 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
     const failedMonths: any[] = [];
     let continuityContext = "";
 
-    for (const mesToGenerate of monthsToGenerate) {
+    const isTrimestral = periodoFinal === 90;
+    const mixesByMonth: any[] = isTrimestral
+      ? distributeMixAcrossMonths(mix, monthsToGenerate.length)
+      : monthsToGenerate.map(() => mix);
+
+    for (let monthIndex = 0; monthIndex < monthsToGenerate.length; monthIndex++) {
+      const mesToGenerate = monthsToGenerate[monthIndex];
+      const mixForThisMonth = mixesByMonth[monthIndex] || mix;
+      const totalPostsForThisMonth =
+        (mixForThisMonth.reels || 0) +
+        (mixForThisMonth.static || 0) +
+        (mixForThisMonth.carousel || 0) +
+        (mixForThisMonth.stories || 0) +
+        (mixForThisMonth.photos || 0);
+
       try {
         const datasResumoTexto = await buildDatasResumoTextoForMes(mesToGenerate);
 
-      const prompt = `
-      Atue como Strategist Planner.
+        const prompt = `
+          Atue como Strategist Planner.
 
-      Crie um Planejamento de Conteúdo contendo EXATAMENTE esta quantidade de posts (nem mais, nem menos):
+          Crie um Planejamento de Conteúdo contendo EXATAMENTE esta quantidade de posts (nem mais, nem menos):
 
-      - ${mix.reels || 0} roteiros de REELS (Vídeo vertical, dinâmico).
-      - ${mix.static || 0} posts ESTÁTICOS (Imagem única).
-      - ${mix.carousel || 0} CARROSSÉIS (Conteúdo denso/lista).
-      - ${mix.stories || 0} sequências de STORIES.
-      - ${mix.photos || 0} IDEIAS DE FOTOS (Conceitos visuais para sessões fotográficas).
+          - ${mixForThisMonth.reels || 0} roteiros de REELS (Vídeo vertical, dinâmico).
+          - ${mixForThisMonth.static || 0} posts ESTÁTICOS (Imagem única).
+          - ${mixForThisMonth.carousel || 0} CARROSSÉIS (Conteúdo denso/lista).
+          - ${mixForThisMonth.stories || 0} sequências de STORIES.
+          - ${mixForThisMonth.photos || 0} IDEIAS DE FOTOS (Conceitos visuais para sessões fotográficas).
 
-      Total de itens: ${totalPosts}.
+          Total de itens: ${totalPostsForThisMonth}.
 
-      INSTRUÇÃO DE DISTRIBUIÇÃO:
-      Distribua esses ${totalPosts} posts ao longo do mês de ${mesToGenerate || mes || "Próximo Mês"} de forma lógica e espaçada (ex: terças e quintas, ou a cada 2 dias). Não agrupe tudo no dia 1.
+          INSTRUÇÃO DE DISTRIBUIÇÃO:
+          Distribua esses ${totalPostsForThisMonth} posts ao longo do mês de ${mesToGenerate || mes || "Próximo Mês"} de forma lógica e espaçada (ex: terças e quintas, ou a cada 2 dias). Não agrupe tudo no dia 1.
 
-      DNA DA MARCA (use isso como referência principal, acima de qualquer suposição genérica):
-      - Tom de Voz (detalhado): ${toneText}
-      - Estilo Visual (diretrizes): ${visualText}
-      - Público-Alvo (personas, dores, desejos): ${audienceText}
-      - Palavras-chave estratégicas: ${keywordsText}
+          DNA DA MARCA (use isso como referência principal, acima de qualquer suposição genérica):
+          - Tom de Voz (detalhado): ${toneText}
+          - Estilo Visual (diretrizes): ${visualText}
+          - Público-Alvo (personas, dores, desejos): ${audienceText}
+          - Palavras-chave estratégicas: ${keywordsText}
 
-      INSTRUÇÕES ESPECÍFICAS POR FORMATO (quando fornecidas):
-      - Reels: ${formatInstructions?.reels || 'Sem instruções adicionais para Reels.'}
-      - Posts estáticos: ${formatInstructions?.static || 'Sem instruções adicionais para posts estáticos.'}
-      - Carrosséis: ${formatInstructions?.carousel || 'Sem instruções adicionais para carrosséis.'}
-      - Stories: ${formatInstructions?.stories || 'Sem instruções adicionais para Stories.'}
-      - Ideias de Fotos: ${formatInstructions?.photos || 'Para ideias de fotos, foque em conceitos visuais criativos, locações, ângulos, iluminação e mood. Seja específico e técnico para orientar fotógrafos.'}
+          INSTRUÇÕES ESPECÍFICAS POR FORMATO (quando fornecidas):
+          - Reels: ${formatInstructions?.reels || 'Sem instruções adicionais para Reels.'}
+          - Posts estáticos: ${formatInstructions?.static || 'Sem instruções adicionais para posts estáticos.'}
+          - Carrosséis: ${formatInstructions?.carousel || 'Sem instruções adicionais para carrosséis.'}
+          - Stories: ${formatInstructions?.stories || 'Sem instruções adicionais para Stories.'}
+          - Ideias de Fotos: ${formatInstructions?.photos || 'Para ideias de fotos, foque em conceitos visuais criativos, locações, ângulos, iluminação e mood. Seja específico e técnico para orientar fotógrafos.'}
 
-      DATAS COMEMORATIVAS/RELEVANTES DO MÊS (use como base obrigatória):
-      ${datasResumoTexto || 'Sem lista prévia. Você DEVE levantar datas relevantes reais do mês e usá-las no planejamento.'}
+          DATAS COMEMORATIVAS/RELEVANTES DO MÊS (use como base obrigatória):
+          ${datasResumoTexto || 'Sem lista prévia. Você DEVE levantar datas relevantes reais do mês e usá-las no planejamento.'}
 
-      DATA ATUAL (referência): ${hojeISO}
+          DATA ATUAL (referência): ${hojeISO}
 
-      REGRAS OBRIGATÓRIAS (Não viole em hipótese alguma):
-      ${rules}
+          REGRAS OBRIGATÓRIAS (Não viole em hipótese alguma):
+          ${rules}
 
-      BRIEFING DO CLIENTE (contexto tático desta leva de conteúdos):
-      "${briefing || 'Foco em engajamento e autoridade.'}"
+          BRIEFING DO CLIENTE (contexto tático desta leva de conteúdos):
+          "${briefing || 'Foco em engajamento e autoridade.'}"
 
-      REFERÊNCIAS GERAIS PARA ESTE MÊS (links, campanhas anteriores, benchmarks, etc.):
-      ${monthReferences || 'Nenhuma referência específica fornecida para este mês.'}
+          REFERÊNCIAS GERAIS PARA ESTE MÊS (links, campanhas anteriores, benchmarks, etc.):
+          ${monthReferences || 'Nenhuma referência específica fornecida para este mês.'}
 
-      CONTINUIDADE ENTRE MESES (mantenha consistência estratégica e aproveite campanhas em andamento):
-      ${continuityContext || 'Primeiro mês da geração. Ainda não há meses anteriores gerados nesta execução.'}
+          CONTINUIDADE ENTRE MESES (mantenha consistência estratégica e aproveite campanhas em andamento):
+          ${continuityContext || 'Primeiro mês da geração. Ainda não há meses anteriores gerados nesta execução.'}
 
-      INSTRUÇÕES AVANÇADAS DO ESTRATEGISTA (se fornecidas pelo usuário ou pela Prompt Chain):
-      ${effectiveGenerationPrompt || 'Use seu melhor julgamento estratégico mantendo consistência com o DNA de marca e as regras acima.'}
+          INSTRUÇÕES AVANÇADAS DO ESTRATEGISTA (se fornecidas pelo usuário ou pela Prompt Chain):
+          ${effectiveGenerationPrompt || 'Use seu melhor julgamento estratégico mantendo consistência com o DNA de marca e as regras acima.'}
 
-      DOCUMENTOS DA MARCA (resumo de guias, posicionamento, manifesto, etc):
-      ${docsResumo || 'Nenhum documento adicional cadastrado. Use apenas o DNA e o briefing acima.'}
+          DOCUMENTOS DA MARCA (resumo de guias, posicionamento, manifesto, etc):
+          ${docsResumo || 'Nenhum documento adicional cadastrado. Use apenas o DNA e o briefing acima.'}
 
-      INSTRUÇÃO ESPECIAL PARA PROMPTS DE ARTE:
-      Para cada post, gere também um campo 'image_generation_prompt' técnico para ferramentas de IA generativa (Midjourney, DALL-E, etc.).
+          INSTRUÇÃO ESPECIAL PARA PROMPTS DE ARTE:
+          Para cada post, gere também um campo 'image_generation_prompt' técnico para ferramentas de IA generativa (Midjourney, DALL-E, etc.).
 
-      Este prompt deve seguir esta estrutura específica:
-      '[Descrição detalhada da cena/conteúdo] + [Estilo visual da marca (use as diretrizes acima)] + [Paleta de cores predominante alinhada ao branding] + [Iluminação e mood adequados ao tema] + [Composição e ângulo apropriados]'.
+          Este prompt deve seguir esta estrutura específica:
+          '[Descrição detalhada da cena/conteúdo] + [Estilo visual da marca (use as diretrizes acima)] + [Paleta de cores predominante alinhada ao branding] + [Iluminação e mood adequados ao tema] + [Composição e ângulo apropriados]'.
 
-      Seja específico, técnico e pronto para uso direto. Escreva em inglês para compatibilidade com ferramentas de IA.
+          Seja específico, técnico e pronto para uso direto. Escreva em inglês para compatibilidade com ferramentas de IA.
 
-      Retorne APENAS um JSON puro (sem markdown) com este formato array:
-      [
-        {
-          "data": "DD/MM",
-          "tema": "...",
-          "formato": "Reels/Carrossel/Static/Stories/Photos",
-          "ideia_visual": "...",
-          "copy_sugestao": "...",
-          "objetivo": "...",
-          "image_generation_prompt": "..."
+          Retorne APENAS um JSON puro (sem markdown) com este formato array:
+          [
+            {
+              "data": "DD/MM",
+              "tema": "...",
+              "formato": "Reels/Carrossel/Static/Stories/Photos",
+              "ideia_visual": "...",
+              "copy_sugestao": "...",
+              "objetivo": "...",
+              "image_generation_prompt": "..."
+            }
+          ]
+
+          IMPORTANTE: Para formato 'Photos', seja ainda mais detalhado no campo 'ideia_visual' incluindo: locação, ângulo, iluminação, composição, props, vestuário e mood desejado.
+        `;
+
+        console.log("🚀 [DEBUG] Enviando para Gemini...");
+        let responseText = "";
+        let usedModelName: string | null = null;
+        for (const modelName of modelsToTry) {
+          try {
+            console.log(`🤖 [DEBUG] Tentando modelo: ${modelName}...`);
+            const model = genAI.getGenerativeModel({ model: modelName });
+            const result = await model.generateContent(prompt);
+            responseText = result.response.text();
+            usedModelName = modelName;
+
+            const usageMetadata = result.response.usageMetadata;
+            if (usageMetadata) {
+              await updateTokenUsage(clienteId, usageMetadata, "calendar_generation", modelName);
+            }
+            break;
+          } catch (modelError: any) {
+            if (modelName === modelsToTry[modelsToTry.length - 1]) {
+              throw new Error(`Todos os modelos falharam. Erro final: ${modelError.message}`);
+            }
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
         }
-      ]
 
-      IMPORTANTE: Para formato 'Photos', seja ainda mais detalhado no campo 'ideia_visual' incluindo: locação, ângulo, iluminação, composição, props, vestuário e mood desejado.
-    `;
+        console.log("🧹 [DEBUG] Limpando resposta do Gemini...");
+        const rawCalendarData = cleanAndParseJSON(responseText);
 
-      console.log("🚀 [DEBUG] Enviando para Gemini...");
-      let responseText = "";
-      let usedModelName: string | null = null;
-      for (const modelName of modelsToTry) {
+        let calendarData = rawCalendarData;
+        if (Array.isArray(rawCalendarData)) {
+          const seen = new Set<string>();
+          const uniquePosts = rawCalendarData.filter((post: any) => {
+            const key = `${post.data}|${post.tema}|${post.formato}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          calendarData = uniquePosts.slice(0, totalPostsForThisMonth);
+        }
+
+        console.log("� [DEBUG] Salvando no banco...");
+        const mesFinal = mesToGenerate || "Geral";
+        const metadata = {
+          month_references: monthReferences || null,
+          format_instructions: formatInstructions || null,
+        };
+
+        const saved = await db.query(
+          "INSERT INTO calendarios (cliente_id, mes, calendario_json, periodo, metadata) VALUES ($1, $2, $3, $4, $5) RETURNING id",
+          [clienteId, mesFinal, JSON.stringify(calendarData), periodoFinal, metadata]
+        );
+
         try {
-          console.log(`🤖 [DEBUG] Tentando modelo: ${modelName}...`);
-          const model = genAI.getGenerativeModel({ model: modelName });
-          const result = await model.generateContent(prompt);
-          responseText = result.response.text();
-          usedModelName = modelName;
-
-          const usageMetadata = result.response.usageMetadata;
-          if (usageMetadata) {
-            await updateTokenUsage(clienteId, usageMetadata, "calendar_generation", modelName);
+          if (Array.isArray(calendarData)) {
+            const temas = calendarData
+              .slice(0, 12)
+              .map((p: any) => String(p?.tema || "").trim())
+              .filter(Boolean);
+            continuityContext = `${continuityContext}\n\nMÊS JÁ GERADO: ${mesFinal}\nTEMAS (amostra):\n${temas.slice(0, 8).map((t: string) => `- ${t}`).join("\n")}`;
           }
-          break;
-        } catch (modelError: any) {
-          if (modelName === modelsToTry[modelsToTry.length - 1]) {
-            throw new Error(`Todos os modelos falharam. Erro final: ${modelError.message}`);
-          }
-          await new Promise(resolve => setTimeout(resolve, 2000));
+        } catch (_e) {
+          // ignore
         }
-      }
 
-      console.log("🧹 [DEBUG] Limpando resposta do Gemini...");
-      const rawCalendarData = cleanAndParseJSON(responseText);
-
-      let calendarData = rawCalendarData;
-      if (Array.isArray(rawCalendarData)) {
-        const seen = new Set<string>();
-        const uniquePosts = rawCalendarData.filter((post: any) => {
-          const key = `${post.data}|${post.tema}|${post.formato}`;
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
+        resultsByMonth.push({
+          calendarId: saved.rows[0].id,
+          mes: mesFinal,
+          model: usedModelName,
+          postsCount: Array.isArray(calendarData) ? calendarData.length : 0,
         });
-        calendarData = uniquePosts.slice(0, totalPosts);
-      }
-
-      console.log("💾 [DEBUG] Salvando no banco...");
-      const mesFinal = mesToGenerate || "Geral";
-      const metadata = {
-        month_references: monthReferences || null,
-        format_instructions: formatInstructions || null,
-      };
-
-      const saved = await db.query(
-        "INSERT INTO calendarios (cliente_id, mes, calendario_json, periodo, metadata) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-        [clienteId, mesFinal, JSON.stringify(calendarData), periodoFinal, metadata]
-      );
-
-      try {
-        if (Array.isArray(calendarData)) {
-          const temas = calendarData
-            .slice(0, 12)
-            .map((p: any) => String(p?.tema || "").trim())
-            .filter(Boolean);
-          continuityContext = `${continuityContext}\n\nMÊS JÁ GERADO: ${mesFinal}\nTEMAS (amostra):\n${temas.slice(0, 8).map((t: string) => `- ${t}`).join("\n")}`;
-        }
-      } catch (_e) {
-        // ignore
-      }
-
-      resultsByMonth.push({
-        calendarId: saved.rows[0].id,
-        mes: mesFinal,
-        model: usedModelName,
-        postsCount: Array.isArray(calendarData) ? calendarData.length : 0,
-      });
 
         console.log(`✅ [DEBUG] Mês ${mesFinal} gerado com sucesso!`);
       } catch (monthError: any) {
