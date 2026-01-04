@@ -427,7 +427,12 @@ export default function SlideEditorModal({
     const blockIds = new Set(blocks.map((b) => b.id));
 
     // Persistir layout para o Python respeitar posição/tamanho/fonte
-    updatedSlideData.layout = blocks.map((b) => ({
+    // Filtrar campos exclusivos do planner se não for planner
+    const blocksToSave = isPlannerSlide 
+      ? blocks 
+      : blocks.filter(b => b.id !== 'mes' && b.id !== 'nome_cliente');
+    
+    updatedSlideData.layout = blocksToSave.map((b) => ({
       id: b.id,
       x: b.x,
       y: b.y,
@@ -450,8 +455,9 @@ export default function SlideEditorModal({
       if (block.id === 'texto') updatedSlideData.texto_longo = block.content;
       if (block.id === 'frase') updatedSlideData.frase = block.content;
       if (block.id === 'legenda') updatedSlideData.legenda = block.content;
-      if (block.id === 'mes') updatedSlideData.mes = block.content;
-      if (block.id === 'nome_cliente') updatedSlideData.nome_cliente = block.content;
+      // Campos mes e nome_cliente só devem ser salvos se for planner
+      if (isPlannerSlide && block.id === 'mes') updatedSlideData.mes = block.content;
+      if (isPlannerSlide && block.id === 'nome_cliente') updatedSlideData.nome_cliente = block.content;
     });
 
     // Se o bloco foi removido, limpar o campo correspondente para não ser re-renderizado
@@ -460,8 +466,16 @@ export default function SlideEditorModal({
     if (!blockIds.has('texto')) updatedSlideData.texto_longo = '';
     if (!blockIds.has('frase')) updatedSlideData.frase = '';
     if (!blockIds.has('legenda')) updatedSlideData.legenda = '';
-    if (!blockIds.has('mes')) updatedSlideData.mes = '';
-    if (!blockIds.has('nome_cliente')) updatedSlideData.nome_cliente = '';
+    
+    // Campos exclusivos do Planner: remover completamente se não for planner
+    if (isPlannerSlide) {
+      if (!blockIds.has('mes')) updatedSlideData.mes = '';
+      if (!blockIds.has('nome_cliente')) updatedSlideData.nome_cliente = '';
+    } else {
+      // Se não é planner, garantir que esses campos não existam
+      delete updatedSlideData.mes;
+      delete updatedSlideData.nome_cliente;
+    }
 
     if (typeof logoUrlOverride === 'string' && logoUrlOverride.trim()) {
       updatedSlideData.logo_url = logoUrlOverride.trim();
