@@ -566,7 +566,8 @@ export default function SlideEditorModal({
                         top: `${((block.y / 1080) * 100).toFixed(4)}%`,
                         width: `${((block.width / 1920) * 100).toFixed(4)}%`,
                         height: `${((block.height / 1080) * 100).toFixed(4)}%`,
-                        fontSize: `${((block.fontSize / 1080) * 100).toFixed(4)}vh`,
+                        // Usar porcentagem da altura do canvas em vez de vh para match exato com Python
+                        fontSize: `${((block.fontSize / 1080) * 100).toFixed(4)}%`,
                         color: block.color,
                         fontWeight: block.fontWeight,
                         textAlign: block.align,
