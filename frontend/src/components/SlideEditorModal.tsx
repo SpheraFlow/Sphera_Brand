@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, MouseEvent as ReactMouseEvent } from 'react';
 import api from '../services/api';
 import { resolveAssetUrl, withCacheBust } from '../utils/assetHelpers';
+import { toPng } from 'html-to-image';
+import download from 'downloadjs';
 
 interface TextBlock {
   id: string;
@@ -398,6 +400,28 @@ export default function SlideEditorModal({
     setIsEditing(null);
   };
 
+  const handleExportFromEditor = async () => {
+    if (!canvasRef.current) return;
+
+    try {
+      const canvas = canvasRef.current;
+      const dataUrl = await toPng(canvas, {
+        quality: 1.0,
+        pixelRatio: 2,
+        width: 1920,
+        height: 1080,
+        cacheBust: true
+      });
+
+      const filename = `${slideName.replace(/\s+/g, '_')}_${Date.now()}.png`;
+      download(dataUrl, filename, 'image/png');
+      alert('✅ Imagem exportada com sucesso!');
+    } catch (error) {
+      console.error('Erro ao exportar:', error);
+      alert('❌ Erro ao exportar. Tente novamente.');
+    }
+  };
+
   const handleSaveLayout = () => {
     const updatedSlideData = { ...slideData };
     const blockIds = new Set(blocks.map((b) => b.id));
@@ -496,6 +520,13 @@ export default function SlideEditorModal({
             <p className="text-xs text-gray-400 mt-1">Arraste os textos para reposicionar • Duplo clique para editar</p>
           </div>
           <div className="flex gap-2">
+            <button
+              onClick={handleExportFromEditor}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm"
+              title="Exporta exatamente o que você vê no editor"
+            >
+              📥 Exportar do Editor
+            </button>
             <button
               onClick={handleSaveLayout}
               className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold text-sm"
