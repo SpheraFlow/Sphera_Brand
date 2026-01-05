@@ -74,9 +74,19 @@ export default function SlideEditorModal({
       (slideName || '').toLowerCase().includes('planner') ||
       (slideData?.mes !== undefined && slideData?.nome_cliente !== undefined);
 
+    // CORREÇÃO DEFINITIVA: Filtrar layout para remover blocos exclusivos do Planner
+    // se não for uma lâmina Planner (previne contaminação entre lâminas)
     const layoutList = Array.isArray(slideData?.layout) ? slideData.layout : [];
+    const filteredLayout = isPlannerSlide 
+      ? layoutList 
+      : layoutList.filter((l: any) => {
+          // Remover blocos exclusivos do Planner de lâminas não-planner
+          const id = l?.id;
+          return id !== 'mes' && id !== 'nome_cliente' && id !== 'logo';
+        });
+    
     const layoutById = new Map<string, any>();
-    layoutList.forEach((l: any) => {
+    filteredLayout.forEach((l: any) => {
       if (l && typeof l === 'object' && l.id) layoutById.set(l.id, l);
     });
 
@@ -430,7 +440,13 @@ export default function SlideEditorModal({
     // Filtrar campos exclusivos do planner se não for planner
     const blocksToSave = isPlannerSlide 
       ? blocks 
-      : blocks.filter(b => b.id !== 'mes' && b.id !== 'nome_cliente');
+      : blocks.filter(b => {
+          // Sempre filtrar nome_cliente de não-planner
+          if (b.id === 'nome_cliente') return false;
+          // Filtrar mes apenas se não existia no slideData original (evita criar blocos indesejados)
+          if (b.id === 'mes' && slideData.mes === undefined) return false;
+          return true;
+        });
     
     updatedSlideData.layout = blocksToSave.map((b) => ({
       id: b.id,
@@ -467,12 +483,18 @@ export default function SlideEditorModal({
     if (!blockIds.has('frase')) updatedSlideData.frase = '';
     if (!blockIds.has('legenda')) updatedSlideData.legenda = '';
     
-    // Campos exclusivos do Planner: remover completamente se não for planner
+    // CORREÇÃO DEFINITIVA: Limpeza robusta de campos por tipo de lâmina
+    const isMetasSlide = (slideName || '').toLowerCase().includes('metas');
+    
     if (isPlannerSlide) {
+      // Planner: limpar se blocos foram removidos
       if (!blockIds.has('mes')) updatedSlideData.mes = '';
       if (!blockIds.has('nome_cliente')) updatedSlideData.nome_cliente = '';
+    } else if (isMetasSlide) {
+      // Metas: preservar 'mes' (usado pelo Python), remover 'nome_cliente'
+      delete updatedSlideData.nome_cliente;
     } else {
-      // Se não é planner, garantir que esses campos não existam
+      // Outras lâminas (Defesa, Slogan, Desafios): remover ambos completamente
       delete updatedSlideData.mes;
       delete updatedSlideData.nome_cliente;
     }
