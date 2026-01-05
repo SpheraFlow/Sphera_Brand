@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, MouseEvent as ReactMouseEvent } from 'react';
 import api from '../services/api';
 import { resolveAssetUrl } from '../utils/assetHelpers';
+// 🚨 DEPENDÊNCIAS CRÍTICAS - NÃO REMOVER 🚨
+// html-to-image e downloadjs são necessários para "Exportar do Editor"
 import { toPng } from 'html-to-image';
 import download from 'downloadjs';
 
@@ -470,6 +472,18 @@ export default function SlideEditorModal({
     setIsEditing(null);
   };
 
+  /**
+   * 🚨 FUNCIONALIDADE CRÍTICA - NÃO REMOVER 🚨
+   * 
+   * Exporta a lâmina EXATAMENTE como aparece no editor (WYSIWYG).
+   * Esta função é essencial porque:
+   * 1. Preview (Python PIL) e Editor (HTML Canvas) podem renderizar layouts diferentes
+   * 2. Permite correções manuais de lâminas individuais sem regenerar tudo
+   * 3. Garante que o usuário baixe exatamente o que está vendo
+   * 
+   * Dependências: html-to-image, downloadjs (já instaladas em package.json)
+   * Botão UI: linha ~618 "📥 Exportar do Editor"
+   */
   const handleExportFromEditor = async () => {
     if (!canvasRef.current) return;
 
@@ -615,6 +629,8 @@ export default function SlideEditorModal({
             <p className="text-xs text-gray-400 mt-1">Arraste os textos para reposicionar • Duplo clique para editar</p>
           </div>
           <div className="flex gap-2">
+            {/* 🚨 BOTÃO CRÍTICO - NÃO REMOVER 🚨 
+                Exporta WYSIWYG do editor, essencial quando preview Python difere do editor */}
             <button
               onClick={handleExportFromEditor}
               className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-sm"
