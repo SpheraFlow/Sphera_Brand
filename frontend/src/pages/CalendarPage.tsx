@@ -223,7 +223,8 @@ export default function CalendarPage() {
       setIsGenerating(true);
 
       const downloadClientName = clientName || 'Cliente';
-      const safeMonth = String(calendar.mes || 'mes').replace(/\s+/g, '_');
+      const suffix = getExcelFilenameSuffix(exportMonthsSelected);
+      const safeMonth = String(suffix || String(calendar.mes || 'mes')).replace(/\s+/g, '_');
 
       const response = await api.post(
         '/calendars/export-excel',
@@ -277,6 +278,29 @@ export default function CalendarPage() {
       'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
     ];
     return monthNames[monthNum - 1] || `Mês ${monthNum}`;
+  };
+
+  const getExcelFilenameSuffix = (monthsSelected: number[]) => {
+    const normalized = (Array.isArray(monthsSelected) ? monthsSelected : [])
+      .map((m) => parseInt(String(m), 10))
+      .filter((m) => !isNaN(m) && m >= 1 && m <= 12)
+      .sort((a, b) => a - b);
+
+    const yearMatch = String(calendar?.mes || '').match(/(\d{4})/);
+    const yearStr = yearMatch?.[1] || '';
+
+    if (normalized.length >= 2) {
+      const start = getMonthName(normalized[0]);
+      const end = getMonthName(normalized[normalized.length - 1]);
+      return `${start}-${end}${yearStr ? `_${yearStr}` : ''}`;
+    }
+
+    if (normalized.length === 1) {
+      return `${getMonthName(normalized[0])}${yearStr ? `_${yearStr}` : ''}`;
+    }
+
+    const safeMonth = String(calendar?.mes || 'mes').replace(/\s+/g, '_');
+    return safeMonth;
   };
 
   const openExportModal = () => {
@@ -994,7 +1018,7 @@ export default function CalendarPage() {
                   </div>
                 ) : (
                   <>
-                    <div className="flex gap-2 justify-end">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <button
                         onClick={() => {
                           const allMonths = detectMonthsFromCalendar(calendar);
@@ -1003,6 +1027,19 @@ export default function CalendarPage() {
                         className="text-xs px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-lg transition-colors"
                       >
                         ✓ Selecionar Todos
+                      </button>
+                      <button
+                        onClick={() => {
+                          const start = (currentMonth.getMonth() + 1);
+                          const m1 = start;
+                          const m2 = start === 12 ? 1 : start + 1;
+                          const m3 = start >= 11 ? (start + 2) % 12 : start + 2;
+                          setExportMonthsSelected([m1, m2, m3].sort((a, b) => a - b));
+                        }}
+                        className="text-xs px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 rounded-lg transition-colors"
+                        title="Seleciona o mês atual + próximos 2"
+                      >
+                        3 Meses
                       </button>
                       <button
                         onClick={() => setExportMonthsSelected([])}

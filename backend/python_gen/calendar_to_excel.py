@@ -494,10 +494,14 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
                 continue
             if mm < 1 or mm > 12:
                 continue
-            if mm in posts_by_month:
-                filtered.append(mm)
+            filtered.append(mm)
+
         if filtered:
             sorted_months = sorted(set(filtered))
+            # Garantir que meses selecionados existam no dicionário mesmo que não tenham posts
+            for mm in sorted_months:
+                if mm not in posts_by_month:
+                    posts_by_month[mm] = []
 
     if not sorted_months:
         sorted_months = [start_month_num]
