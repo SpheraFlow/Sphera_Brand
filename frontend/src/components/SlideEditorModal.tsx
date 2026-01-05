@@ -740,7 +740,11 @@ export default function SlideEditorModal({
                             className="w-full h-full object-contain pointer-events-none"
                             draggable={false}
                             onError={() => {
-                              if (logoTriedFallback) return;
+                              console.log('🔴 [LOGO ERROR] Falha ao carregar:', logoImgSrc);
+                              if (logoTriedFallback) {
+                                console.log('🔴 [LOGO ERROR] Fallback já tentado, desistindo');
+                                return;
+                              }
                               if (!logoImgSrc) return;
                               const base = logoImgSrc.replace(/([?&])t=\d+(&?)/g, (_, p1, p2) => (p2 ? p1 : '')).replace(/[?&]$/g, '');
                               let next = base;
@@ -749,7 +753,11 @@ export default function SlideEditorModal({
                               } else if (base.includes('/static/client-logos/')) {
                                 next = base.replace('/static/client-logos/', '/api/static/client-logos/');
                               }
-                              if (next === base) return;
+                              if (next === base) {
+                                console.log('🔴 [LOGO ERROR] URL não contém /static/ ou /api/static/, não há fallback');
+                                return;
+                              }
+                              console.log('🔄 [LOGO FALLBACK] Tentando rota alternativa:', next);
                               setLogoTriedFallback(true);
                               setLogoImgSrc(withStableCacheKey(next, logoCacheKey));
                             }}

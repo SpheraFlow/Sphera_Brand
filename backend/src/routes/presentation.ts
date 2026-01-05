@@ -326,6 +326,7 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
         }
         
         // 1. Salvar JSON
+        console.log(`📝 [PRESENTATION] Payload final antes de salvar - grid.mes: "${data?.grid?.mes || 'undefined'}"`);
         fs.writeFileSync(CONTENT_FILE, JSON.stringify(data, null, 2), { encoding: 'utf-8' });
         console.log("📝 [PRESENTATION] content.json salvo");
 

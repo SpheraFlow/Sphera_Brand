@@ -169,7 +169,8 @@ def render_metas(data, output_name):
     
     # Subtítulo (Mês)
     mes = data.get('mes', '')
-    if mes:
+    # Não renderizar se mes estiver vazio ou apenas whitespace
+    if mes and mes.strip():
         b = layout.get('mes')
         if b:
             font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 32)))
