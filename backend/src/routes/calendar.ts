@@ -1343,7 +1343,10 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
             .filter((mm) => !isNaN(mm) && mm >= 1 && mm <= 12)
         : [];
 
+      console.log(` [DEBUG] Merge check: normalizedMonths=${JSON.stringify(normalizedMonths)}, cliente_id=${calendar.cliente_id || 'NULL'}`);
+
       if (normalizedMonths.length >= 2 && calendar.cliente_id) {
+        console.log(` [DEBUG] Iniciando merge de ${normalizedMonths.length} meses para cliente_id=${calendar.cliente_id}`);
         const baseMonthNum = parseMonthLabelToNumber(String(monthLabel)) || normalizedMonths[0] || 1;
         const baseYearNum = parseInt(String(year), 10) || new Date().getFullYear();
         const mergedPosts: any[] = Array.isArray(posts) ? [...posts] : [];
