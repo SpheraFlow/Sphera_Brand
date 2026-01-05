@@ -45,6 +45,11 @@ export default function ClientLayout() {
       icon: '📊',
     },
     {
+      path: `/client/${clientId}/campaign`,
+      label: 'Planejamento de Campanha',
+      icon: '🧩',
+    },
+    {
       path: `/client/${clientId}/branding`,
       label: 'DNA da Marca',
       icon: '🎨',

@@ -7,6 +7,7 @@ import GeneralCalendarPage from './pages/GeneralCalendarPage';
 import KnowledgeBase from './pages/KnowledgeBase';
 import BrandProfile from './pages/BrandProfile';
 import ReferencesPage from './pages/ReferencesPage';
+import CampaignPlanning from './pages/CampaignPlanning';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="branding" element={<BrandProfile />} />
           <Route path="calendar" element={<CalendarPage />} />
+          <Route path="campaign" element={<CampaignPlanning />} />
           <Route path="references" element={<ReferencesPage />} />
           <Route path="knowledge" element={<KnowledgeBase />} />
         </Route>

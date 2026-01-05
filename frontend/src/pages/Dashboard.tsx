@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../services/api';
-import PresentationGenerator from '../components/PresentationGenerator';
 import TokenUsageDisplay from '../components/TokenUsageDisplay';
 
 interface ClientInfo {
@@ -434,11 +433,6 @@ export default function Dashboard() {
               </div>
             )}
           </div>
-        </div>
-
-        {/* Gerador de Apresentação */}
-        <div className="mb-8">
-          <PresentationGenerator />
         </div>
 
         {/* Seções detalhadas */}
