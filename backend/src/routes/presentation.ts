@@ -279,7 +279,11 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
         // Metas (grid): o usuário não quer mês nessa lâmina.
         // Garantir que nunca vai para o Python, independente do payload/estado.
         if (data?.grid && typeof data.grid === 'object') {
-            data.grid.mes = '';
+            const before = (data.grid as any).mes;
+            if (before !== undefined && before !== '') {
+                console.log(`🧼 [PRESENTATION] Removendo grid.mes no início do /generate (antes: "${String(before)}")`);
+            }
+            delete (data.grid as any).mes;
         }
 
         const requestedMonths: string[] = Array.isArray(data?.months)
@@ -330,7 +334,15 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
         }
         
         // 1. Salvar JSON
-        console.log(`📝 [PRESENTATION] Payload final antes de salvar - grid.mes: "${data?.grid?.mes || 'undefined'}"`);
+        // Blindagem final: garantir que nada reintroduziu o mês nas Metas
+        if (data?.grid && typeof data.grid === 'object') {
+            const beforeFinal = (data.grid as any).mes;
+            if (beforeFinal !== undefined && beforeFinal !== '') {
+                console.log(`🧼 [PRESENTATION] Removendo grid.mes antes de salvar content.json (antes: "${String(beforeFinal)}")`);
+            }
+            delete (data.grid as any).mes;
+        }
+        console.log(`📝 [PRESENTATION] Payload final antes de salvar - grid.mes: "${(data?.grid as any)?.mes ?? 'undefined'}"`);
         fs.writeFileSync(CONTENT_FILE, JSON.stringify(data, null, 2), { encoding: 'utf-8' });
         console.log("📝 [PRESENTATION] content.json salvo");
 
