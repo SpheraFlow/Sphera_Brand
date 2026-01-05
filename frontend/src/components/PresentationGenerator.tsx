@@ -333,7 +333,7 @@ export default function PresentationGenerator() {
         const effectiveLogoUrl = plannerLogoUrl || logoUrl;
         data = {
           ...planner,
-          ...(effectiveLogoUrl ? { logo_url: effectiveLogoUrl } : {})
+          ...(effectiveLogoUrl ? { logo_url: resolveAssetUrl(effectiveLogoUrl) } : {})
         };
         realIndex = 4;
     }

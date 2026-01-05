@@ -66,6 +66,20 @@ export default function SlideEditorModal({
     (slideName || '').toLowerCase().includes('planner') ||
     (slideData?.mes !== undefined && slideData?.nome_cliente !== undefined);
 
+  const isMetasSlide = (slideName || '').toLowerCase().includes('metas');
+
+  const estimateTextBoxSize = (text: string, fontSize: number, maxWidth: number) => {
+    const safeText = String(text || '');
+    const safeFont = Number.isFinite(fontSize) ? fontSize : 20;
+    const safeMaxW = Math.max(120, Number.isFinite(maxWidth) ? maxWidth : 240);
+    const approxCharW = safeFont * 0.56;
+    const charsPerLine = Math.max(6, Math.floor((safeMaxW - 16) / approxCharW));
+    const lines = Math.max(1, Math.ceil(safeText.length / charsPerLine));
+    const lineH = safeFont * 1.25;
+    const height = Math.min(280, Math.max(44, Math.ceil(lines * lineH + 12)));
+    return { width: safeMaxW, height };
+  };
+
   const [blocks, setBlocks] = useState<TextBlock[]>(() => {
     // Inicializar blocos baseado no tipo de slide
     const initialBlocks: TextBlock[] = [];
@@ -211,14 +225,18 @@ export default function SlideEditorModal({
         const id = `item-${i}`;
         const l = getLayout(id);
 
+        const defaultW = 240;
+        const defaultFont = l?.fontSize ?? 20;
+        const size = estimateTextBoxSize(items[i] || '', defaultFont, l?.width ?? defaultW);
+
         initialBlocks.push({
           id,
           content: items[i] || '',
           x: l?.x ?? defaultPositions[i].x,
           y: l?.y ?? defaultPositions[i].y,
-          width: l?.width ?? 280,
-          height: l?.height ?? 280,
-          fontSize: l?.fontSize ?? 20,
+          width: l?.width ?? size.width,
+          height: l?.height ?? size.height,
+          fontSize: defaultFont,
           color: l?.color ?? '#FFFFFF',
           fontWeight: l?.fontWeight ?? 'normal',
           align: l?.align ?? 'center',
@@ -227,6 +245,27 @@ export default function SlideEditorModal({
           shadow: l?.shadow ?? true
         });
       }
+    }
+
+    // Metas: mês vigente (Python desenha), então expor como bloco editável para evitar "mês fantasma"
+    if (!isPlannerSlide && (slideName || '').toLowerCase().includes('metas')) {
+      const mesValue = typeof slideData?.mes === 'string' ? slideData.mes : '';
+      const l = getLayout('mes');
+      initialBlocks.push({
+        id: 'mes',
+        content: mesValue,
+        x: l?.x ?? 100,
+        y: l?.y ?? 520,
+        width: l?.width ?? 520,
+        height: l?.height ?? 60,
+        fontSize: l?.fontSize ?? 32,
+        color: l?.color ?? '#FFFFFF',
+        fontWeight: l?.fontWeight ?? 'normal',
+        align: l?.align ?? 'left',
+        fontFamily: l?.fontFamily ?? 'Lato',
+        kind: 'text',
+        shadow: l?.shadow ?? true
+      });
     }
 
     // Planner: mes, nome_cliente e caixa da logo
@@ -293,6 +332,7 @@ export default function SlideEditorModal({
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [editContent, setEditContent] = useState('');
   const canvasRef = useRef<HTMLDivElement>(null);
+  const manuallyResizedIdsRef = useRef<Set<string>>(new Set());
 
   if (!isOpen) return null;
 
@@ -308,6 +348,7 @@ export default function SlideEditorModal({
     setSelectedBlockId(id);
     setResizingId(id);
     setResizeStart({ x: e.clientX, y: e.clientY });
+    manuallyResizedIdsRef.current.add(id);
   };
 
   const handleMouseMove = (e: ReactMouseEvent) => {
@@ -382,11 +423,26 @@ export default function SlideEditorModal({
 
   const handleSaveEdit = () => {
     if (!isEditing) return;
-    
+
+    const editingId = isEditing;
+    const nextContent = editContent;
+
     setBlocks((prev) =>
-      prev.map((block) =>
-        block.id === isEditing ? { ...block, content: editContent } : block
-      )
+      prev.map((block) => {
+        if (block.id !== editingId) return block;
+        const updated = { ...block, content: nextContent };
+        if (
+          editingId.startsWith('item-') &&
+          !manuallyResizedIdsRef.current.has(editingId)
+        ) {
+          const size = estimateTextBoxSize(nextContent, updated.fontSize, updated.width);
+          return { ...updated, height: size.height };
+        }
+        if (editingId === 'mes' && isMetasSlide) {
+          return updated;
+        }
+        return updated;
+      })
     );
     
     setIsEditing(null);
@@ -474,6 +530,7 @@ export default function SlideEditorModal({
       // Campos mes e nome_cliente só devem ser salvos se for planner
       if (isPlannerSlide && block.id === 'mes') updatedSlideData.mes = block.content;
       if (isPlannerSlide && block.id === 'nome_cliente') updatedSlideData.nome_cliente = block.content;
+      if (isMetasSlide && block.id === 'mes') updatedSlideData.mes = block.content;
     });
 
     // Se o bloco foi removido, limpar o campo correspondente para não ser re-renderizado
@@ -483,9 +540,7 @@ export default function SlideEditorModal({
     if (!blockIds.has('frase')) updatedSlideData.frase = '';
     if (!blockIds.has('legenda')) updatedSlideData.legenda = '';
     
-    // CORREÇÃO DEFINITIVA: Limpeza robusta de campos por tipo de lâmina
-    const isMetasSlide = (slideName || '').toLowerCase().includes('metas');
-    
+    // Limpeza robusta de campos por tipo de lâmina
     if (isPlannerSlide) {
       // Planner: limpar se blocos foram removidos
       if (!blockIds.has('mes')) updatedSlideData.mes = '';
@@ -493,6 +548,7 @@ export default function SlideEditorModal({
     } else if (isMetasSlide) {
       // Metas: preservar 'mes' (usado pelo Python), remover 'nome_cliente'
       delete updatedSlideData.nome_cliente;
+      if (!blockIds.has('mes')) updatedSlideData.mes = '';
     } else {
       // Outras lâminas (Defesa, Slogan, Desafios): remover ambos completamente
       delete updatedSlideData.mes;
@@ -676,6 +732,7 @@ export default function SlideEditorModal({
                         ((logoUrlOverride || slideData?.logo_url) ? (
                           <img
                             src={withCacheBust(resolveAssetUrl(logoUrlOverride || slideData.logo_url))}
+                            crossOrigin="anonymous"
                             alt="Logo"
                             className="w-full h-full object-contain pointer-events-none"
                             draggable={false}
