@@ -91,31 +91,75 @@ def parse_year_from_label(month_label, fallback_year):
         pass
     return int(fallback_year)
 
+def _take_first_words(text, max_words=10):
+    try:
+        s = str(text or '').strip()
+        if not s:
+            return ''
+        words = re.findall(r"\S+", s)
+        if len(words) <= int(max_words):
+            return ' '.join(words)
+        return ' '.join(words[: int(max_words)])
+    except Exception:
+        return ''
+
+def _extract_day_month_year(date_str):
+    """Best-effort parse of many formats.
+
+    Returns: (day, month, year_or_none)
+    """
+    s = str(date_str or '').strip()
+    if not s:
+        return (1, None, None)
+
+    # ISO-ish: YYYY-MM-DD (optionally time)
+    m = re.search(r"(\d{4})\-(\d{1,2})\-(\d{1,2})", s)
+    if m:
+        return (int(m.group(3)), int(m.group(2)), int(m.group(1)))
+
+    # YYYY/MM/DD
+    m = re.search(r"(\d{4})\/(\d{1,2})\/(\d{1,2})", s)
+    if m:
+        return (int(m.group(3)), int(m.group(2)), int(m.group(1)))
+
+    # dd/MM[/yyyy] OR MM/DD[/yyyy] (ambiguous). Heuristic:
+    # - If second part > 12, treat as MM/DD (month=first, day=second)
+    # - Else treat as DD/MM (day=first, month=second)
+    m = re.search(r"\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?", s)
+    if m:
+        a = int(m.group(1))
+        b = int(m.group(2))
+        y = m.group(3)
+        year_val = int(y) if (y and len(y) == 4) else None
+        if b > 12 and a <= 12:
+            return (b, a, year_val)
+        return (a, b, year_val)
+
+    # dd-MM[-yyyy] OR MM-DD[-yyyy] (ambiguous). Same heuristic as above.
+    m = re.search(r"\b(\d{1,2})\-(\d{1,2})(?:\-(\d{2,4}))?", s)
+    if m:
+        a = int(m.group(1))
+        b = int(m.group(2))
+        y = m.group(3)
+        year_val = int(y) if (y and len(y) == 4) else None
+        if b > 12 and a <= 12:
+            return (b, a, year_val)
+        return (a, b, year_val)
+
+    # fallback: first number = day
+    m = re.search(r"(\d{1,2})", s)
+    if m:
+        return (int(m.group(1)), None, None)
+    return (1, None, None)
+
 def month_num_from_date_str(date_str, default_month):
     try:
         s = str(date_str or '').strip()
         if not s:
             return int(default_month)
-
-        # YYYY-MM-DD
-        m = re.search(r"(\d{4})\-(\d{1,2})\-(\d{1,2})", s)
-        if m:
-            return int(m.group(2))
-
-        # YYYY/MM/DD
-        m = re.search(r"(\d{4})\/(\d{1,2})\/(\d{1,2})", s)
-        if m:
-            return int(m.group(2))
-
-        # dd/MM or dd/MM/yyyy
-        m = re.search(r"(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?", s)
-        if m:
-            return int(m.group(2))
-
-        # dd-MM or dd-MM-yyyy
-        m = re.search(r"(\d{1,2})\-(\d{1,2})(?:\-(\d{2,4}))?", s)
-        if m:
-            return int(m.group(2))
+        _day, _month, _year = _extract_day_month_year(s)
+        if _month is not None and 1 <= int(_month) <= 12:
+            return int(_month)
     except Exception:
         pass
     return int(default_month)
@@ -125,31 +169,10 @@ def day_from_date_str(date_str):
         s = str(date_str or '').strip()
         if not s:
             return 1
-
-        # YYYY-MM-DD
-        m = re.search(r"(\d{4})\-(\d{1,2})\-(\d{1,2})", s)
-        if m:
-            return int(m.group(3))
-
-        # YYYY/MM/DD
-        m = re.search(r"(\d{4})\/(\d{1,2})\/(\d{1,2})", s)
-        if m:
-            return int(m.group(3))
-
-        # dd/MM or dd/MM/yyyy
-        m = re.search(r"(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?", s)
-        if m:
-            return int(m.group(1))
-
-        # dd-MM or dd-MM-yyyy
-        m = re.search(r"(\d{1,2})\-(\d{1,2})(?:\-(\d{2,4}))?", s)
-        if m:
-            return int(m.group(1))
-
-        m = re.search(r"(\d{1,2})", s)
-        if m:
-            return int(m.group(1))
-        return int(s)
+        _day, _month, _year = _extract_day_month_year(s)
+        if 1 <= int(_day) <= 31:
+            return int(_day)
+        return 1
     except Exception:
         return 1
 
@@ -453,6 +476,10 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
             # Linha do tipo (formato)
             tipo_cell = _top_left_of_merged(f"{col}{header_row + 1}")
             ws[tipo_cell].value = formato_excel
+            try:
+                ws[tipo_cell].alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            except Exception:
+                pass
 
             # Em templates com conditional formatting (ex.: modelo final.xlsx), NÃO setar fill/font.
             # A cor deve ser aplicada automaticamente pelo Excel baseado no texto.
@@ -468,11 +495,9 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
 
             # Bloco do resumo (3 linhas no template). Normalmente é mesclado verticalmente.
             resumo_cell = _top_left_of_merged(f"{col}{header_row + 2}")
-            description = (post.get('descricao') or post.get('description') or post.get('copy_sugestao') or '').strip()
-            if description and short_title and description != short_title:
-                ws[resumo_cell].value = f"{short_title}\n{description}"
-            else:
-                ws[resumo_cell].value = description if description else short_title
+            # Exigência: resumo bem curto (máx 10 palavras)
+            base_text = (short_title or post.get('descricao') or post.get('description') or post.get('copy_sugestao') or '').strip()
+            ws[resumo_cell].value = _take_first_words(base_text, 10)
             try:
                 ws[resumo_cell].alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
             except Exception:
