@@ -164,7 +164,6 @@ Retorne APENAS este JSON preenchido:
     "texto_longo": "Estratégia em 3 parágrafos (ATÉ 850 caracteres, contando espaços e quebras de linha)"
   },
   "grid": {
-    "mes": "MÊS EM MAIÚSCULAS",
     "texto_longo": "Metas em 2 parágrafos (ATÉ 850 caracteres, contando espaços e quebras de linha)"
   },
   "slogan": {
@@ -237,6 +236,11 @@ Retorne APENAS este JSON preenchido:
         // Garantir nome do cliente vindo do cadastro
         if (content.planner && clientName) {
             content.planner.nome_cliente = clientName;
+        }
+
+        // 🚨 CRÍTICO: Metas (grid) NUNCA deve ter mês - remover se IA gerou
+        if (content.grid) {
+            delete content.grid.mes;
         }
 
         return res.json({ success: true, content });
