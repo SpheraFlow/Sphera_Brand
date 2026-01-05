@@ -93,20 +93,65 @@ def parse_year_from_label(month_label, fallback_year):
 
 def month_num_from_date_str(date_str, default_month):
     try:
-        if '/' in date_str:
-            parts = date_str.split('/')
-            if len(parts) >= 2:
-                return int(parts[1])
+        s = str(date_str or '').strip()
+        if not s:
+            return int(default_month)
+
+        # YYYY-MM-DD
+        m = re.search(r"(\d{4})\-(\d{1,2})\-(\d{1,2})", s)
+        if m:
+            return int(m.group(2))
+
+        # YYYY/MM/DD
+        m = re.search(r"(\d{4})\/(\d{1,2})\/(\d{1,2})", s)
+        if m:
+            return int(m.group(2))
+
+        # dd/MM or dd/MM/yyyy
+        m = re.search(r"(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?", s)
+        if m:
+            return int(m.group(2))
+
+        # dd-MM or dd-MM-yyyy
+        m = re.search(r"(\d{1,2})\-(\d{1,2})(?:\-(\d{2,4}))?", s)
+        if m:
+            return int(m.group(2))
     except Exception:
         pass
     return int(default_month)
 
 def day_from_date_str(date_str):
-    if not date_str:
+    try:
+        s = str(date_str or '').strip()
+        if not s:
+            return 1
+
+        # YYYY-MM-DD
+        m = re.search(r"(\d{4})\-(\d{1,2})\-(\d{1,2})", s)
+        if m:
+            return int(m.group(3))
+
+        # YYYY/MM/DD
+        m = re.search(r"(\d{4})\/(\d{1,2})\/(\d{1,2})", s)
+        if m:
+            return int(m.group(3))
+
+        # dd/MM or dd/MM/yyyy
+        m = re.search(r"(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?", s)
+        if m:
+            return int(m.group(1))
+
+        # dd-MM or dd-MM-yyyy
+        m = re.search(r"(\d{1,2})\-(\d{1,2})(?:\-(\d{2,4}))?", s)
+        if m:
+            return int(m.group(1))
+
+        m = re.search(r"(\d{1,2})", s)
+        if m:
+            return int(m.group(1))
+        return int(s)
+    except Exception:
         return 1
-    if '/' in date_str:
-        return int(str(date_str).split('/')[0])
-    return int(str(date_str))
 
 def month_name_pt(month_num):
     names = {
@@ -479,7 +524,11 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
             posts_by_month[m_num].append({
                 'day': d,
                 'formato': post.get('formato', 'Static'),
-                'title': title
+                'title': title,
+                # Preservar campos úteis para preencher o resumo, quando existirem
+                'descricao': post.get('descricao'),
+                'description': post.get('description'),
+                'copy_sugestao': post.get('copy_sugestao'),
             })
         except Exception as e:
             print(f"[WARN] Erro ao processar post: {e}")
@@ -497,7 +546,9 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
             filtered.append(mm)
 
         if filtered:
-            sorted_months = sorted(set(filtered))
+            base = int(start_month_num)
+            unique = list(set(filtered))
+            sorted_months = sorted(unique, key=lambda m: (int(m) - base) % 12)
             # Garantir que meses selecionados existam no dicionário mesmo que não tenham posts
             for mm in sorted_months:
                 if mm not in posts_by_month:
@@ -507,18 +558,15 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
         sorted_months = [start_month_num]
         posts_by_month[start_month_num] = []
 
-    month_name_by_num = {m: month_name_pt(m).lower() for m in range(1, 13)}
-    template_month_ws_by_num = {}
-    for ws in wb.worksheets:
-        title_norm = str(ws.title).strip().lower()
-        for m in range(1, 13):
-            if month_name_by_num[m] in title_norm:
-                template_month_ws_by_num[m] = ws
-
+    # Não reutilizar abas já existentes do template por mês.
+    # Renomear não altera a posição; e reuso pode carregar layouts/artefatos inconsistentes.
+    # Estratégia determinística: copiar a aba base para cada mês selecionado e, ao final,
+    # remover todas as abas originais do template.
+    original_sheets = list(wb.worksheets)
     used_sheets = []
 
     total_posts_filled = 0
-    for m_num in sorted_months:
+    for idx, m_num in enumerate(sorted_months):
         y_num = year_num
         if m_num < start_month_num:
             y_num = year_num + 1
@@ -526,9 +574,7 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
         month_label = f"{month_name_pt(m_num)} {y_num}"
         sheet_title = f"{client_name}_{month_name_pt(m_num)}"
 
-        ws = template_month_ws_by_num.get(m_num)
-        if ws is None:
-            ws = wb.copy_worksheet(base_ws)
+        ws = wb.copy_worksheet(base_ws)
         ws.title = ensure_unique_sheet_name(wb, sheet_title)
         used_sheets.append(ws)
 
@@ -542,9 +588,19 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
         )
         total_posts_filled += filled
 
-    for ws in list(wb.worksheets):
-        if ws not in used_sheets:
-            wb.remove(ws)
+    # Remover abas originais do template (mantemos apenas as que geramos neste processo)
+    for ws in original_sheets:
+        try:
+            if ws in wb.worksheets:
+                wb.remove(ws)
+        except Exception:
+            pass
+
+    # Fixar a ordem final das abas conforme used_sheets
+    try:
+        wb._sheets = list(used_sheets)
+    except Exception as e:
+        print(f"[WARN] Não foi possível fixar ordem final das abas: {e}")
     
     # Criar diretório de saída se não existir
     output_dir = os.path.dirname(output_path)

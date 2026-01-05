@@ -259,15 +259,42 @@ export default function CalendarPage() {
   };
 
   const detectMonthsFromCalendar = (cal: Calendar): number[] => {
+    const extractMonthNumFromDateStr = (value: string): number | null => {
+      const s = String(value || '').trim();
+      if (!s) return null;
+
+      let m = s.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+      if (m?.[2]) {
+        const monthNum = parseInt(m[2], 10);
+        return !isNaN(monthNum) && monthNum >= 1 && monthNum <= 12 ? monthNum : null;
+      }
+
+      m = s.match(/(\d{1,2})\-(\d{1,2})(?:\-(\d{2,4}))?/);
+      if (m?.[2]) {
+        const monthNum = parseInt(m[2], 10);
+        return !isNaN(monthNum) && monthNum >= 1 && monthNum <= 12 ? monthNum : null;
+      }
+
+      m = s.match(/(\d{4})\-(\d{1,2})\-(\d{1,2})/);
+      if (m?.[2]) {
+        const monthNum = parseInt(m[2], 10);
+        return !isNaN(monthNum) && monthNum >= 1 && monthNum <= 12 ? monthNum : null;
+      }
+
+      m = s.match(/(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+      if (m?.[2]) {
+        const monthNum = parseInt(m[2], 10);
+        return !isNaN(monthNum) && monthNum >= 1 && monthNum <= 12 ? monthNum : null;
+      }
+
+      return null;
+    };
+
     const months = new Set<number>();
     for (const p of cal.posts || []) {
       const dateStr = String((p as any)?.data || '');
-      const m = dateStr.match(/\b(\d{1,2})\/(\d{1,2})\b/);
-      if (!m) continue;
-      const monthNum = parseInt(m[2], 10);
-      if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
-        months.add(monthNum);
-      }
+      const monthNum = extractMonthNumFromDateStr(dateStr);
+      if (monthNum) months.add(monthNum);
     }
     return Array.from(months).sort((a, b) => a - b);
   };
@@ -303,14 +330,62 @@ export default function CalendarPage() {
     return safeMonth;
   };
 
+  const parseMonthLabelToNumber = (label: string): number | null => {
+    const s = String(label || '').trim().toLowerCase();
+    if (!s) return null;
+    const token = s.split(/\s+/)[0] || '';
+    const map: Record<string, number> = {
+      janeiro: 1,
+      fevereiro: 2,
+      'março': 3,
+      marco: 3,
+      abril: 4,
+      maio: 5,
+      junho: 6,
+      julho: 7,
+      agosto: 8,
+      setembro: 9,
+      outubro: 10,
+      novembro: 11,
+      dezembro: 12,
+    };
+    return map[token] ?? null;
+  };
+
   const openExportModal = () => {
     if (!calendar) {
       alert('Nenhum calendário carregado.');
       return;
     }
-    const detected = detectMonthsFromCalendar(calendar);
-    setExportMonthsSelected(detected);
+
+    const baseMonth = parseMonthLabelToNumber(calendar.mes) || (currentMonth.getMonth() + 1);
+    const isTri = Number(calendar.periodo) >= 90 || Number(calendar.periodo) === 3;
+    const defaultSelection = isTri
+      ? [
+          baseMonth,
+          baseMonth === 12 ? 1 : baseMonth + 1,
+          baseMonth >= 11 ? ((baseMonth + 2) % 12 || 12) : baseMonth + 2,
+        ]
+      : [baseMonth];
+
+    const monthsOptions = getExportMonthOptions(calendar);
+    setExportMonthsSelected(defaultSelection.filter((m) => monthsOptions.includes(m)));
     setShowExportModal(true);
+  };
+
+  const getExportMonthOptions = (cal: Calendar): number[] => {
+    const baseMonth = parseMonthLabelToNumber(cal.mes) || (currentMonth.getMonth() + 1);
+    const isTri = Number(cal.periodo) >= 90 || Number(cal.periodo) === 3;
+    const triMonths = isTri
+      ? [
+          baseMonth,
+          baseMonth === 12 ? 1 : baseMonth + 1,
+          baseMonth >= 11 ? ((baseMonth + 2) % 12 || 12) : baseMonth + 2,
+        ]
+      : [baseMonth];
+
+    const detected = detectMonthsFromCalendar(cal);
+    return Array.from(new Set([...triMonths, ...detected])).sort((a, b) => a - b);
   };
 
   const openGenerateModal = () => {
@@ -1012,34 +1087,21 @@ export default function CalendarPage() {
               </div>
 
               <div className="space-y-4 mb-5">
-                {detectMonthsFromCalendar(calendar).length === 0 ? (
+                {getExportMonthOptions(calendar).length === 0 ? (
                   <div className="text-sm text-gray-300 bg-gray-900/50 border border-gray-700 rounded-lg p-4 text-center">
-                    ⚠️ Nenhum mês detectado (posts sem data no formato dd/MM).
+                    ⚠️ Nenhum mês detectado (posts sem data em formato reconhecível).
                   </div>
                 ) : (
                   <>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <button
                         onClick={() => {
-                          const allMonths = detectMonthsFromCalendar(calendar);
+                          const allMonths = getExportMonthOptions(calendar);
                           setExportMonthsSelected(allMonths);
                         }}
                         className="text-xs px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-lg transition-colors"
                       >
                         ✓ Selecionar Todos
-                      </button>
-                      <button
-                        onClick={() => {
-                          const start = (currentMonth.getMonth() + 1);
-                          const m1 = start;
-                          const m2 = start === 12 ? 1 : start + 1;
-                          const m3 = start >= 11 ? (start + 2) % 12 : start + 2;
-                          setExportMonthsSelected([m1, m2, m3].sort((a, b) => a - b));
-                        }}
-                        className="text-xs px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 rounded-lg transition-colors"
-                        title="Seleciona o mês atual + próximos 2"
-                      >
-                        3 Meses
                       </button>
                       <button
                         onClick={() => setExportMonthsSelected([])}
@@ -1048,8 +1110,41 @@ export default function CalendarPage() {
                         ✕ Limpar Seleção
                       </button>
                     </div>
+
+                    {(() => {
+                      const isTri = Number(calendar.periodo) >= 90 || Number(calendar.periodo) === 3;
+                      if (!isTri) return null;
+
+                      const baseMonth = parseMonthLabelToNumber(calendar.mes) || (currentMonth.getMonth() + 1);
+                      const m1 = baseMonth;
+                      const m2 = baseMonth === 12 ? 1 : baseMonth + 1;
+                      const m3 = baseMonth >= 11 ? ((baseMonth + 2) % 12 || 12) : baseMonth + 2;
+                      const triMonths = [m1, m2, m3].sort((a, b) => a - b);
+                      const isTriSelected = triMonths.every((m) => exportMonthsSelected.includes(m)) && exportMonthsSelected.length === 3;
+
+                      return (
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => {
+                              const options = getExportMonthOptions(calendar);
+                              const filtered = triMonths.filter((m) => options.includes(m));
+                              setExportMonthsSelected(filtered);
+                            }}
+                            className={`text-xs px-3 py-1.5 rounded-lg transition-colors border ${
+                              isTriSelected
+                                ? 'bg-blue-600 text-white border-blue-400'
+                                : 'bg-gray-900/50 text-gray-300 border-gray-700 hover:border-blue-500/50 hover:bg-gray-900'
+                            }`}
+                            title="Selecionar o trimestre do calendário"
+                          >
+                            Selecionar Trimestre
+                          </button>
+                        </div>
+                      );
+                    })()}
+
                     <div className="grid grid-cols-3 gap-3">
-                      {detectMonthsFromCalendar(calendar).map((m) => {
+                      {getExportMonthOptions(calendar).map((m) => {
                         const checked = exportMonthsSelected.includes(m);
                         return (
                           <button
