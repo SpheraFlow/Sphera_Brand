@@ -1328,12 +1328,19 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     const monthsDetected = detectMonths(posts);
     const monthsToExport = Array.isArray(monthsSelected) && monthsSelected.length > 0 ? monthsSelected : monthsDetected;
 
+    try {
+      const baseCount = Array.isArray(posts) ? posts.length : 0;
+      console.log(` [DEBUG] Export meses solicitados: ${JSON.stringify(monthsToExport)} | posts base=${baseCount}`);
+    } catch (_e) {
+      // ignore
+    }
+
     // Merge posts dos outros meses selecionados (tolerante ao formato do campo mes no banco)
     try {
       const normalizedMonths = Array.isArray(monthsToExport)
         ? monthsToExport
-            .map((mm: number) => parseInt(String(mm), 10))
-            .filter((mm: number) => !isNaN(mm) && mm >= 1 && mm <= 12)
+            .map((mm) => parseInt(String(mm), 10))
+            .filter((mm) => !isNaN(mm) && mm >= 1 && mm <= 12)
         : [];
 
       if (normalizedMonths.length >= 2 && calendar.cliente_id) {
@@ -1343,7 +1350,7 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
 
         const monthSearchTokens = (monthNum: number): string[] => {
           const n = Number(monthNum);
-          if (n === 3) return ["março", "marco"];
+          if (n == 3) return ["março", "marco"];
           return [monthNamePt(n).toLowerCase()];
         };
 
@@ -1358,7 +1365,7 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
             [calendar.cliente_id, label]
           );
 
-          // 2) Fallback tolerante: contém mês + contém ano (cobre 'Fevereiro de 2026', etc.)
+          // 2) Fallback tolerante: contém mês + contém ano
           if (!other.rows?.length) {
             const yearToken = String(yNum);
             for (const token of monthSearchTokens(m)) {
@@ -1370,9 +1377,20 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
             }
           }
 
+          // 3) Fallback extra: contém apenas o mês (quando o campo mes não tem ano)
+          if (!other.rows?.length) {
+            for (const token of monthSearchTokens(m)) {
+              other = await db.query(
+                "SELECT calendario_json, mes FROM calendarios WHERE cliente_id = $1 AND lower(mes) LIKE $2 ORDER BY created_at DESC LIMIT 1",
+                [calendar.cliente_id, `%${token}%`]
+              );
+              if (other.rows?.length) break;
+            }
+          }
+
           if (!other.rows?.length) {
             console.log(
-              ` [WARN] Não encontrei calendário para merge do cliente_id=${calendar.cliente_id} mes=${label} (tentativas: exact + like month/year)`
+              ` [WARN] Não encontrei calendário para merge do cliente_id=${calendar.cliente_id} mes=${label} (tentativas: exact + like month/year + like month)`
             );
             continue;
           }
@@ -1383,11 +1401,25 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
 
           const otherPosts = other.rows?.[0]?.calendario_json;
           if (Array.isArray(otherPosts) && otherPosts.length > 0) {
+            console.log(
+              ` [DEBUG] Merge mês ${label}: adicionando ${otherPosts.length} posts (cliente_id=${calendar.cliente_id})`
+            );
             mergedPosts.push(...otherPosts);
+          } else {
+            console.log(
+              ` [WARN] Merge mês ${label}: calendário encontrado mas sem posts (cliente_id=${calendar.cliente_id})`
+            );
           }
         }
 
         posts = mergedPosts;
+
+        try {
+          const mergedCount = Array.isArray(posts) ? posts.length : 0;
+          console.log(` [DEBUG] Export merge finalizado: posts total=${mergedCount}`);
+        } catch (_e) {
+          // ignore
+        }
       }
     } catch (_e) {
       // fallback
