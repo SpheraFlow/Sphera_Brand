@@ -1207,8 +1207,8 @@ router.put("/calendars/:calendarId/metadata", async (req: Request, res: Response
 });
 
 router.post("/calendars/export-excel", async (req: Request, res: Response): Promise<void> => {
-  console.log("\n📊 [DEBUG] ROTA /export-excel ACIONADA");
-  console.log("📦 [DEBUG] Payload:", JSON.stringify(req.body, null, 2));
+  console.log("\n [DEBUG] ROTA /export-excel ACIONADA");
+  console.log(" [DEBUG] Payload:", JSON.stringify(req.body, null, 2));
 
   try {
     if (!req.is("application/json") || !req.body) {
@@ -1230,7 +1230,7 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
       return;
     }
 
-    console.log(`🔍 [DEBUG] Buscando calendário ID: ${calendarId}`);
+    console.log(` Buscando calendário ID: ${calendarId}`);
     const result = await db.query(
       "SELECT calendario_json, mes, cliente_id, periodo FROM calendarios WHERE id = $1",
       [calendarId]
@@ -1242,7 +1242,7 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     }
 
     const calendar = result.rows[0];
-    const posts = calendar.calendario_json;
+    let posts = calendar.calendario_json;
     const monthLabel = calendar.mes || "Janeiro";
     const periodo = calendar.periodo;
 
@@ -1281,6 +1281,28 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
       return names[m - 1] || `Mes${m}`;
     };
 
+    const parseMonthLabelToNumber = (label: string): number | null => {
+      const s = String(label || "").trim().toLowerCase();
+      if (!s) return null;
+      const token = s.split(/\s+/)[0] || "";
+      const map: Record<string, number> = {
+        janeiro: 1,
+        fevereiro: 2,
+        "março": 3,
+        marco: 3,
+        abril: 4,
+        maio: 5,
+        junho: 6,
+        julho: 7,
+        agosto: 8,
+        setembro: 9,
+        outubro: 10,
+        novembro: 11,
+        dezembro: 12,
+      };
+      return map[token] ?? null;
+    };
+
     const sanitizeFilePart = (value: string): string => {
       return value
         .normalize("NFD")
@@ -1305,6 +1327,38 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
 
     const monthsDetected = detectMonths(posts);
     const monthsToExport = Array.isArray(monthsSelected) && monthsSelected.length > 0 ? monthsSelected : monthsDetected;
+
+    try {
+      const normalizedMonths = Array.isArray(monthsToExport)
+        ? monthsToExport
+            .map((m) => parseInt(String(m), 10))
+            .filter((m) => !isNaN(m) && m >= 1 && m <= 12)
+        : [];
+
+      if (normalizedMonths.length >= 2 && calendar.cliente_id) {
+        const baseMonthNum = parseMonthLabelToNumber(String(monthLabel)) || normalizedMonths[0] || 1;
+        const baseYearNum = parseInt(String(year), 10) || new Date().getFullYear();
+        const mergedPosts: any[] = Array.isArray(posts) ? [...posts] : [];
+
+        for (const m of normalizedMonths) {
+          if (m === baseMonthNum) continue;
+          const yNum = m < baseMonthNum ? baseYearNum + 1 : baseYearNum;
+          const label = `${monthNamePt(m)} ${yNum}`;
+          const other = await db.query(
+            "SELECT calendario_json FROM calendarios WHERE cliente_id = $1 AND lower(mes) = lower($2) ORDER BY created_at DESC LIMIT 1",
+            [calendar.cliente_id, label]
+          );
+          const otherPosts = other.rows?.[0]?.calendario_json;
+          if (Array.isArray(otherPosts) && otherPosts.length > 0) {
+            mergedPosts.push(...otherPosts);
+          }
+        }
+
+        posts = mergedPosts;
+      }
+    } catch (_e) {
+      // fallback
+    }
 
     const safeClient = sanitizeFilePart(resolvedClientName || "Cliente") || "Cliente";
     const safeMonth = (() => {
@@ -1332,18 +1386,18 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     const templatePreferred = path.resolve(projectDir, "calendario", "modelo final.xlsx");
     const templateFallback = path.resolve(projectDir, "calendario", "CoreSport_Tri_2026.xlsx");
     const templatePath = fs.existsSync(templatePreferred) ? templatePreferred : templateFallback;
-    console.log(`📁 [DEBUG] Template escolhido: ${templatePath}`);
+    console.log(` Template escolhido: ${templatePath}`);
 
     const outputDir = path.resolve(projectDir, "calendario", "output");
     if (!fs.existsSync(outputDir)) {
       fs.mkdirSync(outputDir, { recursive: true });
-      console.log(`📁 [DEBUG] Diretório criado: ${outputDir}`);
+      console.log(` Diretório criado: ${outputDir}`);
     }
 
     const outputFileName = `${safeClient}_${safeMonth}.xlsx`;
     const outputPath = path.join(outputDir, outputFileName);
 
-    console.log(`🐍 [DEBUG] Executando Python script...`);
+    console.log(` Executando Python script...`);
     console.log(`  Script: ${pythonScript}`);
     console.log(`  Template: ${templatePath}`);
     console.log(`  Output: ${outputPath}`);
@@ -1377,32 +1431,32 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
 
     pythonProcess.on("close", (code: any) => {
       if (code === 0) {
-        console.log(`✅ [SUCCESS] Python script executado com sucesso`);
+        console.log(` [SUCCESS] Python script executado com sucesso`);
         if (fs.existsSync(outputPath)) {
-          console.log(`📄 [DEBUG] Arquivo Excel criado: ${outputPath}`);
+          console.log(` Arquivo Excel criado: ${outputPath}`);
           res.download(outputPath, outputFileName, (err: any) => {
             if (err) {
-              console.error(`❌ [ERROR] Erro ao enviar arquivo: ${err}`);
+              console.error(` [ERROR] Erro ao enviar arquivo: ${err}`);
               if (!res.headersSent) {
                 res.status(500).json({ error: "Erro ao enviar arquivo" });
               }
             } else {
-              console.log(`✅ [SUCCESS] Arquivo enviado para download`);
+              console.log(` [SUCCESS] Arquivo enviado para download`);
             }
           });
         } else {
-          console.error(`❌ [ERROR] Arquivo não foi criado: ${outputPath}`);
+          console.error(` [ERROR] Arquivo não foi criado: ${outputPath}`);
           res.status(500).json({ error: "Arquivo Excel não foi gerado", details: pythonOutput });
         }
       } else {
-        console.error(`❌ [ERROR] Python script falhou com código: ${code}`);
+        console.error(` [ERROR] Python script falhou com código: ${code}`);
         res.status(500).json({ error: "Erro ao gerar Excel", details: pythonError || pythonOutput });
       }
     });
 
     return;
   } catch (error: any) {
-    console.error("❌ [ERRO FATAL] Erro ao exportar Excel:", error);
+    console.error(" [ERRO FATAL] Erro ao exportar Excel:", error);
     res.status(500).json({
       error: "Falha interna ao exportar Excel.",
       details: error?.message || String(error),
