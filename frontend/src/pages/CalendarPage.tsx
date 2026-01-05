@@ -359,14 +359,11 @@ export default function CalendarPage() {
     }
 
     const baseMonth = parseMonthLabelToNumber(calendar.mes) || (currentMonth.getMonth() + 1);
-    const isTri = Number(calendar.periodo) >= 90 || Number(calendar.periodo) === 3;
-    const defaultSelection = isTri
-      ? [
-          baseMonth,
-          baseMonth === 12 ? 1 : baseMonth + 1,
-          baseMonth >= 11 ? ((baseMonth + 2) % 12 || 12) : baseMonth + 2,
-        ]
-      : [baseMonth];
+    const defaultSelection = [
+      baseMonth,
+      baseMonth === 12 ? 1 : baseMonth + 1,
+      baseMonth >= 11 ? ((baseMonth + 2) % 12 || 12) : baseMonth + 2,
+    ];
 
     const monthsOptions = getExportMonthOptions(calendar);
     setExportMonthsSelected(defaultSelection.filter((m) => monthsOptions.includes(m)));
@@ -375,14 +372,11 @@ export default function CalendarPage() {
 
   const getExportMonthOptions = (cal: Calendar): number[] => {
     const baseMonth = parseMonthLabelToNumber(cal.mes) || (currentMonth.getMonth() + 1);
-    const isTri = Number(cal.periodo) >= 90 || Number(cal.periodo) === 3;
-    const triMonths = isTri
-      ? [
-          baseMonth,
-          baseMonth === 12 ? 1 : baseMonth + 1,
-          baseMonth >= 11 ? ((baseMonth + 2) % 12 || 12) : baseMonth + 2,
-        ]
-      : [baseMonth];
+    const triMonths = [
+      baseMonth,
+      baseMonth === 12 ? 1 : baseMonth + 1,
+      baseMonth >= 11 ? ((baseMonth + 2) % 12 || 12) : baseMonth + 2,
+    ];
 
     const detected = detectMonthsFromCalendar(cal);
     return Array.from(new Set([...triMonths, ...detected])).sort((a, b) => a - b);

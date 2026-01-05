@@ -1255,8 +1255,8 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
           resolvedClientName = dbName;
         }
       }
-    } catch (_e) {
-      // fallback
+    } catch (e: any) {
+      console.log(` [ERROR] Falha no merge multi-mês: ${e?.message || String(e)}`);
     }
 
     const yearMatch = String(monthLabel).match(/(\d{4})/);
@@ -1364,7 +1364,7 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
 
           // 1) Match exato
           let other = await db.query(
-            "SELECT calendario_json, mes FROM calendarios WHERE cliente_id = $1 AND lower(mes) = lower($2) ORDER BY created_at DESC LIMIT 1",
+            "SELECT calendario_json, mes FROM calendarios WHERE cliente_id = $1 AND lower(mes) = lower($2) ORDER BY updated_at DESC NULLS LAST, criado_em DESC NULLS LAST LIMIT 1",
             [calendar.cliente_id, label]
           );
 
@@ -1373,7 +1373,7 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
             const yearToken = String(yNum);
             for (const token of monthSearchTokens(m)) {
               other = await db.query(
-                "SELECT calendario_json, mes FROM calendarios WHERE cliente_id = $1 AND lower(mes) LIKE $2 AND lower(mes) LIKE $3 ORDER BY created_at DESC LIMIT 1",
+                "SELECT calendario_json, mes FROM calendarios WHERE cliente_id = $1 AND lower(mes) LIKE $2 AND lower(mes) LIKE $3 ORDER BY updated_at DESC NULLS LAST, criado_em DESC NULLS LAST LIMIT 1",
                 [calendar.cliente_id, `%${token}%`, `%${yearToken}%`]
               );
               if (other.rows?.length) break;
@@ -1384,7 +1384,7 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
           if (!other.rows?.length) {
             for (const token of monthSearchTokens(m)) {
               other = await db.query(
-                "SELECT calendario_json, mes FROM calendarios WHERE cliente_id = $1 AND lower(mes) LIKE $2 ORDER BY created_at DESC LIMIT 1",
+                "SELECT calendario_json, mes FROM calendarios WHERE cliente_id = $1 AND lower(mes) LIKE $2 ORDER BY updated_at DESC NULLS LAST, criado_em DESC NULLS LAST LIMIT 1",
                 [calendar.cliente_id, `%${token}%`]
               );
               if (other.rows?.length) break;
