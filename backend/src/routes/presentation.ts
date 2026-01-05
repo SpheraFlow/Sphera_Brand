@@ -278,9 +278,6 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
 
         if (requestedMonths.length > 0) {
             const label = requestedMonths.join(' | ');
-            if (data?.grid && (!data.grid.mes || String(data.grid.mes).toLowerCase().includes('mês'))) {
-                data.grid.mes = label;
-            }
             if (data?.planner && (!data.planner.mes || String(data.planner.mes).toLowerCase().includes('mês'))) {
                 data.planner.mes = label;
             }

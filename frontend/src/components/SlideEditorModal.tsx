@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, MouseEvent as ReactMouseEvent } from 'react';
 import api from '../services/api';
-import { resolveAssetUrl, withCacheBust } from '../utils/assetHelpers';
+import { resolveAssetUrl } from '../utils/assetHelpers';
 import { toPng } from 'html-to-image';
 import download from 'downloadjs';
 
@@ -43,6 +43,8 @@ export default function SlideEditorModal({
     return (slideData?.logo_url ? String(slideData.logo_url) : '').trim();
   });
 
+  const [logoCacheKey, setLogoCacheKey] = useState<number>(() => Date.now());
+
   // Sincronizar logoUrlOverride quando slideData.logo_url mudar
   useEffect(() => {
     if (slideData?.logo_url) {
@@ -52,6 +54,10 @@ export default function SlideEditorModal({
       }
     }
   }, [slideData?.logo_url, slideData]);
+
+  useEffect(() => {
+    setLogoCacheKey(Date.now());
+  }, [logoUrlOverride, slideData?.logo_url]);
 
   const [showGrid, setShowGrid] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(true);
@@ -78,6 +84,12 @@ export default function SlideEditorModal({
     const lineH = safeFont * 1.25;
     const height = Math.min(280, Math.max(44, Math.ceil(lines * lineH + 12)));
     return { width: safeMaxW, height };
+  };
+
+  const withStableCacheKey = (url: string, cacheKey: number) => {
+    if (!url) return url;
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}t=${cacheKey}`;
   };
 
   const [blocks, setBlocks] = useState<TextBlock[]>(() => {
@@ -245,27 +257,6 @@ export default function SlideEditorModal({
           shadow: l?.shadow ?? true
         });
       }
-    }
-
-    // Metas: mês vigente (Python desenha), então expor como bloco editável para evitar "mês fantasma"
-    if (!isPlannerSlide && (slideName || '').toLowerCase().includes('metas')) {
-      const mesValue = typeof slideData?.mes === 'string' ? slideData.mes : '';
-      const l = getLayout('mes');
-      initialBlocks.push({
-        id: 'mes',
-        content: mesValue,
-        x: l?.x ?? 100,
-        y: l?.y ?? 520,
-        width: l?.width ?? 520,
-        height: l?.height ?? 60,
-        fontSize: l?.fontSize ?? 32,
-        color: l?.color ?? '#FFFFFF',
-        fontWeight: l?.fontWeight ?? 'normal',
-        align: l?.align ?? 'left',
-        fontFamily: l?.fontFamily ?? 'Lato',
-        kind: 'text',
-        shadow: l?.shadow ?? true
-      });
     }
 
     // Planner: mes, nome_cliente e caixa da logo
@@ -530,7 +521,6 @@ export default function SlideEditorModal({
       // Campos mes e nome_cliente só devem ser salvos se for planner
       if (isPlannerSlide && block.id === 'mes') updatedSlideData.mes = block.content;
       if (isPlannerSlide && block.id === 'nome_cliente') updatedSlideData.nome_cliente = block.content;
-      if (isMetasSlide && block.id === 'mes') updatedSlideData.mes = block.content;
     });
 
     // Se o bloco foi removido, limpar o campo correspondente para não ser re-renderizado
@@ -546,9 +536,9 @@ export default function SlideEditorModal({
       if (!blockIds.has('mes')) updatedSlideData.mes = '';
       if (!blockIds.has('nome_cliente')) updatedSlideData.nome_cliente = '';
     } else if (isMetasSlide) {
-      // Metas: preservar 'mes' (usado pelo Python), remover 'nome_cliente'
+      // Metas: NÃO deve ter mês. Remover sempre.
       delete updatedSlideData.nome_cliente;
-      if (!blockIds.has('mes')) updatedSlideData.mes = '';
+      delete updatedSlideData.mes;
     } else {
       // Outras lâminas (Defesa, Slogan, Desafios): remover ambos completamente
       delete updatedSlideData.mes;
@@ -731,7 +721,7 @@ export default function SlideEditorModal({
                       {block.kind === 'logo' ? (
                         ((logoUrlOverride || slideData?.logo_url) ? (
                           <img
-                            src={withCacheBust(resolveAssetUrl(logoUrlOverride || slideData.logo_url))}
+                            src={withStableCacheKey(resolveAssetUrl(logoUrlOverride || slideData.logo_url), logoCacheKey)}
                             crossOrigin="anonymous"
                             alt="Logo"
                             className="w-full h-full object-contain pointer-events-none"

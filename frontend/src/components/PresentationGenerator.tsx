@@ -75,7 +75,7 @@ export default function PresentationGenerator() {
 
   const [grid, setGrid] = useState<GridData>({
     titulo: 'METAS\nDO MÊS',
-    mes: 'MÊS VIGENTE',
+    mes: '',
     texto_longo: 'Descrição das metas...'
   });
 
@@ -136,7 +136,7 @@ export default function PresentationGenerator() {
       if (res.data.success && res.data.content) {
         const c = res.data.content;
         if (c.defesa) setDefesa(c.defesa);
-        if (c.grid) setGrid(c.grid);
+        if (c.grid) setGrid({ ...c.grid, mes: '' });
         if (c.slogan) setSlogan(c.slogan);
         
         if (c.desafios) {
@@ -186,7 +186,8 @@ export default function PresentationGenerator() {
         clienteId: clientId,
         months: (periodMode === 'unico' || periodMode === 'multiplos') ? selectedMonths : [],
         defesa,
-        grid,
+        // Metas: nunca enviar 'mes' (evita "mês fantasma" no preview/Python)
+        grid: { ...grid, mes: '' },
         slogan,
         desafios,
         planner: {
@@ -222,7 +223,7 @@ export default function PresentationGenerator() {
       const payload = {
         clienteId: clientId,
         tempFiles,
-        dataJson: { defesa, grid, slogan, desafios, planner },
+        dataJson: { defesa, grid: { ...grid, mes: '' }, slogan, desafios, planner },
         titulo: `Apresentação ${new Date().toLocaleString()}`
       };
       
@@ -371,7 +372,11 @@ export default function PresentationGenerator() {
         clienteId: clientId,
         months: (periodMode === 'unico' || periodMode === 'multiplos') ? selectedMonths : [],
         defesa: editingSlide.index === 0 ? updatedData : defesa,
-        grid: editingSlide.index === 1 ? updatedData : grid,
+        // Metas: nunca enviar 'mes' (evita "mês fantasma" no preview/Python)
+        grid: {
+          ...(editingSlide.index === 1 ? updatedData : grid),
+          mes: ''
+        },
         slogan: editingSlide.index === 2 ? updatedData : slogan,
         desafios: editingSlide.index === 3 ? updatedData : desafios,
         planner: {

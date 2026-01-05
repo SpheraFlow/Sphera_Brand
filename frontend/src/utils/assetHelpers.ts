@@ -26,9 +26,9 @@ export const resolveAssetUrl = (url: string): string => {
   if (url.startsWith('/api/')) return `${getBackendOrigin()}${url}`;
   if (url.startsWith('/static/')) return `${getBackendOrigin()}/api${url}`;
   if (url.startsWith('/')) return `${getBackendOrigin()}${url}`;
-  if (url.startsWith('static/')) return `${getBackendOrigin()}/${url}`;
+  if (url.startsWith('static/')) return `${getBackendOrigin()}/api/${url}`;
   if (url.includes('static/client-logos/') && !url.startsWith('/')) {
-    return `${getBackendOrigin()}/${url}`;
+    return `${getBackendOrigin()}/api/${url}`;
   }
   return url;
 };
