@@ -159,9 +159,12 @@ def month_num_from_date_str(date_str, default_month):
             return int(default_month)
         _day, _month, _year = _extract_day_month_year(s)
         if _month is not None and 1 <= int(_month) <= 12:
+            print(f"[DEBUG] Parsed date '{date_str}' -> month={_month}, day={_day}")
             return int(_month)
-    except Exception:
-        pass
+        else:
+            print(f"[WARN] Failed to parse month from '{date_str}', using default={default_month}")
+    except Exception as e:
+        print(f"[ERROR] Exception parsing date '{date_str}': {e}")
     return int(default_month)
 
 def day_from_date_str(date_str):
@@ -476,10 +479,6 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
             # Linha do tipo (formato)
             tipo_cell = _top_left_of_merged(f"{col}{header_row + 1}")
             ws[tipo_cell].value = formato_excel
-            try:
-                ws[tipo_cell].alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
-            except Exception:
-                pass
 
             # Em templates com conditional formatting (ex.: modelo final.xlsx), NÃO setar fill/font.
             # A cor deve ser aplicada automaticamente pelo Excel baseado no texto.
@@ -489,9 +488,14 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
                     if legend_cell is not None:
                         ws[tipo_cell].fill = copy(legend_cell.fill)
                         ws[tipo_cell].font = copy(legend_cell.font)
-                        ws[tipo_cell].alignment = copy(legend_cell.alignment)
                 except Exception:
                     pass
+            
+            # SEMPRE aplicar alinhamento centralizado (Ctrl+E no Excel) DEPOIS de copiar estilos
+            try:
+                ws[tipo_cell].alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+            except Exception:
+                pass
 
             # Bloco do resumo (3 linhas no template). Normalmente é mesclado verticalmente.
             resumo_cell = _top_left_of_merged(f"{col}{header_row + 2}")
@@ -536,9 +540,11 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
 
     # Normalizar posts e agrupar por mês
     posts_by_month = {}
-    for post in calendar_json:
+    print(f"\n[INFO] Processando {len(calendar_json)} posts do JSON...")
+    for idx, post in enumerate(calendar_json):
         try:
             date_str = post.get('data', '01/01')
+            print(f"[DEBUG] Post {idx+1}: data='{date_str}', formato='{post.get('formato')}'")
             m_num = month_num_from_date_str(date_str, start_month_num)
             d = day_from_date_str(date_str)
             title = build_post_title(post)
@@ -555,11 +561,17 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
                 'description': post.get('description'),
                 'copy_sugestao': post.get('copy_sugestao'),
             })
+            print(f"[DEBUG] Post {idx+1} agrupado no mês {m_num} (dia {d})")
         except Exception as e:
-            print(f"[WARN] Erro ao processar post: {e}")
+            print(f"[WARN] Erro ao processar post {idx+1}: {e}")
+    
+    print(f"\n[INFO] Posts agrupados por mês: {dict((k, len(v)) for k, v in posts_by_month.items())}")
 
     sorted_months = sorted(posts_by_month.keys())
+    print(f"[INFO] Meses detectados nos posts: {sorted_months}")
+    
     if isinstance(selected_months, list) and len(selected_months) > 0:
+        print(f"[INFO] Meses selecionados pelo usuário: {selected_months}")
         filtered = []
         for m in selected_months:
             try:
@@ -574,9 +586,11 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
             base = int(start_month_num)
             unique = list(set(filtered))
             sorted_months = sorted(unique, key=lambda m: (int(m) - base) % 12)
+            print(f"[INFO] Meses finais (ordenados): {sorted_months}")
             # Garantir que meses selecionados existam no dicionário mesmo que não tenham posts
             for mm in sorted_months:
                 if mm not in posts_by_month:
+                    print(f"[INFO] Criando aba vazia para mês {mm} ({month_name_pt(mm)})")
                     posts_by_month[mm] = []
 
     if not sorted_months:
