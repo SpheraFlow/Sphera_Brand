@@ -44,6 +44,8 @@ export default function SlideEditorModal({
   });
 
   const [logoCacheKey, setLogoCacheKey] = useState<number>(() => Date.now());
+  const [logoImgSrc, setLogoImgSrc] = useState<string>('');
+  const [logoTriedFallback, setLogoTriedFallback] = useState(false);
 
   // Sincronizar logoUrlOverride quando slideData.logo_url mudar
   useEffect(() => {
@@ -58,6 +60,17 @@ export default function SlideEditorModal({
   useEffect(() => {
     setLogoCacheKey(Date.now());
   }, [logoUrlOverride, slideData?.logo_url]);
+
+  useEffect(() => {
+    const raw = (logoUrlOverride || slideData?.logo_url || '').toString().trim();
+    if (!raw) {
+      setLogoImgSrc('');
+      setLogoTriedFallback(false);
+      return;
+    }
+    setLogoImgSrc(withStableCacheKey(resolveAssetUrl(raw), logoCacheKey));
+    setLogoTriedFallback(false);
+  }, [logoUrlOverride, slideData?.logo_url, logoCacheKey]);
 
   const [showGrid, setShowGrid] = useState(true);
   const [snapToGrid, setSnapToGrid] = useState(true);
@@ -721,11 +734,25 @@ export default function SlideEditorModal({
                       {block.kind === 'logo' ? (
                         ((logoUrlOverride || slideData?.logo_url) ? (
                           <img
-                            src={withStableCacheKey(resolveAssetUrl(logoUrlOverride || slideData.logo_url), logoCacheKey)}
+                            src={logoImgSrc}
                             crossOrigin="anonymous"
                             alt="Logo"
                             className="w-full h-full object-contain pointer-events-none"
                             draggable={false}
+                            onError={() => {
+                              if (logoTriedFallback) return;
+                              if (!logoImgSrc) return;
+                              const base = logoImgSrc.replace(/([?&])t=\d+(&?)/g, (_, p1, p2) => (p2 ? p1 : '')).replace(/[?&]$/g, '');
+                              let next = base;
+                              if (base.includes('/api/static/client-logos/')) {
+                                next = base.replace('/api/static/client-logos/', '/static/client-logos/');
+                              } else if (base.includes('/static/client-logos/')) {
+                                next = base.replace('/static/client-logos/', '/api/static/client-logos/');
+                              }
+                              if (next === base) return;
+                              setLogoTriedFallback(true);
+                              setLogoImgSrc(withStableCacheKey(next, logoCacheKey));
+                            }}
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-xs text-gray-300 pointer-events-none">

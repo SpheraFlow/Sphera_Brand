@@ -272,6 +272,12 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
     try {
         const data = req.body;
 
+        // Metas (grid): o usuário não quer mês nessa lâmina.
+        // Garantir que nunca vai para o Python, independente do payload/estado.
+        if (data?.grid && typeof data.grid === 'object') {
+            data.grid.mes = '';
+        }
+
         const requestedMonths: string[] = Array.isArray(data?.months)
             ? data.months.map((m: any) => String(m)).filter((m: string) => !!m)
             : [];
