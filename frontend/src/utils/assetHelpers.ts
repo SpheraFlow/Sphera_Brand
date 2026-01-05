@@ -21,6 +21,10 @@ export const getBackendOrigin = (): string => {
 export const resolveAssetUrl = (url: string): string => {
   if (!url) return url;
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  // Em produção, geralmente o backend está acessível via /api (proxy do Nginx).
+  // Então /static/* deve ser resolvido como /api/static/* para funcionar no browser.
+  if (url.startsWith('/api/')) return `${getBackendOrigin()}${url}`;
+  if (url.startsWith('/static/')) return `${getBackendOrigin()}/api${url}`;
   if (url.startsWith('/')) return `${getBackendOrigin()}${url}`;
   if (url.startsWith('static/')) return `${getBackendOrigin()}/${url}`;
   if (url.includes('static/client-logos/') && !url.startsWith('/')) {

@@ -72,6 +72,15 @@ app.use(
   })
 );
 
+// Compat: em produção o Nginx costuma fazer proxy apenas de /api,
+// então também expomos os mesmos assets em /api/static/client-logos
+app.use(
+  "/api/static/client-logos",
+  express.static(clientLogosPath, {
+    setHeaders: (res) => setNoCacheHeaders(res as unknown as Response)
+  })
+);
+
 // Expor assets de branding (galeria)
 const brandingAssetsPath = path.resolve(__dirname, "../storage/branding");
 app.use("/storage/branding", express.static(brandingAssetsPath));
