@@ -46,7 +46,7 @@ export default function ClientLayout() {
     },
     {
       path: `/client/${clientId}/campaign`,
-      label: 'Planejamento de Campanha',
+      label: 'Apresentação da Campanha',
       icon: '🧩',
     },
     {
