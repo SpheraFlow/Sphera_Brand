@@ -1,8 +1,10 @@
 import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Info, FileText, Calendar, X } from 'lucide-react';
 import api from '../services/api';
 import ImagePreview from '../components/ImagePreview';
 import { resolveAssetUrl, withCacheBust, stripCacheBust } from '../utils/assetHelpers';
+import { getArchetypeInfo } from '../utils/jungArchetypes';
 
 interface Cliente {
   id: string;
@@ -11,6 +13,7 @@ interface Cliente {
   avatarUrl: string | null;
   categorias_nicho?: string[];
   criado_em: string;
+  archetype?: string;
 }
 
 interface ClientCalendarOverview {
@@ -299,10 +302,6 @@ export default function ClientsHome() {
     }
   };
 
-  const handleAccessClient = (clientId: string) => {
-    // Ir direto para o calendário do cliente
-    navigate(`/client/${clientId}/calendar`);
-  };
 
   const handleDeleteClient = async (clientId: string, clientName: string) => {
     const confirmDelete = window.confirm(
@@ -443,11 +442,12 @@ export default function ClientsHome() {
                 <button
                   key={tag}
                   type="button"
-                  className="px-3 py-1 rounded-full bg-gray-700 text-gray-200 text-xs border border-gray-600 hover:border-blue-500"
+                  className="px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs border border-blue-500/30 hover:border-blue-500 transition-colors flex items-center gap-1"
                   title="Remover filtro"
                   onClick={() => setDatasNichoTags((prev) => prev.filter((t) => t !== tag))}
                 >
-                  {tag} ×
+                  {tag}
+                  <X className="w-3 h-3" />
                 </button>
               ))}
               <button
@@ -472,13 +472,23 @@ export default function ClientsHome() {
                 {datasList.slice(0, 8).map((d) => (
                   <div
                     key={d.id}
-                    className="bg-gray-900/40 border border-gray-700 rounded-lg p-3"
+                    className="bg-gray-900/40 border border-gray-700 rounded-lg p-3 hover:border-gray-600 transition-all shadow-sm hover:shadow-md"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="font-semibold text-gray-100">
                         {String(d.data).slice(0, 10)}
                       </div>
-                      <div className="text-xs text-gray-400">Relevância: {Number(d.relevancia ?? 0)}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs text-gray-400">Relevância: {Number(d.relevancia ?? 0)}</div>
+                        {d.descricao && (
+                          <div className="group relative">
+                            <Info className="w-4 h-4 text-blue-400 cursor-help" />
+                            <div className="absolute right-0 top-6 w-64 bg-gray-800 border border-gray-600 rounded-lg p-3 shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10">
+                              <div className="text-xs text-gray-300">{d.descricao}</div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                     <div className="text-gray-200 mt-1">{d.titulo}</div>
                     {Array.isArray(d.categorias) && d.categorias.length > 0 && (
@@ -526,15 +536,19 @@ export default function ClientsHome() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {clientes.map((cliente) => (
+            {clientes.map((cliente) => {
+              const archetypeInfo = getArchetypeInfo(cliente.archetype);
+              const overview = calendarsOverview[cliente.id];
+              
+              return (
               <div
                 key={cliente.id}
-                className="bg-gray-800 border border-gray-700 rounded-xl p-6 hover:border-blue-500 transition-all cursor-pointer group"
-                onClick={() => handleAccessClient(cliente.id)}
+                className="bg-gray-800 border border-gray-700 rounded-xl p-6 hover:border-blue-500 transition-all shadow-sm hover:shadow-lg cursor-pointer group"
               >
                 {/* Avatar/Ícone */}
                 <div className="flex items-center mb-4">
-                  <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xl font-bold overflow-hidden">
+                  <div className="relative">
+                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xl font-bold overflow-hidden">
                     {(logoOverrides[cliente.id] || cliente.avatarUrl) && !brokenLogoClients.has(cliente.id) ? (
                       <ImagePreview
                         src={withCacheBust(stripCacheBust(resolveAssetUrl(logoOverrides[cliente.id] || (cliente.avatarUrl as string))))}
@@ -546,11 +560,27 @@ export default function ClientsHome() {
                     ) : (
                       getInitials(cliente.nome)
                     )}
+                    </div>
+                    {archetypeInfo && (
+                      <div
+                        className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-gray-700 border-2 border-gray-800 flex items-center justify-center text-sm"
+                        title={`Arquétipo: ${archetypeInfo.label}`}
+                      >
+                        {archetypeInfo.emoji}
+                      </div>
+                    )}
                   </div>
                   <div className="ml-4 flex-1">
-                    <h3 className="text-xl font-semibold group-hover:text-blue-400 transition-colors">
-                      {cliente.nome}
-                    </h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-xl font-semibold group-hover:text-blue-400 transition-colors">
+                        {cliente.nome}
+                      </h3>
+                      {overview && overview.pendingCount > 0 && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                          {overview.pendingCount}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-gray-400 mt-1">
                       {cliente.status}
                     </p>
@@ -627,33 +657,49 @@ export default function ClientsHome() {
                     </div>
                   )}
 
-                  {calendarsOverview[cliente.id] && (
+                  {overview && (
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-gray-400">
                         Próximo deadline:{' '}
                         <span className="text-gray-100">
-                          {calendarsOverview[cliente.id].deadlineLabel}
+                          {overview.deadlineLabel}
                         </span>
                       </span>
-                      <span className="inline-flex items-center justify-center px-2 py-1 rounded-full bg-blue-500/20 text-blue-300 text-[11px]">
-                        {calendarsOverview[cliente.id].pendingCount} posts pendentes
+                      <span className={`inline-flex items-center justify-center px-2 py-1 rounded-full text-[11px] border ${overview.statusColorClass}`}>
+                        {overview.statusIcon}
                       </span>
                     </div>
                   )}
                 </div>
 
-                {/* Botão */}
-                <button
-                  className="w-full bg-gray-700 hover:bg-blue-600 py-2 rounded-lg font-medium transition-colors group-hover:bg-blue-600"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleAccessClient(cliente.id);
-                  }}
-                >
-                  Acessar Painel →
-                </button>
+                {/* Botões de Ação Rápida */}
+                <div className="flex gap-2">
+                  <button
+                    className="flex-1 flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 py-2 rounded-lg font-medium transition-colors text-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/client/${cliente.id}/branding`);
+                    }}
+                    title="Ver DNA da Marca"
+                  >
+                    <FileText className="w-4 h-4" />
+                    DNA
+                  </button>
+                  <button
+                    className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium transition-colors text-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/client/${cliente.id}/calendar`);
+                    }}
+                    title="Gerar Novo Calendário"
+                  >
+                    <Calendar className="w-4 h-4" />
+                    Calendário
+                  </button>
+                </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>
