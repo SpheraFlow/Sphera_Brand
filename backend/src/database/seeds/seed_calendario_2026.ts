@@ -17,7 +17,7 @@ async function seedCalendario2026() {
     const fileContent = fs.readFileSync(jsonPath, 'utf-8');
     
     const jsonMatch = fileContent.match(/```json\n([\s\S]+?)\n```/);
-    if (!jsonMatch) {
+    if (!jsonMatch || !jsonMatch[1]) {
       throw new Error('JSON não encontrado no arquivo calendario_estrategico_2026.md');
     }
 
