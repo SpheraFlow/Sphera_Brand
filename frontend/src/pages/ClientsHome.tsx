@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import ImagePreview from '../components/ImagePreview';
@@ -21,6 +21,15 @@ interface ClientCalendarOverview {
   pendingCount: number;
 }
 
+interface DataComemorativa {
+  id: string;
+  data: string;
+  titulo: string;
+  categorias: string[];
+  descricao?: string | null;
+  relevancia?: number;
+}
+
 export default function ClientsHome() {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +50,15 @@ export default function ClientsHome() {
       return {};
     }
   });
+
+  const now = useMemo(() => new Date(), []);
+  const [datasMonth, setDatasMonth] = useState<number>(now.getMonth() + 1);
+  const [datasYear, setDatasYear] = useState<number>(now.getFullYear());
+  const [datasNichoInput, setDatasNichoInput] = useState<string>('');
+  const [datasNichoTags, setDatasNichoTags] = useState<string[]>([]);
+  const [datasLoading, setDatasLoading] = useState<boolean>(false);
+  const [datasError, setDatasError] = useState<string | null>(null);
+  const [datasList, setDatasList] = useState<DataComemorativa[]>([]);
   const navigate = useNavigate();
 
   // Helpers agora vêm de assetHelpers.ts
@@ -82,6 +100,30 @@ export default function ClientsHome() {
   useEffect(() => {
     loadClientes();
   }, []);
+
+  const fetchDatasGlobais = async (mes: number, ano: number, nichos: string[]) => {
+    try {
+      setDatasLoading(true);
+      setDatasError(null);
+
+      const params: any = { mes, ano };
+      if (nichos.length > 0) params.nicho = nichos;
+
+      const res = await api.get('/datas-comemorativas', { params });
+      setDatasList((res.data?.datas || []) as DataComemorativa[]);
+    } catch (e: any) {
+      console.error('Erro ao carregar datas comemorativas:', e);
+      setDatasError(e?.response?.data?.error || e?.message || 'Erro ao carregar datas comemorativas.');
+      setDatasList([]);
+    } finally {
+      setDatasLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDatasGlobais(datasMonth, datasYear, datasNichoTags);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [datasMonth, datasYear, datasNichoTags]);
 
   const loadClientes = async () => {
     try {
@@ -327,6 +369,149 @@ export default function ClientsHome() {
 
       {/* Grid de Clientes */}
       <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="bg-gray-800 border border-gray-700 rounded-xl p-6 mb-8">
+          <div className="flex items-start justify-between gap-6 flex-col lg:flex-row">
+            <div className="flex-1">
+              <h2 className="text-xl font-semibold">📅 Datas do mês (global)</h2>
+              <p className="text-gray-400 text-sm mt-1">
+                Tabela compartilhada ({'datas_comemorativas'}). Use o nicho para filtrar por categoria.
+              </p>
+            </div>
+
+            <div className="w-full lg:w-auto flex flex-col sm:flex-row gap-3">
+              <select
+                value={datasMonth}
+                onChange={(e) => setDatasMonth(Number(e.target.value))}
+                className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+              >
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <option key={i + 1} value={i + 1}>
+                    {String(i + 1).padStart(2, '0')}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                type="number"
+                value={datasYear}
+                onChange={(e) => setDatasYear(Number(e.target.value) || now.getFullYear())}
+                className="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 w-[120px]"
+              />
+
+              <div className="flex gap-2 flex-1">
+                <input
+                  type="text"
+                  value={datasNichoInput}
+                  onChange={(e) => setDatasNichoInput(e.target.value)}
+                  placeholder="Nicho/categorias (ex: saude, fitness, psicologia)"
+                  className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const parsed = datasNichoInput
+                        .split(',')
+                        .map((s) => s.trim())
+                        .filter(Boolean);
+                      const next = Array.from(new Set([...datasNichoTags, ...parsed]));
+                      setDatasNichoTags(next);
+                      setDatasNichoInput('');
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const parsed = datasNichoInput
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                    const next = Array.from(new Set([...datasNichoTags, ...parsed]));
+                    setDatasNichoTags(next);
+                    setDatasNichoInput('');
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-semibold transition-colors"
+                >
+                  Filtrar
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {datasNichoTags.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {datasNichoTags.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  className="px-3 py-1 rounded-full bg-gray-700 text-gray-200 text-xs border border-gray-600 hover:border-blue-500"
+                  title="Remover filtro"
+                  onClick={() => setDatasNichoTags((prev) => prev.filter((t) => t !== tag))}
+                >
+                  {tag} ×
+                </button>
+              ))}
+              <button
+                type="button"
+                className="px-3 py-1 rounded-full bg-gray-700 text-gray-300 text-xs border border-gray-600 hover:border-red-500"
+                onClick={() => setDatasNichoTags([])}
+              >
+                Limpar
+              </button>
+            </div>
+          )}
+
+          <div className="mt-5">
+            {datasLoading ? (
+              <div className="text-gray-300">Carregando datas…</div>
+            ) : datasError ? (
+              <div className="text-red-300">{datasError}</div>
+            ) : datasList.length === 0 ? (
+              <div className="text-gray-400">Nenhuma data encontrada para este mês/filtro.</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {datasList.slice(0, 8).map((d) => (
+                  <div
+                    key={d.id}
+                    className="bg-gray-900/40 border border-gray-700 rounded-lg p-3"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="font-semibold text-gray-100">
+                        {String(d.data).slice(0, 10)}
+                      </div>
+                      <div className="text-xs text-gray-400">Relevância: {Number(d.relevancia ?? 0)}</div>
+                    </div>
+                    <div className="text-gray-200 mt-1">{d.titulo}</div>
+                    {Array.isArray(d.categorias) && d.categorias.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {d.categorias.slice(0, 4).map((c) => (
+                          <span
+                            key={c}
+                            className="px-2 py-1 rounded-full bg-gray-700 text-gray-200 text-[11px] border border-gray-600"
+                          >
+                            {c}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {datasList.length > 8 && (
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => navigate('/calendar')}
+                  className="text-sm text-blue-300 hover:text-blue-200 underline"
+                >
+                  Ver todas no Calendário Geral →
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         {clientes.length === 0 ? (
           <div className="text-center py-16">
             <div className="text-gray-400 text-lg mb-4">

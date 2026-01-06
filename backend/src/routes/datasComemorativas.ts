@@ -24,7 +24,7 @@ function normalizeCategorias(input: unknown): string[] {
 router.get("/datas-comemorativas", async (req: Request, res: Response) => {
   try {
     const { mes, ano } = req.query;
-    const { categorias } = req.query as { categorias?: string | string[] };
+    const { categorias, nicho } = req.query as { categorias?: string | string[]; nicho?: string | string[] };
 
     const mesNum = mes ? parseInt(mes as string, 10) : NaN;
     const anoNum = ano ? parseInt(ano as string, 10) : NaN;
@@ -36,7 +36,7 @@ router.get("/datas-comemorativas", async (req: Request, res: Response) => {
       });
     }
 
-    const categoriasNormalized = normalizeCategorias(categorias);
+    const categoriasNormalized = normalizeCategorias(categorias ?? nicho);
     const categoriasArray = categoriasNormalized.length > 0 ? categoriasNormalized : undefined;
 
     const datas = await getDatasComemorativas(mesNum, anoNum, categoriasArray);

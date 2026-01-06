@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../services/api';
+import { getArchetypeInfo, JUNG_ARCHETYPES } from '../utils/jungArchetypes';
 
 interface BrandingData {
   id?: string;
@@ -497,6 +498,8 @@ export default function BrandProfile() {
   const demographics = isEditing ? editDemographics : (branding.audience?.demographics || '');
   const keywords = isEditing ? editKeywords : (branding.keywords || []);
 
+  const archetypeInfo = getArchetypeInfo(isEditing ? editArchetype : branding.archetype);
+
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
       <div className="max-w-7xl mx-auto">
@@ -566,15 +569,40 @@ export default function BrandProfile() {
             </div>
           </div>
           
-          {/* Arquétipo - Sempre mostra */}
           <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl p-4">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">👑</span>
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">{archetypeInfo?.emoji || '👑'}</span>
               <div className="flex-1">
                 <div className="text-sm text-gray-400">Arquétipo da Marca</div>
-                <div className={`text-xl font-bold ${branding.archetype ? 'text-purple-300' : 'text-gray-500'}`}>
-                  {branding?.archetype || 'Arquétipo não definido'}
-                </div>
+
+                {isEditing ? (
+                  <div className="mt-2">
+                    <select
+                      value={editArchetype}
+                      onChange={(e) => setEditArchetype(e.target.value)}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500"
+                    >
+                      <option value="">Selecione um arquétipo (ex: Criador)</option>
+                      {JUNG_ARCHETYPES.map((a) => (
+                        <option key={a.key} value={a.key}>
+                          {a.emoji} {a.label}
+                        </option>
+                      ))}
+                    </select>
+
+                    {archetypeInfo && (
+                      <div className="mt-2 text-sm text-gray-300">
+                        <div className="text-gray-200 font-semibold">{archetypeInfo.label}</div>
+                        <div className="text-gray-400">{archetypeInfo.description}</div>
+                        <div className="text-gray-400 mt-1">Tom sugerido: {archetypeInfo.tone_hint}</div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className={`text-xl font-bold ${branding.archetype ? 'text-purple-300' : 'text-gray-500'}`}>
+                    {branding?.archetype || 'Arquétipo não definido'}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -594,7 +622,7 @@ export default function BrandProfile() {
                   type="text"
                   value={newColor}
                   onChange={(e) => setNewColor(e.target.value)}
-                  placeholder="#HEXCODE"
+                  placeholder="Ex: #0EA5E9 (azul), #111827 (grafite)"
                   className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
                 />
                 <button
@@ -647,7 +675,7 @@ export default function BrandProfile() {
                   type="text"
                   value={newFont}
                   onChange={(e) => setNewFont(e.target.value)}
-                  placeholder="Nome da fonte"
+                  placeholder="Ex: Inter (principal), Playfair Display (títulos)"
                   className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
                 />
                 <button
@@ -703,7 +731,7 @@ export default function BrandProfile() {
                 <textarea
                   value={editToneDescription}
                   onChange={(e) => setEditToneDescription(e.target.value)}
-                  placeholder="Descreva o tom de voz da marca..."
+                  placeholder="Ex: Direto e educativo, com energia e foco em resultados. Evitar formalidade excessiva."
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:border-blue-500 min-h-[100px]"
                 />
                 
@@ -713,7 +741,7 @@ export default function BrandProfile() {
                     type="text"
                     value={newToneKeyword}
                     onChange={(e) => setNewToneKeyword(e.target.value)}
-                    placeholder="Ex: Inspirador, Técnico..."
+                    placeholder="Ex: Inspirador, técnico, humano, confiante"
                     className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
                     onKeyPress={(e) => e.key === 'Enter' && addToneKeyword()}
                   />
@@ -753,9 +781,18 @@ export default function BrandProfile() {
 
           {/* Seção 4: Público & Persona */}
           <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <span className="text-2xl">👥</span>
-              <h2 className="text-xl font-semibold">Público-Alvo</h2>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">👥</span>
+                <h2 className="text-xl font-semibold">Público-Alvo</h2>
+              </div>
+
+              <div
+                className="w-10 h-10 rounded-full bg-gray-700 border border-gray-600 flex items-center justify-center text-xl"
+                title={archetypeInfo ? `Arquétipo: ${archetypeInfo.label}` : 'Arquétipo não definido'}
+              >
+                {archetypeInfo?.emoji || '🙂'}
+              </div>
             </div>
             
             <div className="mb-4">
@@ -764,7 +801,7 @@ export default function BrandProfile() {
                 <textarea
                   value={editPersona}
                   onChange={(e) => setEditPersona(e.target.value)}
-                  placeholder="Descreva a persona principal..."
+                  placeholder="Ex: Mulher, 28-40 anos, trabalha e treina após o expediente. Busca praticidade, autoestima e resultados sem complicação."
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 min-h-[80px]"
                 />
               ) : (
@@ -778,7 +815,7 @@ export default function BrandProfile() {
                 <textarea
                   value={editDemographics}
                   onChange={(e) => setEditDemographics(e.target.value)}
-                  placeholder="Idade, localização, interesses..."
+                  placeholder="Ex: 25-44 anos, Brasil (capitais), interesses: bem-estar, treino, autocuidado, estética."
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 min-h-[80px]"
                 />
               ) : (
@@ -801,7 +838,7 @@ export default function BrandProfile() {
                 type="text"
                 value={newKeyword}
                 onChange={(e) => setNewKeyword(e.target.value)}
-                placeholder="Adicionar keyword..."
+                placeholder="Ex: óculos 3D, saúde visual, armações, lentes, estilo"
                 className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
                 onKeyPress={(e) => e.key === 'Enter' && addKeyword()}
               />
@@ -853,7 +890,7 @@ export default function BrandProfile() {
             <textarea
               value={editUsp}
               onChange={(e) => setEditUsp(e.target.value)}
-              placeholder="O que torna esta marca especial e diferente das outras?"
+              placeholder="Ex: Atendimento em até 30 minutos + armações premium com ajuste personalizado e garantia estendida."
               className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 min-h-[100px]"
             />
           ) : (
@@ -874,7 +911,7 @@ export default function BrandProfile() {
                 type="text"
                 value={newAntiKeyword}
                 onChange={(e) => setNewAntiKeyword(e.target.value)}
-                placeholder="Adicionar aversão..."
+                placeholder="Ex: barato, milagre, cura garantida, antes e depois"
                 className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
                 onKeyPress={(e) => e.key === 'Enter' && addAntiKeyword()}
               />
@@ -925,7 +962,7 @@ export default function BrandProfile() {
             <textarea
               value={editNiche}
               onChange={(e) => setEditNiche(e.target.value)}
-              placeholder="Qual é o nicho específico onde a marca se posiciona?"
+              placeholder="Ex: Ótica premium com foco em tecnologia (lentes e óculos 3D) para público urbano."
               className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 min-h-[80px]"
             />
           ) : (
