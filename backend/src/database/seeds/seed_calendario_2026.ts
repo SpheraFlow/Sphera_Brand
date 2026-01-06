@@ -13,7 +13,24 @@ async function seedCalendario2026() {
   try {
     console.log('🌱 Iniciando seed do Calendário Estratégico 2026...');
 
-    const jsonPath = path.resolve(__dirname, '../../../../calendario_estrategico_2026.md');
+    const envPath = process.env.CALENDARIO_2026_PATH?.trim();
+    const candidatePaths = [
+      envPath,
+      path.resolve(process.cwd(), 'calendario_estrategico_2026.md'),
+      path.resolve(__dirname, '../../../../calendario_estrategico_2026.md'),
+      path.resolve(__dirname, '../../../calendario_estrategico_2026.md'),
+    ].filter(Boolean) as string[];
+
+    const jsonPath = candidatePaths.find((p) => fs.existsSync(p));
+    if (!jsonPath) {
+      throw new Error(
+        `Arquivo calendario_estrategico_2026.md não encontrado. Tente:
+ - Colocar o arquivo no root do repo (/var/www/mvp-system/calendario_estrategico_2026.md)
+ - Ou definir CALENDARIO_2026_PATH com o caminho completo
+Paths testados: ${candidatePaths.join(', ')}`
+      );
+    }
+
     const fileContent = fs.readFileSync(jsonPath, 'utf-8');
     
     const jsonMatch = fileContent.match(/```json\n([\s\S]+?)\n```/);
