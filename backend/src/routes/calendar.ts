@@ -518,13 +518,14 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
           ? categoriasNicho.map((c) => String(c).trim()).filter(Boolean)
           : [];
 
-        const backendRoot = path.resolve(__dirname, "..", "..", "..");
+        const backendRoot = path.resolve(__dirname, "..", "..");
         const pythonScript = path.resolve(backendRoot, "python_gen", "trends_cli.py");
         const cachePath = path.resolve(backendRoot, "python_gen", "trends_cache.json");
         const venvPython = path.resolve(backendRoot, ".venv", "bin", "python");
         const pythonBin = fs.existsSync(venvPython) ? venvPython : "python3";
 
         console.log(` [DEBUG] TrendsService pythonBin: ${pythonBin}`);
+        console.log(` [DEBUG] TrendsService pythonScript: ${pythonScript}`);
 
         if (!fs.existsSync(pythonScript)) {
           console.log(` [WARN] TrendsService: python script não encontrado em ${pythonScript}`);
