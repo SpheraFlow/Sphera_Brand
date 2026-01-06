@@ -28,6 +28,11 @@ interface BrandingData {
   updated_at?: string;
 }
 
+interface ClienteData {
+  id: string;
+  categorias_nicho?: string[];
+}
+
 export default function BrandProfile() {
   // ============================================
   // 🔴 PROVA DE VIDA - FRONTEND
@@ -73,6 +78,12 @@ export default function BrandProfile() {
   const [editAntiKeywords, setEditAntiKeywords] = useState<string[]>([]);
   const [editNiche, setEditNiche] = useState('');
 
+  const [clientCategoriasNicho, setClientCategoriasNicho] = useState<string[]>([]);
+  const [editCategoriasNicho, setEditCategoriasNicho] = useState<string[]>([]);
+  const [categoriasSuggestions, setCategoriasSuggestions] = useState<string[]>([]);
+  const [categoriasQuery, setCategoriasQuery] = useState<string>('');
+  const [loadingCategoriasSuggestions, setLoadingCategoriasSuggestions] = useState(false);
+
   // Estado para controlar se há rascunho restaurado
   const [hasDraftRestored, setHasDraftRestored] = useState(false);
 
@@ -82,6 +93,23 @@ export default function BrandProfile() {
   const [newToneKeyword, setNewToneKeyword] = useState('');
   const [newKeyword, setNewKeyword] = useState('');
   const [newAntiKeyword, setNewAntiKeyword] = useState('');
+
+  const addCategoriaNicho = (raw: string) => {
+    const next = String(raw || '').trim();
+    if (!next) return;
+    const key = next.toLowerCase();
+    setEditCategoriasNicho((prev: string[]) => {
+      const existing = new Set(prev.map((c) => String(c).toLowerCase()));
+      if (existing.has(key)) return prev;
+      return [...prev, next];
+    });
+    setCategoriasQuery('');
+  };
+
+  const removeCategoriaNicho = (cat: string) => {
+    const key = String(cat || '').toLowerCase();
+    setEditCategoriasNicho((prev: string[]) => prev.filter((c) => String(c).toLowerCase() !== key));
+  };
 
   // Função para salvar no localStorage
   const saveToLocalStorage = (data: BrandingData) => {
@@ -154,6 +182,17 @@ export default function BrandProfile() {
     try {
       setLoading(true);
 
+      try {
+        const clientRes = await api.get(`/clients/${clientId}`);
+        const cliente: ClienteData | undefined = clientRes.data?.cliente;
+        const currentCats = Array.isArray(cliente?.categorias_nicho)
+          ? cliente?.categorias_nicho?.map((c) => String(c).trim()).filter(Boolean)
+          : [];
+        setClientCategoriasNicho(currentCats);
+      } catch (_e) {
+        setClientCategoriasNicho([]);
+      }
+
       // Primeiro: verificar se há rascunho no localStorage
       const draftData = loadFromLocalStorage();
       if (draftData) {
@@ -211,7 +250,22 @@ export default function BrandProfile() {
     setEditUsp(branding.usp || '');
     setEditAntiKeywords(branding.anti_keywords || []);
     setEditNiche(branding.niche || '');
+    setEditCategoriasNicho(clientCategoriasNicho || []);
+    setCategoriasQuery('');
     setIsEditing(true);
+
+    (async () => {
+      try {
+        setLoadingCategoriasSuggestions(true);
+        const res = await api.get('/datas-comemorativas/categorias');
+        const list = Array.isArray(res.data?.categorias) ? res.data.categorias : [];
+        setCategoriasSuggestions(list.map((c: any) => String(c)).filter(Boolean));
+      } catch (_e) {
+        setCategoriasSuggestions([]);
+      } finally {
+        setLoadingCategoriasSuggestions(false);
+      }
+    })();
   };
 
   const cancelEditing = () => {
@@ -253,6 +307,14 @@ export default function BrandProfile() {
       console.log('💾 [BRANDING SAVE] Salvando branding definitivo:', payload);
 
       await api.put(`/branding/${clientId}`, payload);
+
+      try {
+        await api.put(`/clients/${clientId}`, {
+          categorias_nicho: editCategoriasNicho,
+        });
+      } catch (e: any) {
+        console.error('❌ Erro ao salvar categorias_nicho do cliente:', e);
+      }
 
       // Após salvar com sucesso, limpar o rascunho do localStorage
       clearLocalStorage();
@@ -968,6 +1030,112 @@ export default function BrandProfile() {
           ) : (
             <p className="text-gray-300">{branding.niche || 'Não definido'}</p>
           )}
+
+          <div className="mt-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-gray-200">Categorias do cliente (para calendário)</h3>
+              {!isEditing && (
+                <span className="text-xs text-gray-500">Usado para filtrar datas no prompt</span>
+              )}
+            </div>
+
+            {isEditing ? (
+              <div className="mt-2 w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-3 focus-within:border-blue-500">
+                <div className="flex flex-wrap gap-2">
+                  {editCategoriasNicho.map((c) => (
+                    <span
+                      key={c}
+                      className="inline-flex items-center gap-2 px-2 py-1 rounded-full border border-gray-600 bg-gray-800 text-gray-200 text-xs"
+                    >
+                      <span>{c}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeCategoriaNicho(c)}
+                        className="text-gray-400 hover:text-white"
+                        disabled={isSaving}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-3">
+                  <input
+                    type="text"
+                    value={categoriasQuery}
+                    onChange={(e) => setCategoriasQuery(e.target.value)}
+                    placeholder={loadingCategoriasSuggestions ? 'Carregando categorias…' : 'Digite para buscar e pressione Enter'}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addCategoriaNicho(categoriasQuery);
+                      }
+                    }}
+                    disabled={isSaving}
+                  />
+                </div>
+
+                {categoriasQuery.trim().length > 0 && (
+                  <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-gray-700 bg-gray-900">
+                    {categoriasSuggestions
+                      .filter((s) => String(s).toLowerCase().includes(categoriasQuery.trim().toLowerCase()))
+                      .slice(0, 12)
+                      .map((s) => {
+                        const label = String(s);
+                        const already = new Set(editCategoriasNicho.map((c) => String(c).toLowerCase())).has(label.toLowerCase());
+                        return (
+                          <button
+                            type="button"
+                            key={label}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-800 ${already ? 'text-gray-500' : 'text-gray-200'}`}
+                            onClick={() => {
+                              if (!already) addCategoriaNicho(label);
+                            }}
+                            disabled={isSaving || already}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                  </div>
+                )}
+
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => addCategoriaNicho(categoriasQuery)}
+                    className="text-xs text-blue-300 hover:text-blue-200 disabled:opacity-60"
+                    disabled={isSaving || !categoriasQuery.trim()}
+                  >
+                    Adicionar “{categoriasQuery.trim() || 'categoria'}”
+                  </button>
+                </div>
+
+                <p className="text-gray-500 text-xs mt-2">
+                  Essas categorias entram no prompt da geração para puxar datas relevantes do Calendário Geral.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-2">
+                {(clientCategoriasNicho || []).length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {(clientCategoriasNicho || []).map((c) => (
+                      <span
+                        key={c}
+                        className="px-3 py-1 rounded-full border border-gray-700 bg-gray-900/60 text-gray-200 text-xs"
+                      >
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-400 text-sm">Nenhuma categoria definida.</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Footer Info */}

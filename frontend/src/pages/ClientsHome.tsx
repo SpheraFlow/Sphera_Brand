@@ -32,7 +32,10 @@ export default function ClientsHome() {
   const [showNichoModal, setShowNichoModal] = useState(false);
   const [nichoClientId, setNichoClientId] = useState<string | null>(null);
   const [nichoClientName, setNichoClientName] = useState<string>('');
-  const [nichoValue, setNichoValue] = useState<string>('');
+  const [nichoSelected, setNichoSelected] = useState<string[]>([]);
+  const [nichoSuggestions, setNichoSuggestions] = useState<string[]>([]);
+  const [nichoQuery, setNichoQuery] = useState<string>('');
+  const [loadingNichoSuggestions, setLoadingNichoSuggestions] = useState(false);
   const [savingNicho, setSavingNicho] = useState(false);
   const [calendarsOverview, setCalendarsOverview] = useState<Record<string, ClientCalendarOverview>>({});
   const [brokenLogoClients, setBrokenLogoClients] = useState<Set<string>>(() => new Set());
@@ -61,8 +64,22 @@ export default function ClientsHome() {
     setNichoClientId(cliente.id);
     setNichoClientName(cliente.nome);
     const current = Array.isArray(cliente.categorias_nicho) ? cliente.categorias_nicho : [];
-    setNichoValue(current.join(', '));
+    setNichoSelected(current.map((c) => String(c).trim()).filter(Boolean));
+    setNichoQuery('');
     setShowNichoModal(true);
+
+    (async () => {
+      try {
+        setLoadingNichoSuggestions(true);
+        const res = await api.get('/datas-comemorativas/categorias');
+        const list = Array.isArray(res.data?.categorias) ? res.data.categorias : [];
+        setNichoSuggestions(list.map((c: any) => String(c)).filter(Boolean));
+      } catch (e) {
+        setNichoSuggestions([]);
+      } finally {
+        setLoadingNichoSuggestions(false);
+      }
+    })();
   };
 
   const saveNicho = async () => {
@@ -71,7 +88,7 @@ export default function ClientsHome() {
     try {
       setSavingNicho(true);
       await api.put(`/clients/${nichoClientId}`, {
-        categorias_nicho: nichoValue,
+        categorias_nicho: nichoSelected,
       });
       setShowNichoModal(false);
       await loadClientes();
@@ -81,6 +98,23 @@ export default function ClientsHome() {
     } finally {
       setSavingNicho(false);
     }
+  };
+
+  const addNichoCategory = (raw: string) => {
+    const next = String(raw || '').trim();
+    if (!next) return;
+    const key = next.toLowerCase();
+    setNichoSelected((prev) => {
+      const existing = new Set(prev.map((c) => String(c).toLowerCase()));
+      if (existing.has(key)) return prev;
+      return [...prev, next];
+    });
+    setNichoQuery('');
+  };
+
+  const removeNichoCategory = (cat: string) => {
+    const key = String(cat || '').toLowerCase();
+    setNichoSelected((prev) => prev.filter((c) => String(c).toLowerCase() !== key));
   };
 
   useEffect(() => {
@@ -563,15 +597,80 @@ export default function ClientsHome() {
             </div>
 
             <div className="mt-4">
-              <label className="block text-xs text-gray-400 mb-1">Categorias (separadas por vírgula)</label>
-              <input
-                type="text"
-                value={nichoValue}
-                onChange={(e) => setNichoValue(e.target.value)}
-                placeholder="Ex: saude, fitness, kids, psicologia"
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500"
-                autoFocus
-              />
+              <label className="block text-xs text-gray-400 mb-1">Categorias do cliente</label>
+
+              <div className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-3 focus-within:border-blue-500">
+                <div className="flex flex-wrap gap-2">
+                  {nichoSelected.map((c) => (
+                    <span key={c} className="inline-flex items-center gap-2 px-2 py-1 rounded-full border border-gray-600 bg-gray-800 text-gray-200 text-xs">
+                      <span>{c}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeNichoCategory(c)}
+                        className="text-gray-400 hover:text-white"
+                        disabled={savingNicho}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-3">
+                  <input
+                    type="text"
+                    value={nichoQuery}
+                    onChange={(e) => setNichoQuery(e.target.value)}
+                    placeholder={loadingNichoSuggestions ? 'Carregando categorias…' : 'Digite para buscar e pressione Enter'}
+                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addNichoCategory(nichoQuery);
+                      }
+                    }}
+                    disabled={savingNicho}
+                  />
+                </div>
+
+                {nichoQuery.trim().length > 0 && (
+                  <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-gray-700 bg-gray-900">
+                    {nichoSuggestions
+                      .filter((s) => String(s).toLowerCase().includes(nichoQuery.trim().toLowerCase()))
+                      .slice(0, 12)
+                      .map((s) => {
+                        const label = String(s);
+                        const already = new Set(nichoSelected.map((c) => String(c).toLowerCase())).has(label.toLowerCase());
+                        return (
+                          <button
+                            type="button"
+                            key={label}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-800 ${already ? 'text-gray-500' : 'text-gray-200'}`}
+                            onClick={() => {
+                              if (!already) addNichoCategory(label);
+                            }}
+                            disabled={savingNicho || already}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                  </div>
+                )}
+
+                <div className="mt-2">
+                  <button
+                    type="button"
+                    onClick={() => addNichoCategory(nichoQuery)}
+                    className="text-xs text-blue-300 hover:text-blue-200 disabled:opacity-60"
+                    disabled={savingNicho || !nichoQuery.trim()}
+                  >
+                    Adicionar “{nichoQuery.trim() || 'categoria'}”
+                  </button>
+                </div>
+              </div>
+
               <p className="text-gray-500 text-xs mt-2">
                 Essas categorias serão usadas para filtrar datas relevantes no Calendário Geral durante a geração.
               </p>
