@@ -315,7 +315,9 @@ export default function GeneralCalendarPage() {
               const primary = cats[0] || 'geral';
               const dateLabel = (() => {
                 try {
-                  const dt = new Date(d.data);
+                  // Parse ISO date string (YYYY-MM-DD) sem conversão UTC
+                  const [year, month, day] = d.data.split('-').map(Number);
+                  const dt = new Date(year, month - 1, day);
                   return dt.toLocaleDateString('pt-BR');
                 } catch {
                   return d.data;
