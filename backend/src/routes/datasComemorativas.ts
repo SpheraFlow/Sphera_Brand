@@ -20,6 +20,33 @@ function normalizeCategorias(input: unknown): string[] {
   return [];
 }
 
+router.get("/datas-comemorativas/categorias", async (_req: Request, res: Response) => {
+  try {
+    const fixed = ["Feriado", "Feriado Nacional", "Ponto Facultativo", "Geral"];
+
+    const result = await db.query(
+      `SELECT DISTINCT lower(trim(jsonb_array_elements_text(categorias))) as categoria
+       FROM datas_comemorativas
+       WHERE categorias IS NOT NULL
+       ORDER BY categoria ASC`
+    );
+
+    const fromDb = result.rows
+      .map((r: any) => String(r.categoria || "").trim())
+      .filter((c: string) => c.length > 0);
+
+    const merged = Array.from(new Set([...fixed.map((c) => c.toLowerCase()), ...fromDb]));
+
+    return res.json({
+      success: true,
+      categorias: merged,
+    });
+  } catch (error) {
+    console.error("❌ Erro ao listar categorias de datas comemorativas:", error);
+    return res.status(500).json({ success: false, error: "Erro ao listar categorias." });
+  }
+});
+
 // GET /api/datas-comemorativas?mes=12&ano=2025&categorias[]=saude&categorias[]=geral
 router.get("/datas-comemorativas", async (req: Request, res: Response) => {
   try {
