@@ -287,6 +287,7 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
         const labels: string[] = [];
         try {
           const parts = startMesLabel.trim().split(" ");
+
           if (parts.length < 2) return [startMesLabel];
           const possibleYear = parts[parts.length - 1] ?? "";
           const anoNum = parseInt(possibleYear, 10);
@@ -494,6 +495,81 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
       ? branding.keywords.join(", ")
       : branding.keywords || "";
 
+    const trendsConfig = {
+      ENABLE_TRENDS: true,
+      CACHE_DURATION_HOURS: 24,
+      REQUEST_DELAY_SECONDS: 2,
+      MAX_TRENDS_PER_CLIENTE: 10,
+      MIN_TREND_SCORE: 50,
+    };
+
+    const fetchTrendsBlock = async (): Promise<string> => {
+      try {
+        if (!trendsConfig.ENABLE_TRENDS) return "";
+
+        const dnaKeywords: string[] = Array.isArray(branding?.keywords)
+          ? branding.keywords.map((k: any) => String(k).trim()).filter(Boolean)
+          : String(branding?.keywords || "")
+              .split(",")
+              .map((k) => String(k).trim())
+              .filter(Boolean);
+
+        const categorias: string[] = Array.isArray(categoriasNicho)
+          ? categoriasNicho.map((c) => String(c).trim()).filter(Boolean)
+          : [];
+
+        const backendDir = process.cwd();
+        const pythonScript = path.resolve(backendDir, "python_gen", "trends_cli.py");
+        const cachePath = path.resolve(backendDir, "python_gen", "trends_cache.json");
+
+        if (!fs.existsSync(pythonScript)) {
+          console.log(` [WARN] TrendsService: python script não encontrado em ${pythonScript}`);
+          return "";
+        }
+
+        const payload = {
+          cache_path: cachePath,
+          dna_keywords: dnaKeywords,
+          categorias,
+          config: trendsConfig,
+        };
+
+        const raw = await new Promise<string>((resolve, reject) => {
+          const proc = spawn("python3", [pythonScript, JSON.stringify(payload)]);
+          let out = "";
+          let err = "";
+          proc.stdout.on("data", (d: any) => {
+            out += d.toString();
+          });
+          proc.stderr.on("data", (d: any) => {
+            err += d.toString();
+          });
+          proc.on("close", (code: any) => {
+            if (code === 0) return resolve(out.trim());
+            reject(new Error(err || out || `python exit code ${code}`));
+          });
+        });
+
+        const parsed = JSON.parse(raw || "{}");
+        if (!parsed?.ok || !Array.isArray(parsed?.suggestions) || parsed.suggestions.length === 0) {
+          return "";
+        }
+
+        const lines = parsed.suggestions
+          .slice(0, trendsConfig.MAX_TRENDS_PER_CLIENTE)
+          .map((s: any) => `- ${String(s.trend_keyword || "").trim()} (score ${Number(s.trend_score || 0)})`)
+          .filter(Boolean)
+          .join("\n");
+
+        return lines ? `TRENDS RELEVANTES (Brasil, hoje):\n${lines}` : "";
+      } catch (e: any) {
+        console.log(` [WARN] TrendsService falhou; seguindo sem trends. Motivo: ${e?.message || String(e)}`);
+        return "";
+      }
+    };
+
+    const trendsBlock = await fetchTrendsBlock();
+
     let effectiveGenerationPrompt = generationPrompt || "";
     if (chainOutputFinal) {
       effectiveGenerationPrompt = `${effectiveGenerationPrompt}\n\n# Contexto gerado pela Prompt Chain:\n${chainOutputFinal}`;
@@ -572,6 +648,8 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
 
           DATAS COMEMORATIVAS/RELEVANTES DO MÊS (use como base obrigatória):
           ${datasResumoTexto || 'Sem lista prévia. Você DEVE levantar datas relevantes reais do mês e usá-las no planejamento.'}
+
+          ${trendsBlock ? `\nTRENDS (use como inspiração adicional, mantendo coerência com o DNA da marca):\n${trendsBlock}\n` : ''}
 
           DATA ATUAL (referência): ${hojeISO}
 
