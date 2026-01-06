@@ -66,11 +66,18 @@ class TrendsService:
             return cache.get('trends_geral_br')
 
         self._sleep()
-        df = self._pytrends_call_with_retry(self.pytrends.trending_searches, pn='brazil')
+        df = self._pytrends_call_with_retry(self.pytrends.realtime_trending_searches, pn='BR')
         trends = []
         if df is not None and len(df.columns) > 0:
-            col = df.columns[0]
-            for v in df[col].tolist():
+            title_col = None
+            for c in df.columns:
+                if str(c).lower() in ['title', 'query', 'term']:
+                    title_col = c
+                    break
+            if title_col is None:
+                title_col = df.columns[0]
+            
+            for v in df[title_col].tolist():
                 s = str(v).strip()
                 if s:
                     trends.append(s)
@@ -95,7 +102,7 @@ class TrendsService:
         trends = []
         try:
             self._sleep()
-            df = self._pytrends_call_with_retry(self.pytrends.realtime_trending_searches, pn='brazil')
+            df = self._pytrends_call_with_retry(self.pytrends.realtime_trending_searches, pn='BR')
             if df is not None:
                 col = None
                 for c in df.columns:
