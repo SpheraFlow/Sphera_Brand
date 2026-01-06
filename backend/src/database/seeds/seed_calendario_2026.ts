@@ -31,14 +31,26 @@ Paths testados: ${candidatePaths.join(', ')}`
       );
     }
 
-    const fileContent = fs.readFileSync(jsonPath, 'utf-8');
-    
-    const jsonMatch = fileContent.match(/```json\n([\s\S]+?)\n```/);
-    if (!jsonMatch || !jsonMatch[1]) {
-      throw new Error('JSON não encontrado no arquivo calendario_estrategico_2026.md');
+    const fileContentRaw = fs.readFileSync(jsonPath, 'utf-8');
+    const fileContent = fileContentRaw.replace(/^\uFEFF/, '').trim();
+
+    const jsonString = (() => {
+      const jsonMatch = fileContent.match(/```json\n([\s\S]+?)\n```/);
+      if (jsonMatch && jsonMatch[1]) return jsonMatch[1].trim();
+
+      // Novo formato: o arquivo pode ser um JSON puro (array) sem code fence
+      if (fileContent.startsWith('[') || fileContent.startsWith('{')) return fileContent;
+
+      return null;
+    })();
+
+    if (!jsonString) {
+      throw new Error(
+        `JSON não encontrado no arquivo calendario_estrategico_2026.md (formato esperado: bloco \`\`\`json ou JSON puro). Arquivo: ${jsonPath}`
+      );
     }
 
-    const datas: DataComemorativa2026[] = JSON.parse(jsonMatch[1]);
+    const datas: DataComemorativa2026[] = JSON.parse(jsonString);
     console.log(`📊 Total de datas a importar: ${datas.length}`);
 
     let inserted = 0;
