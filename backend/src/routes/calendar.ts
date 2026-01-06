@@ -518,9 +518,13 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
           ? categoriasNicho.map((c) => String(c).trim()).filter(Boolean)
           : [];
 
-        const backendDir = process.cwd();
-        const pythonScript = path.resolve(backendDir, "python_gen", "trends_cli.py");
-        const cachePath = path.resolve(backendDir, "python_gen", "trends_cache.json");
+        const backendRoot = path.resolve(__dirname, "..", "..", "..");
+        const pythonScript = path.resolve(backendRoot, "python_gen", "trends_cli.py");
+        const cachePath = path.resolve(backendRoot, "python_gen", "trends_cache.json");
+        const venvPython = path.resolve(backendRoot, ".venv", "bin", "python");
+        const pythonBin = fs.existsSync(venvPython) ? venvPython : "python3";
+
+        console.log(` [DEBUG] TrendsService pythonBin: ${pythonBin}`);
 
         if (!fs.existsSync(pythonScript)) {
           console.log(` [WARN] TrendsService: python script não encontrado em ${pythonScript}`);
@@ -535,12 +539,13 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
         };
 
         const raw = await new Promise<string>((resolve, reject) => {
-          const proc = spawn("python3", [pythonScript, JSON.stringify(payload)]);
+          const proc = spawn(pythonBin, [pythonScript, JSON.stringify(payload)]);
           let out = "";
           let err = "";
           proc.stdout.on("data", (d: any) => {
             out += d.toString();
           });
+
           proc.stderr.on("data", (d: any) => {
             err += d.toString();
           });
