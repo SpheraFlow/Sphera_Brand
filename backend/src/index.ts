@@ -61,7 +61,14 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ strict: false }));
+app.use((req: Request, _res: Response, next) => {
+  const contentType = String(req.headers['content-type'] || '').toLowerCase();
+  if (contentType.includes('application/json') && req.body === null) {
+    (req as any).body = {};
+  }
+  next();
+});
 app.use(express.urlencoded({ extended: true }));
 
 const clientLogosPath = path.resolve(__dirname, "../storage/client-logos");

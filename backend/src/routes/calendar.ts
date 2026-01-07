@@ -415,13 +415,15 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
             await syncFeriadosBrasilApi(anoNum);
 
             console.log(`📅 [DEBUG] Buscando datas comemorativas para ${mesNum}/${anoNum}...`);
+
             try {
               const whereCategorias = categoriasParaBusca.length > 0 ? "AND categorias ?| $3" : "";
               const params: any[] = [mesNum, anoNum];
               if (categoriasParaBusca.length > 0) params.push(categoriasParaBusca);
 
               const datasResult = await db.query(
-                `SELECT data, titulo, categorias, relevancia FROM datas_comemorativas
+                `SELECT data::text as data, titulo, categorias, relevancia, descricao
+                 FROM datas_comemorativas
                  WHERE EXTRACT(MONTH FROM data) = $1 AND EXTRACT(YEAR FROM data) = $2
                  ${whereCategorias}
                  ORDER BY data ASC, relevancia DESC`,
@@ -431,15 +433,18 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
               if (datasResult.rows.length > 0) {
                 datasResumoTexto = datasResult.rows
                   .map((d: any) => {
-                    const dt = new Date(d.data);
-                    const dia = dt.getDate().toString().padStart(2, "0");
-                    const mesNumStr = (dt.getMonth() + 1).toString().padStart(2, "0");
+                    const mesStr = String(mesNum).padStart(2, "0");
+                    const raw = String(d.data || "").slice(0, 10); // YYYY-MM-DD
+                    const parts = raw.split("-");
+                    const dia = (parts[2] || "").padStart(2, "0");
                     const cats = Array.isArray(d.categorias) ? d.categorias.join(", ") : "";
-                    return `- ${dia}/${mesNumStr}/${anoNum}: ${d.titulo}${cats ? ` (categorias: ${cats})` : ""}`;
+                    const desc = String(d.descricao || "").trim();
+                    const descBlock = desc ? `\n  orientação: ${desc}` : "";
+                    return `- ${dia}/${mesStr}/${anoNum}: ${d.titulo} (${cats}) [relevância ${d.relevancia ?? 0}]${descBlock}`;
                   })
                   .join("\n");
               }
-            } catch (dbDatasError: any) {
+            } catch (_dbDatasError: any) {
               datasResumoTexto = "";
             }
 
@@ -495,87 +500,6 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
       ? branding.keywords.join(", ")
       : branding.keywords || "";
 
-    const trendsConfig = {
-      ENABLE_TRENDS: true,
-      CACHE_DURATION_HOURS: 24,
-      REQUEST_DELAY_SECONDS: 2,
-      MAX_TRENDS_PER_CLIENTE: 10,
-      MIN_TREND_SCORE: 50,
-    };
-
-    const fetchTrendsBlock = async (): Promise<string> => {
-      try {
-        if (!trendsConfig.ENABLE_TRENDS) return "";
-
-        const dnaKeywords: string[] = Array.isArray(branding?.keywords)
-          ? branding.keywords.map((k: any) => String(k).trim()).filter(Boolean)
-          : String(branding?.keywords || "")
-              .split(",")
-              .map((k) => String(k).trim())
-              .filter(Boolean);
-
-        const categorias: string[] = Array.isArray(categoriasNicho)
-          ? categoriasNicho.map((c) => String(c).trim()).filter(Boolean)
-          : [];
-
-        const backendRoot = path.resolve(__dirname, "..", "..");
-        const pythonScript = path.resolve(backendRoot, "python_gen", "trends_cli.py");
-        const cachePath = path.resolve(backendRoot, "python_gen", "trends_cache.json");
-        const venvPython = path.resolve(backendRoot, ".venv", "bin", "python");
-        const pythonBin = fs.existsSync(venvPython) ? venvPython : "python3";
-
-        console.log(` [DEBUG] TrendsService pythonBin: ${pythonBin}`);
-        console.log(` [DEBUG] TrendsService pythonScript: ${pythonScript}`);
-
-        if (!fs.existsSync(pythonScript)) {
-          console.log(` [WARN] TrendsService: python script não encontrado em ${pythonScript}`);
-          return "";
-        }
-
-        const payload = {
-          cache_path: cachePath,
-          dna_keywords: dnaKeywords,
-          categorias,
-          config: trendsConfig,
-        };
-
-        const raw = await new Promise<string>((resolve, reject) => {
-          const proc = spawn(pythonBin, [pythonScript, JSON.stringify(payload)]);
-          let out = "";
-          let err = "";
-          proc.stdout.on("data", (d: any) => {
-            out += d.toString();
-          });
-
-          proc.stderr.on("data", (d: any) => {
-            err += d.toString();
-          });
-          proc.on("close", (code: any) => {
-            if (code === 0) return resolve(out.trim());
-            reject(new Error(err || out || `python exit code ${code}`));
-          });
-        });
-
-        const parsed = JSON.parse(raw || "{}");
-        if (!parsed?.ok || !Array.isArray(parsed?.suggestions) || parsed.suggestions.length === 0) {
-          return "";
-        }
-
-        const lines = parsed.suggestions
-          .slice(0, trendsConfig.MAX_TRENDS_PER_CLIENTE)
-          .map((s: any) => `- ${String(s.trend_keyword || "").trim()} (score ${Number(s.trend_score || 0)})`)
-          .filter(Boolean)
-          .join("\n");
-
-        return lines ? `TRENDS RELEVANTES (Brasil, hoje):\n${lines}` : "";
-      } catch (e: any) {
-        console.log(` [WARN] TrendsService falhou; seguindo sem trends. Motivo: ${e?.message || String(e)}`);
-        return "";
-      }
-    };
-
-    const trendsBlock = await fetchTrendsBlock();
-
     let effectiveGenerationPrompt = generationPrompt || "";
     if (chainOutputFinal) {
       effectiveGenerationPrompt = `${effectiveGenerationPrompt}\n\n# Contexto gerado pela Prompt Chain:\n${chainOutputFinal}`;
@@ -584,19 +508,45 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
     const hojeISO = new Date().toISOString().slice(0, 10);
 
     const cleanAndParseJSON = (text: string) => {
-      const firstBracket = text.indexOf('[');
-      const lastBracket = text.lastIndexOf(']');
-      if (firstBracket !== -1 && lastBracket !== -1) {
-        const jsonCandidate = text.substring(firstBracket, lastBracket + 1);
+      const sanitize = (rawText: string) => {
+        const withoutFences = String(rawText || "")
+          .replace(/```json/gi, "")
+          .replace(/```/g, "")
+          .trim();
+
+        // Remove caracteres de controle que quebram JSON (exceto \n, \r, \t)
+        return withoutFences.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+      };
+
+      const cleanedText = sanitize(text);
+      const candidates: string[] = [];
+
+      const firstArray = cleanedText.indexOf("[");
+      const lastArray = cleanedText.lastIndexOf("]");
+      if (firstArray !== -1 && lastArray !== -1 && lastArray > firstArray) {
+        candidates.push(cleanedText.substring(firstArray, lastArray + 1));
+      }
+
+      const firstObj = cleanedText.indexOf("{");
+      const lastObj = cleanedText.lastIndexOf("}");
+      if (firstObj !== -1 && lastObj !== -1 && lastObj > firstObj) {
+        candidates.push(cleanedText.substring(firstObj, lastObj + 1));
+      }
+
+      candidates.push(cleanedText);
+
+      for (const cand of candidates) {
         try {
-          return JSON.parse(jsonCandidate);
-        } catch (e) {
-          console.error("⚠️ [DEBUG] Erro ao fazer parse do trecho extraído:", e);
+          return JSON.parse(cand);
+        } catch (e: any) {
+          console.error("⚠️ [DEBUG] Erro ao fazer parse do trecho extraído:", e?.message || e);
         }
       }
-      const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
-      return JSON.parse(cleaned);
+
+      throw new Error("Não foi possível interpretar JSON retornado pela IA.");
     };
+
+    const trendsBlock = "";
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
     const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
