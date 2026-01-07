@@ -562,6 +562,107 @@ export default function BrandProfile() {
 
   const archetypeInfo = getArchetypeInfo(isEditing ? editArchetype : branding.archetype);
 
+  const toneExamples = [
+    {
+      label: 'Educativo & Direto',
+      description:
+        'Tom educativo, direto e objetivo. Linguagem simples, sem jargões desnecessários. Misturar didática com exemplos práticos e CTAs claros. Evitar formalidade excessiva.',
+      keywords: ['educativo', 'direto', 'prático', 'confiante'],
+    },
+    {
+      label: 'Humano & Inspirador',
+      description:
+        'Tom humano, acolhedor e inspirador. Incentivar consistência, progresso e autoestima. Evitar culpa e discurso agressivo. Use storytelling e empatia.',
+      keywords: ['humano', 'inspirador', 'acolhedor', 'empático'],
+    },
+    {
+      label: 'Premium & Sofisticado',
+      description:
+        'Tom premium e sofisticado. Frases curtas, vocabulário refinado, foco em exclusividade e experiência. Evitar gírias e exageros.',
+      keywords: ['premium', 'sofisticado', 'exclusivo', 'elegante'],
+    },
+  ];
+
+  const personaExamples = [
+    {
+      label: 'Urbano Ocupado (25-40)',
+      persona:
+        'Homem ou mulher, 25-40 anos, rotina corrida, trabalha e precisa de soluções práticas. Quer resultados e clareza, sem perda de tempo. Valoriza marcas confiáveis.',
+      demographics:
+        '25-40 anos, capitais e regiões metropolitanas, interesses: produtividade, bem-estar, tecnologia e estilo de vida.',
+    },
+    {
+      label: 'Família & Rotina (30-55)',
+      persona:
+        'Pessoa responsável pela família, 30-55 anos, busca segurança, qualidade e previsibilidade. Quer orientações claras e confiança no serviço/produto.',
+      demographics:
+        '30-55 anos, Brasil, interesses: família, saúde, educação, finanças pessoais e consumo consciente.',
+    },
+    {
+      label: 'Aspiracional Premium (28-45)',
+      persona:
+        'Pessoa 28-45 anos, aspiracional, busca status, estética e experiência. Compra por qualidade e diferenciação, quer referências e prova social.',
+      demographics:
+        '28-45 anos, capitais, interesses: moda, lifestyle, luxo acessível, gastronomia, viagens.',
+    },
+  ];
+
+  const uspExamples = [
+    {
+      label: 'Rapidez + Garantia',
+      text: 'Atendimento em até 30 minutos + garantia estendida + suporte pós-venda com acompanhamento.',
+    },
+    {
+      label: 'Premium + Personalização',
+      text: 'Experiência premium com personalização completa: diagnóstico, recomendação sob medida e acabamento superior.',
+    },
+    {
+      label: 'Preço Justo + Clareza',
+      text: 'Preço justo com transparência total: planos claros, sem taxas escondidas e entrega consistente.',
+    },
+  ];
+
+  const nicheExamples = [
+    {
+      label: 'Serviço Local (bairro/cidade)',
+      text: 'Negócio local com foco em atendimento humano e recorrência. Público da região, busca conveniência e confiança.',
+    },
+    {
+      label: 'B2B (decisores)',
+      text: 'Solução B2B para decisores (gestores e diretores) com foco em ROI, previsibilidade, prova social e implementação.',
+    },
+    {
+      label: 'Infoproduto/educação',
+      text: 'Oferta educacional (curso/mentoria) com foco em transformação prática, comunidade e execução passo-a-passo.',
+    },
+  ];
+
+  const keywordsExamples = [
+    {
+      label: 'Saúde/Bem-estar',
+      items: ['bem-estar', 'saúde', 'qualidade de vida', 'rotina', 'autocuidado'],
+    },
+    {
+      label: 'Tecnologia/Produto',
+      items: ['tecnologia', 'inovação', 'performance', 'durabilidade', 'design'],
+    },
+    {
+      label: 'Serviço/Premium',
+      items: ['atendimento', 'experiência', 'premium', 'confiança', 'garantia'],
+    },
+  ];
+
+  const antiKeywordsExamples = [
+    {
+      label: 'Promessas vazias',
+      items: ['milagre', 'cura garantida', 'resultado imediato', 'antes e depois', 'sem esforço'],
+    },
+    {
+      label: 'Baixo valor',
+      items: ['barato', 'qualquer coisa', 'genérico', 'improviso', 'mal feito'],
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
       <div className="max-w-7xl mx-auto">
@@ -629,6 +730,92 @@ export default function BrandProfile() {
                 </>
               )}
             </div>
+          </div>
+
+          <div className="mt-6 bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm text-gray-400">Categorias do cliente</div>
+                <div className="text-lg font-semibold">Usadas para filtrar datas no Calendário e enriquecer o prompt</div>
+              </div>
+              <div className="text-xs text-gray-500">{(isEditing ? editCategoriasNicho : clientCategoriasNicho).length} selecionadas</div>
+            </div>
+
+            {isEditing ? (
+              <div className="mt-4">
+                <div className="flex flex-wrap gap-2">
+                  {editCategoriasNicho.map((c) => (
+                    <span key={c} className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-gray-600 bg-gray-900/60 text-gray-200 text-xs">
+                      <span>{c}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeCategoriaNicho(c)}
+                        className="text-gray-400 hover:text-white"
+                        disabled={isSaving}
+                      >
+                        ✕
+                      </button>
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-3">
+                  <input
+                    type="text"
+                    value={categoriasQuery}
+                    onChange={(e) => setCategoriasQuery(e.target.value)}
+                    placeholder={loadingCategoriasSuggestions ? 'Carregando categorias…' : 'Busque e selecione uma categoria'}
+                    className="w-full bg-gray-900/60 border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
+                    disabled={isSaving}
+                  />
+                </div>
+
+                <div className="mt-2 max-h-48 overflow-auto rounded-lg border border-gray-700 bg-gray-900">
+                  {categoriasSuggestions
+                    .filter((s) => String(s).toLowerCase().includes(categoriasQuery.trim().toLowerCase()))
+                    .slice(0, 30)
+                    .map((s) => {
+                      const label = String(s);
+                      const already = new Set(editCategoriasNicho.map((c) => String(c).toLowerCase())).has(label.toLowerCase());
+                      return (
+                        <button
+                          type="button"
+                          key={label}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-800 ${already ? 'text-gray-500' : 'text-gray-200'}`}
+                          onClick={() => {
+                            if (!already) addCategoriaNicho(label);
+                          }}
+                          disabled={isSaving || already}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+
+                  {(!loadingCategoriasSuggestions && categoriasSuggestions.length === 0) && (
+                    <div className="px-3 py-3 text-sm text-gray-400">
+                      Nenhuma categoria disponível.
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-2 text-xs text-gray-500">Selecione as categorias existentes.</div>
+              </div>
+            ) : (
+              <div className="mt-3">
+                {(clientCategoriasNicho || []).length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {(clientCategoriasNicho || []).map((c) => (
+                      <span key={c} className="px-3 py-1 rounded-full border border-gray-700 bg-gray-900/60 text-gray-200 text-xs">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-400">Nenhuma categoria definida.</div>
+                )}
+              </div>
+            )}
           </div>
           
           <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl p-4">
@@ -790,6 +977,25 @@ export default function BrandProfile() {
             
             {isEditing ? (
               <>
+                <div className="mb-3">
+                  <div className="text-xs text-gray-400 mb-2">Exemplos (clique para preencher)</div>
+                  <div className="flex flex-wrap gap-2">
+                    {toneExamples.map((ex) => (
+                      <button
+                        key={ex.label}
+                        type="button"
+                        onClick={() => {
+                          setEditToneDescription(ex.description);
+                          setEditToneKeywords(ex.keywords);
+                        }}
+                        className="px-3 py-1 rounded-full border border-gray-600 bg-gray-900/60 text-gray-200 text-xs hover:border-blue-500/60 hover:text-white transition-colors"
+                        disabled={isSaving}
+                      >
+                        {ex.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <textarea
                   value={editToneDescription}
                   onChange={(e) => setEditToneDescription(e.target.value)}
@@ -860,12 +1066,34 @@ export default function BrandProfile() {
             <div className="mb-4">
               <div className="text-sm text-gray-400 mb-2">Persona</div>
               {isEditing ? (
-                <textarea
-                  value={editPersona}
-                  onChange={(e) => setEditPersona(e.target.value)}
-                  placeholder="Ex: Mulher, 28-40 anos, trabalha e treina após o expediente. Busca praticidade, autoestima e resultados sem complicação."
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 min-h-[80px]"
-                />
+                <>
+                  <div className="mb-3">
+                    <div className="text-xs text-gray-400 mb-2">Exemplos (clique para preencher)</div>
+                    <div className="flex flex-wrap gap-2">
+                      {personaExamples.map((ex) => (
+                        <button
+                          key={ex.label}
+                          type="button"
+                          onClick={() => {
+                            setEditPersona(ex.persona);
+                            setEditDemographics(ex.demographics);
+                          }}
+                          className="px-3 py-1 rounded-full border border-gray-600 bg-gray-900/60 text-gray-200 text-xs hover:border-blue-500/60 hover:text-white transition-colors"
+                          disabled={isSaving}
+                        >
+                          {ex.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <textarea
+                    value={editPersona}
+                    onChange={(e) => setEditPersona(e.target.value)}
+                    placeholder="Ex: Mulher, 28-40 anos, trabalha e treina após o expediente. Busca praticidade, autoestima e resultados sem complicação."
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 min-h-[80px]"
+                  />
+                </>
               ) : (
                 <p className="text-gray-300">{persona || 'Não definido'}</p>
               )}
@@ -893,6 +1121,31 @@ export default function BrandProfile() {
             <span className="text-2xl">🏷️</span>
             <h2 className="text-xl font-semibold">Keywords & Elementos da Marca</h2>
           </div>
+
+          {isEditing && (
+            <div className="mb-3">
+              <div className="text-xs text-gray-400 mb-2">Exemplos (clique para adicionar)</div>
+              <div className="flex flex-wrap gap-2">
+                {keywordsExamples.map((ex) => (
+                  <button
+                    key={ex.label}
+                    type="button"
+                    onClick={() => {
+                      setEditKeywords((prev) => {
+                        const existing = new Set(prev.map((x) => String(x).toLowerCase()));
+                        const toAdd = ex.items.filter((it) => !existing.has(String(it).toLowerCase()));
+                        return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+                      });
+                    }}
+                    className="px-3 py-1 rounded-full border border-gray-600 bg-gray-900/60 text-gray-200 text-xs hover:border-purple-500/60 hover:text-white transition-colors"
+                    disabled={isSaving}
+                  >
+                    {ex.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
           
           {isEditing && (
             <div className="mb-4 flex gap-2">
@@ -949,12 +1202,31 @@ export default function BrandProfile() {
           </div>
 
           {isEditing ? (
-            <textarea
-              value={editUsp}
-              onChange={(e) => setEditUsp(e.target.value)}
-              placeholder="Ex: Atendimento em até 30 minutos + armações premium com ajuste personalizado e garantia estendida."
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 min-h-[100px]"
-            />
+            <>
+              <div className="mb-3">
+                <div className="text-xs text-gray-400 mb-2">Exemplos (clique para preencher)</div>
+                <div className="flex flex-wrap gap-2">
+                  {uspExamples.map((ex) => (
+                    <button
+                      key={ex.label}
+                      type="button"
+                      onClick={() => setEditUsp(ex.text)}
+                      className="px-3 py-1 rounded-full border border-gray-600 bg-gray-900/60 text-gray-200 text-xs hover:border-blue-500/60 hover:text-white transition-colors"
+                      disabled={isSaving}
+                    >
+                      {ex.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <textarea
+                value={editUsp}
+                onChange={(e) => setEditUsp(e.target.value)}
+                placeholder="Ex: Atendimento em até 30 minutos + armações premium com ajuste personalizado e garantia estendida."
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 min-h-[100px]"
+              />
+            </>
           ) : (
             <p className="text-gray-300">{branding.usp || 'Não definido'}</p>
           )}
@@ -966,6 +1238,31 @@ export default function BrandProfile() {
             <span className="text-2xl">🚫</span>
             <h2 className="text-xl font-semibold">Aversões da Marca</h2>
           </div>
+
+          {isEditing && (
+            <div className="mb-3">
+              <div className="text-xs text-gray-400 mb-2">Exemplos (clique para adicionar)</div>
+              <div className="flex flex-wrap gap-2">
+                {antiKeywordsExamples.map((ex) => (
+                  <button
+                    key={ex.label}
+                    type="button"
+                    onClick={() => {
+                      setEditAntiKeywords((prev) => {
+                        const existing = new Set(prev.map((x) => String(x).toLowerCase()));
+                        const toAdd = ex.items.filter((it) => !existing.has(String(it).toLowerCase()));
+                        return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+                      });
+                    }}
+                    className="px-3 py-1 rounded-full border border-gray-600 bg-gray-900/60 text-gray-200 text-xs hover:border-red-500/60 hover:text-white transition-colors"
+                    disabled={isSaving}
+                  >
+                    {ex.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {isEditing && (
             <div className="mb-4 flex gap-2">
@@ -1021,121 +1318,34 @@ export default function BrandProfile() {
           </div>
 
           {isEditing ? (
-            <textarea
-              value={editNiche}
-              onChange={(e) => setEditNiche(e.target.value)}
-              placeholder="Ex: Ótica premium com foco em tecnologia (lentes e óculos 3D) para público urbano."
-              className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 min-h-[80px]"
-            />
+            <>
+              <div className="mb-3">
+                <div className="text-xs text-gray-400 mb-2">Exemplos (clique para preencher)</div>
+                <div className="flex flex-wrap gap-2">
+                  {nicheExamples.map((ex) => (
+                    <button
+                      key={ex.label}
+                      type="button"
+                      onClick={() => setEditNiche(ex.text)}
+                      className="px-3 py-1 rounded-full border border-gray-600 bg-gray-900/60 text-gray-200 text-xs hover:border-blue-500/60 hover:text-white transition-colors"
+                      disabled={isSaving}
+                    >
+                      {ex.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <textarea
+                value={editNiche}
+                onChange={(e) => setEditNiche(e.target.value)}
+                placeholder="Ex: Ótica premium com foco em tecnologia (lentes e óculos 3D) para público urbano."
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 min-h-[80px]"
+              />
+            </>
           ) : (
             <p className="text-gray-300">{branding.niche || 'Não definido'}</p>
           )}
-
-          <div className="mt-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-200">Categorias do cliente (para calendário)</h3>
-              {!isEditing && (
-                <span className="text-xs text-gray-500">Usado para filtrar datas no prompt</span>
-              )}
-            </div>
-
-            {isEditing ? (
-              <div className="mt-2 w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-3 focus-within:border-blue-500">
-                <div className="flex flex-wrap gap-2">
-                  {editCategoriasNicho.map((c) => (
-                    <span
-                      key={c}
-                      className="inline-flex items-center gap-2 px-2 py-1 rounded-full border border-gray-600 bg-gray-800 text-gray-200 text-xs"
-                    >
-                      <span>{c}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeCategoriaNicho(c)}
-                        className="text-gray-400 hover:text-white"
-                        disabled={isSaving}
-                      >
-                        ✕
-                      </button>
-                    </span>
-                  ))}
-                </div>
-
-                <div className="mt-3">
-                  <input
-                    type="text"
-                    value={categoriasQuery}
-                    onChange={(e) => setCategoriasQuery(e.target.value)}
-                    placeholder={loadingCategoriasSuggestions ? 'Carregando categorias…' : 'Digite para buscar e pressione Enter'}
-                    className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        addCategoriaNicho(categoriasQuery);
-                      }
-                    }}
-                    disabled={isSaving}
-                  />
-                </div>
-
-                {categoriasQuery.trim().length > 0 && (
-                  <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-gray-700 bg-gray-900">
-                    {categoriasSuggestions
-                      .filter((s) => String(s).toLowerCase().includes(categoriasQuery.trim().toLowerCase()))
-                      .slice(0, 12)
-                      .map((s) => {
-                        const label = String(s);
-                        const already = new Set(editCategoriasNicho.map((c) => String(c).toLowerCase())).has(label.toLowerCase());
-                        return (
-                          <button
-                            type="button"
-                            key={label}
-                            className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-800 ${already ? 'text-gray-500' : 'text-gray-200'}`}
-                            onClick={() => {
-                              if (!already) addCategoriaNicho(label);
-                            }}
-                            disabled={isSaving || already}
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                  </div>
-                )}
-
-                <div className="mt-2">
-                  <button
-                    type="button"
-                    onClick={() => addCategoriaNicho(categoriasQuery)}
-                    className="text-xs text-blue-300 hover:text-blue-200 disabled:opacity-60"
-                    disabled={isSaving || !categoriasQuery.trim()}
-                  >
-                    Adicionar “{categoriasQuery.trim() || 'categoria'}”
-                  </button>
-                </div>
-
-                <p className="text-gray-500 text-xs mt-2">
-                  Essas categorias entram no prompt da geração para puxar datas relevantes do Calendário Geral.
-                </p>
-              </div>
-            ) : (
-              <div className="mt-2">
-                {(clientCategoriasNicho || []).length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {(clientCategoriasNicho || []).map((c) => (
-                      <span
-                        key={c}
-                        className="px-3 py-1 rounded-full border border-gray-700 bg-gray-900/60 text-gray-200 text-xs"
-                      >
-                        {c}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-gray-400 text-sm">Nenhuma categoria definida.</p>
-                )}
-              </div>
-            )}
-          </div>
         </div>
 
         {/* Footer Info */}
