@@ -40,68 +40,41 @@ const monthLabelPtBr = (month: number) => {
 
 const categoryColorClass = (category: string) => {
   const key = (category || '').toLowerCase();
-  
-  // 🏢 Negócios, Vendas e Corporativo
-  if (key.includes('b2b') || key.includes('negocio') || key.includes('negócio') || key.includes('empreendedorismo')) return 'border-blue-500/50 bg-blue-500/10 text-blue-200';
-  if (key.includes('varejo') || key.includes('e-commerce') || key.includes('vendas')) return 'border-green-500/50 bg-green-500/10 text-green-200';
-  if (key.includes('marketing') || key.includes('comunicacao') || key.includes('comunicação') || key.includes('mídia')) return 'border-purple-500/50 bg-purple-500/10 text-purple-200';
-  if (key.includes('rh') || key.includes('recursos humanos') || key.includes('carreira') || key.includes('gestao') || key.includes('gestão')) return 'border-indigo-500/50 bg-indigo-500/10 text-indigo-200';
-  if (key.includes('financas') || key.includes('finanças') || key.includes('economia')) return 'border-amber-500/50 bg-amber-500/10 text-amber-200';
-  if (key.includes('logistica') || key.includes('logística') || key.includes('transporte')) return 'border-orange-500/50 bg-orange-500/10 text-orange-200';
-  if (key.includes('industria') || key.includes('indústria') || key.includes('servicos') || key.includes('serviços')) return 'border-slate-500/50 bg-slate-500/10 text-slate-200';
-  if (key.includes('imobiliario') || key.includes('imobiliário')) return 'border-teal-500/50 bg-teal-500/10 text-teal-200';
-  if (key.includes('atendimento') || key.includes('customer experience')) return 'border-sky-500/50 bg-sky-500/10 text-sky-200';
-  
-  // 🏥 Saúde, Bem-estar e Esportes
-  if (key.includes('saude') || key.includes('saúde') || key.includes('medicina')) return 'border-emerald-500/50 bg-emerald-500/10 text-emerald-200';
-  if (key.includes('saude mental') || key.includes('saúde mental') || key.includes('bem-estar')) return 'border-violet-500/50 bg-violet-500/10 text-violet-200';
-  if (key.includes('fitness') || key.includes('esporte')) return 'border-cyan-500/50 bg-cyan-500/10 text-cyan-200';
-  if (key.includes('nutricao') || key.includes('nutrição') || key.includes('alimentacao') || key.includes('alimentação')) return 'border-lime-500/50 bg-lime-500/10 text-lime-200';
-  if (key.includes('odontologia') || key.includes('dentista') || key.includes('estetica') || key.includes('estética')) return 'border-rose-500/50 bg-rose-500/10 text-rose-200';
-  if (key.includes('veterinaria') || key.includes('veterinária') || key.includes('saude animal') || key.includes('saúde animal')) return 'border-fuchsia-500/50 bg-fuchsia-500/10 text-fuchsia-200';
-  
-  // 💻 Tecnologia e Inovação
-  if (key.includes('tecnologia') || key.includes('tech')) return 'border-blue-400/50 bg-blue-400/10 text-blue-300';
-  if (key.includes('inovacao') || key.includes('inovação')) return 'border-purple-400/50 bg-purple-400/10 text-purple-300';
-  if (key.includes('ciencia') || key.includes('ciência')) return 'border-indigo-400/50 bg-indigo-400/10 text-indigo-300';
-  if (key.includes('dev') || key.includes('programacao') || key.includes('programação')) return 'border-slate-400/50 bg-slate-400/10 text-slate-300';
-  if (key.includes('seguranca') || key.includes('segurança') || key.includes('ciberseguranca') || key.includes('cibersegurança')) return 'border-red-500/50 bg-red-500/10 text-red-200';
-  
-  // 🌍 Sociedade, ESG e Causas
-  if (key.includes('esg')) return 'border-green-600/50 bg-green-600/10 text-green-300';
-  if (key.includes('sustentabilidade') || key.includes('meio ambiente')) return 'border-emerald-600/50 bg-emerald-600/10 text-emerald-300';
-  if (key.includes('inclusao') || key.includes('inclusão') || key.includes('diversidade') || key.includes('acessibilidade')) return 'border-pink-500/50 bg-pink-500/10 text-pink-200';
-  if (key.includes('direitos humanos') || key.includes('responsabilidade social') || key.includes('solidariedade')) return 'border-rose-600/50 bg-rose-600/10 text-rose-300';
-  if (key.includes('civico') || key.includes('cívico') || key.includes('politica') || key.includes('política')) return 'border-gray-500/50 bg-gray-500/10 text-gray-300';
-  if (key.includes('mulher') || key.includes('homem') || key.includes('idoso') || key.includes('infantil') || key.includes('familia') || key.includes('família')) return 'border-pink-400/50 bg-pink-400/10 text-pink-300';
-  if (key.includes('institucional')) return 'border-slate-600/50 bg-slate-600/10 text-slate-300';
-  
-  // 🎨 Cultura, Lazer e Estilo de Vida
-  if (key.includes('cultura') || key.includes('historia') || key.includes('história')) return 'border-amber-400/50 bg-amber-400/10 text-amber-300';
-  if (key.includes('cultura pop') || key.includes('geek')) return 'border-fuchsia-400/50 bg-fuchsia-400/10 text-fuchsia-300';
-  if (key.includes('arte') || key.includes('musica') || key.includes('música') || key.includes('literatura') || key.includes('design')) return 'border-purple-600/50 bg-purple-600/10 text-purple-300';
-  if (key.includes('gastronomia') || key.includes('bar')) return 'border-orange-400/50 bg-orange-400/10 text-orange-300';
-  if (key.includes('viagem') || key.includes('turismo') || key.includes('lazer') || key.includes('entretenimento')) return 'border-sky-400/50 bg-sky-400/10 text-sky-300';
-  if (key.includes('moda') || key.includes('estilo de vida')) return 'border-rose-400/50 bg-rose-400/10 text-rose-300';
-  if (key.includes('religioso') || key.includes('espiritualidade')) return 'border-yellow-500/50 bg-yellow-500/10 text-yellow-200';
-  if (key.includes('festa') || key.includes('junina')) return 'border-orange-600/50 bg-orange-600/10 text-orange-300';
-  if (key.includes('regional')) return 'border-lime-600/50 bg-lime-600/10 text-lime-300';
-  
-  // 🚜 Setores Específicos
-  if (key.includes('agronegocio') || key.includes('agronegócio')) return 'border-green-700/50 bg-green-700/10 text-green-300';
-  if (key.includes('educacao') || key.includes('educação') || key.includes('escola')) return 'border-indigo-600/50 bg-indigo-600/10 text-indigo-300';
-  if (key.includes('direito') || key.includes('juridico') || key.includes('jurídico')) return 'border-gray-600/50 bg-gray-600/10 text-gray-300';
-  if (key.includes('construcao') || key.includes('construção') || key.includes('arquitetura') || key.includes('engenharia')) return 'border-stone-500/50 bg-stone-500/10 text-stone-200';
-  if (key.includes('automotivo') || key.includes('aviacao') || key.includes('aviação')) return 'border-zinc-500/50 bg-zinc-500/10 text-zinc-200';
-  if (key.includes('militar')) return 'border-slate-700/50 bg-slate-700/10 text-slate-300';
-  if (key.includes('pet')) return 'border-amber-600/50 bg-amber-600/10 text-amber-300';
-  
-  // 📅 Categorias de Calendário
+
+  // 📅 Categorias de Calendário (fixas)
   if (key.includes('feriado')) return 'border-red-600/50 bg-red-600/10 text-red-300';
   if (key.includes('ponto facultativo')) return 'border-yellow-600/50 bg-yellow-600/10 text-yellow-300';
-  if (key.includes('geral')) return 'border-gray-600 bg-gray-800 text-gray-200';
-  
-  return 'border-gray-600 bg-gray-800 text-gray-200';
+  if (key === 'geral' || key.includes('geral')) return 'border-gray-600 bg-gray-800 text-gray-200';
+
+  const palette = [
+    'border-blue-500/50 bg-blue-500/10 text-blue-200',
+    'border-emerald-500/50 bg-emerald-500/10 text-emerald-200',
+    'border-violet-500/50 bg-violet-500/10 text-violet-200',
+    'border-amber-500/50 bg-amber-500/10 text-amber-200',
+    'border-cyan-500/50 bg-cyan-500/10 text-cyan-200',
+    'border-rose-500/50 bg-rose-500/10 text-rose-200',
+    'border-orange-500/50 bg-orange-500/10 text-orange-200',
+    'border-lime-500/50 bg-lime-500/10 text-lime-200',
+    'border-fuchsia-500/50 bg-fuchsia-500/10 text-fuchsia-200',
+    'border-indigo-500/50 bg-indigo-500/10 text-indigo-200',
+    'border-teal-500/50 bg-teal-500/10 text-teal-200',
+    'border-sky-500/50 bg-sky-500/10 text-sky-200',
+    'border-stone-500/50 bg-stone-500/10 text-stone-200',
+    'border-zinc-500/50 bg-zinc-500/10 text-zinc-200',
+  ];
+
+  const normalized = key
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    hash = (hash * 31 + normalized.charCodeAt(i)) >>> 0;
+  }
+
+  return palette[hash % palette.length] || 'border-gray-600 bg-gray-800 text-gray-200';
 };
 
 const buildBadges = (categorias: string[]) => {
@@ -153,12 +126,24 @@ export default function GeneralCalendarPage() {
   }, [month, year, categoryFilter]);
 
   const allCategories = useMemo(() => {
+    const fixedCategories = ['Feriado', 'Feriado Nacional', 'Ponto Facultativo', 'Geral'];
     const set = new Set<string>();
+
+    for (const c of fixedCategories) set.add(c);
     for (const d of datas) {
       const cats = Array.isArray(d.categorias) ? d.categorias : [];
       for (const c of cats) set.add(String(c));
     }
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
+
+    const fixedOrder = new Map<string, number>(fixedCategories.map((c, i) => [c.toLowerCase(), i]));
+    return Array.from(set).sort((a, b) => {
+      const ai = fixedOrder.get(String(a).toLowerCase());
+      const bi = fixedOrder.get(String(b).toLowerCase());
+      if (ai != null && bi != null) return ai - bi;
+      if (ai != null) return -1;
+      if (bi != null) return 1;
+      return a.localeCompare(b);
+    });
   }, [datas]);
 
   const openCreate = () => {
@@ -371,8 +356,9 @@ export default function GeneralCalendarPage() {
               const dateLabel = (() => {
                 try {
                   if (!d.data || typeof d.data !== 'string') return 'Data inválida';
+                  const raw = d.data.slice(0, 10);
                   // Parse ISO date string (YYYY-MM-DD) sem conversão UTC
-                  const parts = d.data.split('-');
+                  const parts = raw.split('-');
                   if (parts.length !== 3) return d.data;
                   const [year, month, day] = parts.map(Number);
                   if (isNaN(year) || isNaN(month) || isNaN(day)) return d.data;

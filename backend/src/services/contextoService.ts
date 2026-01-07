@@ -23,7 +23,7 @@ export async function getDatasComemorativas(
   }
 
   const query = `
-    SELECT id, data, titulo, categorias, descricao, relevancia
+    SELECT id, data::text as data, titulo, categorias, descricao, relevancia
     FROM datas_comemorativas
     WHERE ${where}
     ORDER BY data ASC, relevancia DESC

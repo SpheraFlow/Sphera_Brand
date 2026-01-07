@@ -634,11 +634,14 @@ export default function ClientsHome() {
                   />
                 </div>
 
-                {nichoQuery.trim().length > 0 && (
+                {!loadingNichoSuggestions && nichoSuggestions.length > 0 && (
                   <div className="mt-2 max-h-40 overflow-auto rounded-lg border border-gray-700 bg-gray-900">
                     {nichoSuggestions
-                      .filter((s) => String(s).toLowerCase().includes(nichoQuery.trim().toLowerCase()))
-                      .slice(0, 12)
+                      .filter((s) =>
+                        nichoQuery.trim()
+                          ? String(s).toLowerCase().includes(nichoQuery.trim().toLowerCase())
+                          : true
+                      )
                       .map((s) => {
                         const label = String(s);
                         const already = new Set(nichoSelected.map((c) => String(c).toLowerCase())).has(label.toLowerCase());

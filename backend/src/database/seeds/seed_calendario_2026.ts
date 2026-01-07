@@ -9,6 +9,33 @@ interface DataComemorativa2026 {
   descricao_orientativa: string;
 }
 
+function computeRelevancia(categorias: string[]): number {
+  const normalized = (categorias || [])
+    .map((c) => String(c || '').trim())
+    .filter(Boolean)
+    .map((c) => c.toLowerCase());
+
+  const has = (needle: string) => normalized.some((c) => c.includes(needle));
+
+  // Hierarquia de calendário
+  if (has('feriado nacional')) return 10;
+  if (has('ponto facultativo')) return 8;
+  if (has('feriado')) return 9;
+
+  // Datas amplas/alta aderência
+  if (has('geral')) return 7;
+
+  // Temas macro (boa aderência para conteúdo estratégico)
+  if (has('esg') || has('sustentabilidade') || has('inclusao') || has('inclusão') || has('diversidade') || has('acessibilidade')) return 7;
+  if (has('saude mental') || has('saúde mental') || has('saude') || has('saúde') || has('medicina')) return 6;
+  if (has('financas') || has('finanças') || has('economia')) return 6;
+  if (has('marketing') || has('comunicacao') || has('comunicação') || has('mídia')) return 6;
+  if (has('tecnologia') || has('inovacao') || has('inovação') || has('ciencia') || has('ciência') || has('dev')) return 6;
+
+  // Default
+  return 5;
+}
+
 async function seedCalendario2026() {
   try {
     console.log('🌱 Iniciando seed do Calendário Estratégico 2026...');
@@ -66,6 +93,8 @@ Paths testados: ${candidatePaths.join(', ')}`
         categoriasLimpas.push('Geral');
       }
 
+      const relevancia = computeRelevancia(categoriasLimpas);
+
       try {
         const result = await db.query(
           `INSERT INTO datas_comemorativas (data, titulo, categorias, descricao, relevancia, origem)
@@ -81,7 +110,7 @@ Paths testados: ${candidatePaths.join(', ')}`
             item.nome,
             JSON.stringify(categoriasLimpas),
             item.descricao_orientativa,
-            5,
+            relevancia,
             'calendario_2026'
           ]
         );

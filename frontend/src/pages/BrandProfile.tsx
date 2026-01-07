@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ChangeEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../services/api';
 import { getArchetypeInfo, JUNG_ARCHETYPES } from '../utils/jungArchetypes';
@@ -32,6 +32,18 @@ interface ClienteData {
   id: string;
   categorias_nicho?: string[];
 }
+
+type BrandingVersionMeta = {
+  id: string;
+  cliente_id: string;
+  branding_id: string | null;
+  reason: string | null;
+  created_at: string;
+};
+
+type BrandingVersionDetail = BrandingVersionMeta & {
+  snapshot: any;
+};
 
 export default function BrandProfile() {
   // ============================================
@@ -83,6 +95,12 @@ export default function BrandProfile() {
   const [categoriasSuggestions, setCategoriasSuggestions] = useState<string[]>([]);
   const [categoriasQuery, setCategoriasQuery] = useState<string>('');
   const [loadingCategoriasSuggestions, setLoadingCategoriasSuggestions] = useState(false);
+
+  const [showVersionsModal, setShowVersionsModal] = useState(false);
+  const [loadingVersions, setLoadingVersions] = useState(false);
+  const [versions, setVersions] = useState<BrandingVersionMeta[]>([]);
+  const [selectedVersion, setSelectedVersion] = useState<BrandingVersionDetail | null>(null);
+  const [restoringVersion, setRestoringVersion] = useState(false);
 
   // Estado para controlar se há rascunho restaurado
   const [hasDraftRestored, setHasDraftRestored] = useState(false);
@@ -148,6 +166,53 @@ export default function BrandProfile() {
       const draftKey = `branding_draft_${clientId}`;
       localStorage.removeItem(draftKey);
       console.log('🗑️ [AUTO-SAVE] Rascunho removido do localStorage');
+    }
+  };
+
+  const openVersionsModal = async () => {
+    if (!clientId) return;
+    setShowVersionsModal(true);
+    setSelectedVersion(null);
+    setLoadingVersions(true);
+    try {
+      const res = await api.get(`/branding/${clientId}/versions`);
+      const list = Array.isArray(res.data?.versions) ? res.data.versions : [];
+      setVersions(list);
+    } catch (_e) {
+      setVersions([]);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
+  const openVersionDetail = async (versionId: string) => {
+    if (!clientId) return;
+    setLoadingVersions(true);
+    try {
+      const res = await api.get(`/branding/${clientId}/versions/${versionId}`);
+      const v = res.data?.version;
+      if (v) setSelectedVersion(v);
+    } finally {
+      setLoadingVersions(false);
+    }
+  };
+
+  const restoreVersion = async (versionId: string) => {
+    if (!clientId) return;
+    const ok = window.confirm('Restaurar esta versão do DNA? Uma cópia do estado atual será salva automaticamente.');
+    if (!ok) return;
+    setRestoringVersion(true);
+    try {
+      await api.post(`/branding/${clientId}/versions/${versionId}/restore`, {});
+      const refreshed = await api.get(`/branding/${clientId}`);
+      setBranding(refreshed.data?.branding || emptyBranding);
+      setIsNewBrand(false);
+      setIsEditing(false);
+      clearLocalStorage();
+      setHasDraftRestored(false);
+      await openVersionsModal();
+    } finally {
+      setRestoringVersion(false);
     }
   };
 
@@ -388,7 +453,7 @@ export default function BrandProfile() {
     setEditAntiKeywords(editAntiKeywords.filter((_, i) => i !== index));
   };
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const filesArray = Array.from(e.target.files).slice(0, 3); // Máximo 3 imagens
       setUploadImages(filesArray);
@@ -702,6 +767,15 @@ export default function BrandProfile() {
               >
                 ✨ Extrair DNA via Upload
               </button>
+
+              <button
+                onClick={openVersionsModal}
+                className="bg-gray-700 hover:bg-gray-600 px-6 py-3 rounded-lg font-semibold transition-colors"
+                disabled={!clientId}
+                type="button"
+              >
+                🕘 Versões
+              </button>
               
               {!isEditing ? (
                 <button
@@ -732,127 +806,137 @@ export default function BrandProfile() {
             </div>
           </div>
 
-          <div className="mt-6 bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="text-sm text-gray-400">Categorias do cliente</div>
-                <div className="text-lg font-semibold">Usadas para filtrar datas no Calendário e enriquecer o prompt</div>
-              </div>
-              <div className="text-xs text-gray-500">{(isEditing ? editCategoriasNicho : clientCategoriasNicho).length} selecionadas</div>
-            </div>
+          <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl p-5">
+              <div className="flex items-start gap-3">
+                <span className="text-2xl">{archetypeInfo?.emoji || '👑'}</span>
+                <div className="flex-1">
+                  <div className="text-sm text-gray-400">Arquétipo da Marca</div>
 
-            {isEditing ? (
-              <div className="mt-4">
-                <div className="flex flex-wrap gap-2">
-                  {editCategoriasNicho.map((c) => (
-                    <span key={c} className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-gray-600 bg-gray-900/60 text-gray-200 text-xs">
-                      <span>{c}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeCategoriaNicho(c)}
-                        className="text-gray-400 hover:text-white"
-                        disabled={isSaving}
+                  {isEditing ? (
+                    <div className="mt-2">
+                      <select
+                        value={editArchetype}
+                        onChange={(e) => setEditArchetype(e.target.value)}
+                        className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500"
                       >
-                        ✕
-                      </button>
-                    </span>
-                  ))}
-                </div>
+                        <option value="">Selecione um arquétipo (ex: Criador)</option>
+                        {JUNG_ARCHETYPES.map((a) => (
+                          <option key={a.key} value={a.key}>
+                            {a.emoji} {a.label}
+                          </option>
+                        ))}
+                      </select>
 
-                <div className="mt-3">
-                  <input
-                    type="text"
-                    value={categoriasQuery}
-                    onChange={(e) => setCategoriasQuery(e.target.value)}
-                    placeholder={loadingCategoriasSuggestions ? 'Carregando categorias…' : 'Busque e selecione uma categoria'}
-                    className="w-full bg-gray-900/60 border border-gray-700 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 text-sm"
-                    disabled={isSaving}
-                  />
-                </div>
-
-                <div className="mt-2 max-h-48 overflow-auto rounded-lg border border-gray-700 bg-gray-900">
-                  {categoriasSuggestions
-                    .filter((s) => String(s).toLowerCase().includes(categoriasQuery.trim().toLowerCase()))
-                    .slice(0, 30)
-                    .map((s) => {
-                      const label = String(s);
-                      const already = new Set(editCategoriasNicho.map((c) => String(c).toLowerCase())).has(label.toLowerCase());
-                      return (
-                        <button
-                          type="button"
-                          key={label}
-                          className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-800 ${already ? 'text-gray-500' : 'text-gray-200'}`}
-                          onClick={() => {
-                            if (!already) addCategoriaNicho(label);
-                          }}
-                          disabled={isSaving || already}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-
-                  {(!loadingCategoriasSuggestions && categoriasSuggestions.length === 0) && (
-                    <div className="px-3 py-3 text-sm text-gray-400">
-                      Nenhuma categoria disponível.
+                      {archetypeInfo && (
+                        <div className="mt-2 text-sm text-gray-300">
+                          <div className="text-gray-200 font-semibold">{archetypeInfo.label}</div>
+                          <div className="text-gray-400">{archetypeInfo.description}</div>
+                          <div className="text-gray-400 mt-1">Tom sugerido: {archetypeInfo.tone_hint}</div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mt-2">
+                      {archetypeInfo ? (
+                        <div>
+                          <div className="text-xl font-bold text-purple-300">{archetypeInfo.label}</div>
+                          <div className="mt-1 text-sm text-gray-300">{archetypeInfo.description}</div>
+                          <div className="mt-1 text-sm text-gray-400">Tom sugerido: {archetypeInfo.tone_hint}</div>
+                        </div>
+                      ) : (
+                        <div className="text-xl font-bold text-gray-500">Arquétipo não definido</div>
+                      )}
                     </div>
                   )}
                 </div>
-
-                <div className="mt-2 text-xs text-gray-500">Selecione as categorias existentes.</div>
               </div>
-            ) : (
-              <div className="mt-3">
-                {(clientCategoriasNicho || []).length > 0 ? (
+            </div>
+
+            <div className="bg-gradient-to-r from-blue-500/15 to-emerald-500/15 border border-blue-500/30 rounded-xl p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm text-gray-400">Categorias do cliente</div>
+                  <div className="text-lg font-semibold">Nicho (filtro do Calendário + contexto do prompt)</div>
+                </div>
+                <div className="text-xs text-gray-500">{(isEditing ? editCategoriasNicho : clientCategoriasNicho).length} selecionadas</div>
+              </div>
+
+              {isEditing ? (
+                <div className="mt-4">
                   <div className="flex flex-wrap gap-2">
-                    {(clientCategoriasNicho || []).map((c) => (
-                      <span key={c} className="px-3 py-1 rounded-full border border-gray-700 bg-gray-900/60 text-gray-200 text-xs">
-                        {c}
+                    {editCategoriasNicho.map((c) => (
+                      <span key={c} className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-200 text-xs">
+                        <span>{c}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeCategoriaNicho(c)}
+                          className="text-blue-200/70 hover:text-white"
+                          disabled={isSaving}
+                        >
+                          ✕
+                        </button>
                       </span>
                     ))}
                   </div>
-                ) : (
-                  <div className="text-sm text-gray-400">Nenhuma categoria definida.</div>
-                )}
-              </div>
-            )}
-          </div>
-          
-          <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl p-4">
-            <div className="flex items-start gap-3">
-              <span className="text-2xl">{archetypeInfo?.emoji || '👑'}</span>
-              <div className="flex-1">
-                <div className="text-sm text-gray-400">Arquétipo da Marca</div>
 
-                {isEditing ? (
-                  <div className="mt-2">
-                    <select
-                      value={editArchetype}
-                      onChange={(e) => setEditArchetype(e.target.value)}
-                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500"
-                    >
-                      <option value="">Selecione um arquétipo (ex: Criador)</option>
-                      {JUNG_ARCHETYPES.map((a) => (
-                        <option key={a.key} value={a.key}>
-                          {a.emoji} {a.label}
-                        </option>
-                      ))}
-                    </select>
+                  <div className="mt-3">
+                    <input
+                      type="text"
+                      value={categoriasQuery}
+                      onChange={(e) => setCategoriasQuery(e.target.value)}
+                      placeholder={loadingCategoriasSuggestions ? 'Carregando categorias…' : 'Busque e selecione uma categoria'}
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
+                      disabled={isSaving}
+                    />
+                  </div>
 
-                    {archetypeInfo && (
-                      <div className="mt-2 text-sm text-gray-300">
-                        <div className="text-gray-200 font-semibold">{archetypeInfo.label}</div>
-                        <div className="text-gray-400">{archetypeInfo.description}</div>
-                        <div className="text-gray-400 mt-1">Tom sugerido: {archetypeInfo.tone_hint}</div>
+                  <div className="mt-2 max-h-48 overflow-auto rounded-lg border border-gray-700 bg-gray-900">
+                    {categoriasSuggestions
+                      .filter((s) => String(s).toLowerCase().includes(categoriasQuery.trim().toLowerCase()))
+                      .slice(0, 30)
+                      .map((s) => {
+                        const label = String(s);
+                        const already = new Set(editCategoriasNicho.map((c) => String(c).toLowerCase())).has(label.toLowerCase());
+                        return (
+                          <button
+                            type="button"
+                            key={label}
+                            className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-800 ${already ? 'text-gray-500' : 'text-gray-200'}`}
+                            onClick={() => {
+                              if (!already) addCategoriaNicho(label);
+                            }}
+                            disabled={isSaving || already}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+
+                    {(!loadingCategoriasSuggestions && categoriasSuggestions.length === 0) && (
+                      <div className="px-3 py-3 text-sm text-gray-400">
+                        Nenhuma categoria disponível.
                       </div>
                     )}
                   </div>
-                ) : (
-                  <div className={`text-xl font-bold ${branding.archetype ? 'text-purple-300' : 'text-gray-500'}`}>
-                    {branding?.archetype || 'Arquétipo não definido'}
-                  </div>
-                )}
-              </div>
+
+                  <div className="mt-2 text-xs text-gray-500">Selecione as categorias existentes.</div>
+                </div>
+              ) : (
+                <div className="mt-3">
+                  {(clientCategoriasNicho || []).length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {(clientCategoriasNicho || []).map((c) => (
+                        <span key={c} className="px-3 py-1 rounded-full border border-blue-500/30 bg-blue-500/10 text-blue-200 text-xs">
+                          {c}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-400">Nenhuma categoria definida.</div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1358,18 +1442,12 @@ export default function BrandProfile() {
 
       {/* Modal de Upload */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-800 border border-gray-700 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-4xl border border-gray-700">
             {/* Header do Modal */}
             <div className="sticky top-0 bg-gray-800 border-b border-gray-700 p-6 flex items-center justify-between">
               <div>
-                <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                  <span className="text-3xl">✨</span>
-                  Extrair DNA via Upload
-                </h2>
-                <p className="text-gray-400 text-sm mt-1">
-                  Envie até 3 imagens e legendas de exemplo
-                </p>
+                <h2 className="text-2xl font-bold">Extrair DNA via Upload</h2>
               </div>
               <button
                 onClick={() => setShowUploadModal(false)}
@@ -1453,6 +1531,88 @@ export default function BrandProfile() {
                 >
                   {isUploading ? '🔄 Processando...' : '✨ Extrair DNA'}
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showVersionsModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-gray-800 rounded-xl p-6 w-full max-w-4xl border border-gray-700">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-bold">Versões do DNA</h2>
+                <p className="text-gray-400 text-sm mt-1">Histórico automático do que foi salvo/restaurado</p>
+              </div>
+              <button
+                onClick={() => setShowVersionsModal(false)}
+                className="text-gray-400 hover:text-white"
+                type="button"
+                disabled={restoringVersion}
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="border border-gray-700 rounded-lg overflow-hidden">
+                <div className="px-4 py-3 bg-gray-900/60 border-b border-gray-700">
+                  <div className="text-sm text-gray-300 font-semibold">Lista</div>
+                </div>
+                <div className="max-h-[420px] overflow-auto">
+                  {loadingVersions ? (
+                    <div className="px-4 py-4 text-sm text-gray-400">Carregando…</div>
+                  ) : versions.length === 0 ? (
+                    <div className="px-4 py-4 text-sm text-gray-400">Nenhuma versão encontrada ainda.</div>
+                  ) : (
+                    versions.map((v) => (
+                      <div key={v.id} className="px-4 py-3 border-b border-gray-700">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm text-gray-200 font-semibold">
+                              {new Date(v.created_at).toLocaleString('pt-BR')}
+                            </div>
+                            <div className="text-xs text-gray-500">{v.reason || '—'}</div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              className="text-xs px-3 py-1 rounded-lg bg-gray-700 hover:bg-gray-600"
+                              onClick={() => openVersionDetail(v.id)}
+                              disabled={loadingVersions || restoringVersion}
+                            >
+                              Ver
+                            </button>
+                            <button
+                              type="button"
+                              className="text-xs px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-60"
+                              onClick={() => restoreVersion(v.id)}
+                              disabled={loadingVersions || restoringVersion}
+                            >
+                              {restoringVersion ? 'Restaurando…' : 'Restaurar'}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="border border-gray-700 rounded-lg overflow-hidden">
+                <div className="px-4 py-3 bg-gray-900/60 border-b border-gray-700">
+                  <div className="text-sm text-gray-300 font-semibold">Snapshot</div>
+                </div>
+                <div className="max-h-[420px] overflow-auto">
+                  {selectedVersion ? (
+                    <pre className="px-4 py-4 text-xs text-gray-200 whitespace-pre-wrap">
+                      {JSON.stringify(selectedVersion.snapshot, null, 2)}
+                    </pre>
+                  ) : (
+                    <div className="px-4 py-4 text-sm text-gray-400">Selecione uma versão para visualizar.</div>
+                  )}
+                </div>
               </div>
             </div>
           </div>

@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "seed:calendario": "ts-node src/database/seeds/seed_calendario_2026.ts"
+  }
+}

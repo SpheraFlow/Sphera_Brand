@@ -8,6 +8,57 @@ import { existsSync } from "fs";
 
 const router = Router();
 
+type BrandingRow = {
+  id: string;
+  cliente_id: string;
+  visual_style: any;
+  tone_of_voice: any;
+  audience: any;
+  keywords: string[] | null;
+  archetype?: string | null;
+  usp?: string | null;
+  anti_keywords?: string[] | null;
+  niche?: string | null;
+  updated_at?: string;
+};
+
+const snapshotBrandingVersion = async (opts: {
+  clienteId: string;
+  brandingRow: BrandingRow;
+  reason?: string;
+}) => {
+  const versionId = generateUUID();
+  await db.query(
+    `INSERT INTO branding_versions (id, cliente_id, branding_id, snapshot, reason, created_at)
+     VALUES ($1, $2, $3, $4, $5, NOW())`,
+    [
+      versionId,
+      opts.clienteId,
+      opts.brandingRow.id,
+      JSON.stringify({
+        id: opts.brandingRow.id,
+        cliente_id: opts.brandingRow.cliente_id,
+        visual_style: opts.brandingRow.visual_style || {},
+        tone_of_voice: opts.brandingRow.tone_of_voice || {},
+        audience: opts.brandingRow.audience || {},
+        keywords: opts.brandingRow.keywords || [],
+        archetype: opts.brandingRow.archetype || null,
+        usp: opts.brandingRow.usp || null,
+        anti_keywords: opts.brandingRow.anti_keywords || [],
+        niche: opts.brandingRow.niche || null,
+        updated_at: opts.brandingRow.updated_at || null,
+      }),
+      opts.reason || null,
+    ]
+  );
+  return versionId;
+};
+
+const getCurrentBrandingRow = async (clienteId: string): Promise<BrandingRow | null> => {
+  const result = await db.query(`SELECT * FROM branding WHERE cliente_id = $1`, [clienteId]);
+  return result.rows[0] || null;
+};
+
 // Função robusta para limpar e fazer parse do JSON da resposta do Gemini
 const cleanAndParseBrandingJSON = (text: string) => {
   try {
@@ -201,6 +252,124 @@ Retorne APENAS o JSON, sem texto adicional.`;
   }
 });
 
+// GET /branding/:clienteId/versions - Lista versões (mais recentes primeiro)
+router.get("/branding/:clienteId/versions", async (req: Request, res: Response) => {
+  try {
+    const { clienteId } = req.params;
+
+    if (!clienteId) {
+      return res.status(400).json({ success: false, error: "clienteId é obrigatório" });
+    }
+
+    const result = await db.query(
+      `SELECT id, cliente_id, branding_id, reason, created_at
+       FROM branding_versions
+       WHERE cliente_id = $1
+       ORDER BY created_at DESC`,
+      [clienteId]
+    );
+
+    return res.status(200).json({ success: true, clienteId, versions: result.rows });
+  } catch (error) {
+    console.error("Erro ao listar versões do branding:", error);
+    return res.status(500).json({ success: false, error: "Erro ao listar versões do branding" });
+  }
+});
+
+// GET /branding/:clienteId/versions/:versionId - Retorna snapshot de uma versão
+router.get("/branding/:clienteId/versions/:versionId", async (req: Request, res: Response) => {
+  try {
+    const { clienteId, versionId } = req.params;
+
+    if (!clienteId || !versionId) {
+      return res.status(400).json({ success: false, error: "clienteId e versionId são obrigatórios" });
+    }
+
+    const result = await db.query(
+      `SELECT id, cliente_id, branding_id, snapshot, reason, created_at
+       FROM branding_versions
+       WHERE id = $1 AND cliente_id = $2`,
+      [versionId, clienteId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: "Versão não encontrada" });
+    }
+
+    return res.status(200).json({ success: true, clienteId, version: result.rows[0] });
+  } catch (error) {
+    console.error("Erro ao buscar versão do branding:", error);
+    return res.status(500).json({ success: false, error: "Erro ao buscar versão do branding" });
+  }
+});
+
+// POST /branding/:clienteId/versions/:versionId/restore - Restaura uma versão
+router.post("/branding/:clienteId/versions/:versionId/restore", async (req: Request, res: Response) => {
+  try {
+    const { clienteId, versionId } = req.params;
+
+    if (!clienteId || !versionId) {
+      return res.status(400).json({ success: false, error: "clienteId e versionId são obrigatórios" });
+    }
+
+    const current = await getCurrentBrandingRow(clienteId);
+    if (!current) {
+      return res.status(404).json({ success: false, error: "Branding não encontrado para este cliente" });
+    }
+
+    const versionResult = await db.query(
+      `SELECT snapshot
+       FROM branding_versions
+       WHERE id = $1 AND cliente_id = $2`,
+      [versionId, clienteId]
+    );
+
+    if (versionResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: "Versão não encontrada" });
+    }
+
+    // Snapshot do estado atual antes de restaurar
+    await snapshotBrandingVersion({
+      clienteId,
+      brandingRow: current,
+      reason: `auto: before restore ${versionId}`,
+    });
+
+    const snapshot = versionResult.rows[0]?.snapshot || {};
+    const visual_style = snapshot.visual_style || {};
+    const tone_of_voice = snapshot.tone_of_voice || {};
+    const audience = snapshot.audience || {};
+    const keywords = snapshot.keywords || [];
+    const archetype = snapshot.archetype || null;
+    const usp = snapshot.usp || null;
+    const anti_keywords = snapshot.anti_keywords || [];
+    const niche = snapshot.niche || null;
+
+    await db.query(
+      `UPDATE branding
+       SET visual_style = $1, tone_of_voice = $2, audience = $3, keywords = $4,
+           archetype = $5, usp = $6, anti_keywords = $7, niche = $8, updated_at = NOW()
+       WHERE cliente_id = $9`,
+      [
+        JSON.stringify(visual_style),
+        JSON.stringify(tone_of_voice),
+        JSON.stringify(audience),
+        keywords,
+        archetype,
+        usp,
+        anti_keywords,
+        niche,
+        clienteId,
+      ]
+    );
+
+    return res.status(200).json({ success: true, message: "Versão restaurada com sucesso" });
+  } catch (error) {
+    console.error("Erro ao restaurar versão do branding:", error);
+    return res.status(500).json({ success: false, error: "Erro ao restaurar versão do branding" });
+  }
+});
+
 // GET /branding/:clienteId - Retorna DNA de branding consolidado do cliente
 router.get("/branding/:clienteId", async (req: Request, res: Response) => {
   try {
@@ -315,6 +484,18 @@ router.put("/branding/:clienteId", async (req: Request, res: Response) => {
         message: "Branding criado com sucesso",
         brandingId
       });
+    }
+
+    // Snapshot automático antes de atualizar
+    const current = existingResult.rows[0] as BrandingRow;
+    try {
+      await snapshotBrandingVersion({
+        clienteId,
+        brandingRow: current,
+        reason: "auto: before update",
+      });
+    } catch (e) {
+      console.error("⚠️ Falha ao salvar versão do branding (continua update):", e);
     }
 
     // Atualizar existente (Brand DNA 2.0)
