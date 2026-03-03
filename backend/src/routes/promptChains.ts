@@ -204,7 +204,7 @@ router.post("/prompt-chains/execute/:chainId", async (req: Request, res: Respons
       let result;
       let text = "";
 
-      const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+      const modelsToTry = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
 
       for (const modelName of modelsToTry) {
         try {

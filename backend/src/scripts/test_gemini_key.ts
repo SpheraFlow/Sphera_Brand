@@ -19,7 +19,7 @@ async function testGeminiKey() {
   const genAI = new GoogleGenerativeAI(apiKey);
   
   // Lista de modelos para testar
-  const modelsToTest = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+  const modelsToTest = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
 
   for (const modelName of modelsToTest) {
     console.log(`\n🤖 Testando modelo: ${modelName}...`);

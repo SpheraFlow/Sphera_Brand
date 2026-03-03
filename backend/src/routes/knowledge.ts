@@ -485,7 +485,7 @@ router.post("/test-ai", async (_req: Request, res: Response): Promise<void> => {
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const prompt = `Analise estas imagens visualmente. Aja como um especialista de branding.
 

@@ -133,7 +133,7 @@ router.post("/process-post", (req: Request, res: Response, next: NextFunction) =
             let result;
             let responseText = "";
 
-            const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+            const modelsToTry = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
 
             for (const modelName of modelsToTry) {
                 try {
