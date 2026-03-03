@@ -178,8 +178,13 @@ export default function DeliveriesPage() {
             setLoading(true);
             // Backend não tem ainda tabela 'deliveries', mas tem 'presentations' (history)
             // Vou usar History como proxy de entregas já geradas
-            const history = await presentationService.getHistory(clientId!);
-            setDeliveries(history);
+            try {
+                const history = await presentationService.getHistory(clientId!);
+                setDeliveries(history);
+            } catch (errHist) {
+                console.error("Warning: Falha ao carregar historico de apresentacoes", errHist);
+                setDeliveries([]);
+            }
 
             // Pegar ID do último calendário para habilitar os botões de Excel e Defesa
             try {
