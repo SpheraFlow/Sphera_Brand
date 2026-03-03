@@ -48,3 +48,7 @@ storage/*
 # Temporary
 .tmp/
 tmp/
+
+# Database data
+docker/postgres_data/
+DATABASE_MIGRATION.sql
