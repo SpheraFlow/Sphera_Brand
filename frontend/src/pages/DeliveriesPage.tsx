@@ -10,7 +10,7 @@ import {
     Plus,
     Loader2
 } from 'lucide-react';
-import api, { presentationService } from '../services/api';
+import api, { presentationService, calendarService } from '../services/api';
 import PresentationGenerator from '../components/PresentationGenerator';
 import toast from 'react-hot-toast';
 
@@ -183,14 +183,27 @@ export default function DeliveriesPage() {
 
             // Pegar ID do último calendário para habilitar os botões de Excel e Defesa
             try {
-                // Passar includeDrafts=true caso o calendário atual ainda seja um rascunho
-                const calResp = await api.get(`/calendars/${clientId}?includeDrafts=true`);
-                if (calResp.data?.calendar?.id) {
-                    setLatestCalendarId(calResp.data.calendar.id);
-                    setLatestCalendarObj(calResp.data.calendar);
+                // Usar endpoint /list que retorna todos os calendários incluindo rascunhos
+                const calendars = await calendarService.listCalendars(clientId!, true);
+                if (calendars.length > 0) {
+                    const latest = calendars[0]; // já ordenado por criado_em DESC
+                    setLatestCalendarId(latest.id);
+
+                    // Buscar o array de posts completo desse calendário específico passando o mês
+                    try {
+                        const calDetailResp = await api.get(`/calendars/${clientId}?month=${encodeURIComponent(latest.mes)}&includeDrafts=true`);
+                        if (calDetailResp.data?.calendar) {
+                            setLatestCalendarObj(calDetailResp.data.calendar);
+                        } else {
+                            // Fallback manual 
+                            setLatestCalendarObj({ id: latest.id, mes: latest.mes, posts: [] });
+                        }
+                    } catch (errDetail) {
+                        setLatestCalendarObj({ id: latest.id, mes: latest.mes, posts: [] });
+                    }
                 }
             } catch (_calErr) {
-                // Nenhum calendário publicado ainda — latestCalendarId permanece null
+                // Nenhum calendário — latestCalendarId permanece null
             }
 
             // TODO: Pegar nome do cliente em api.getClients() ou similar, 
@@ -311,8 +324,8 @@ export default function DeliveriesPage() {
                                         {Array.isArray(delivery.arquivos) && delivery.arquivos.length > 0 && (
                                             <button
                                                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-colors font-medium ${isExcel
-                                                        ? 'bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/30'
-                                                        : 'bg-gray-700 hover:bg-gray-600 text-white'
+                                                    ? 'bg-green-600/20 hover:bg-green-600/30 text-green-400 border border-green-500/30'
+                                                    : 'bg-gray-700 hover:bg-gray-600 text-white'
                                                     }`}
                                                 onClick={() => {
                                                     const url = delivery.arquivos[0].startsWith('http')
