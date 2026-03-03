@@ -312,13 +312,33 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
         # Deduplicar e manter somente o primeiro bloco de 7 semanas (ordem)
         # Precisamos de até 7 semanas para meses que começam no sábado ou domingo
         rows = sorted(set(rows))
-        # Alguns templates podem ter hits em linhas que não são calendário; limitar para 10 <= r <= 80
+        # Alguns templates podem ter hits em linhas que não são calendário; limitar para 6 <= r <= 80
         rows = [r for r in rows if 6 <= r <= 80]
+
+        # Detectar também linhas de semana parcial (quando o mês começa no sábado ou domingo,
+        # a primeira linha de semana só tém 1-2 dias, abaixo do limiar de hits >= 2).
+        # Buscamos a linha imediatamente anterior à primeira semana completa detectada.
+        if rows:
+            first_full_row = rows[0]
+            partial_re = re.compile(r"\((\d{1,2})\)")
+            partial_candidate = None
+            # Varrer linhas anteriores à primeira semana completa para um cabeçalho parcial
+            for r in range(max(1, first_full_row - 20), first_full_row):
+                for col in col_letters:
+                    v = ws[f"{col}{r}"].value
+                    if v and partial_re.search(str(v)):
+                        partial_candidate = r
+                        break
+                if partial_candidate:
+                    break
+            if partial_candidate and partial_candidate not in rows:
+                rows = [partial_candidate] + rows
+
         return rows[:7]
 
     week_start_rows = _detect_week_start_rows()
     if not week_start_rows:
-        week_start_rows = [9, 14, 20, 26, 32, 38, 44]
+        week_start_rows = [9, 14, 20, 26, 32, 38]
 
     _, days_in_month = calendar.monthrange(year_num, month_num)
 
@@ -338,25 +358,23 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
     first_weekday_mon0 = datetime(year_num, month_num, 1).weekday()  # 0=Seg ... 6=Dom
 
     # Calcular quantas linhas de semana são necessárias para cobrir todos os dias do mês.
-    # Um mês que começa no sábado (dow=5) ou domingo (dow=6) pode precisar de 7 linhas.
-    # Exemplo: Março 2026 começa no domingo (dow=6): semana 1 fica com 1 dia, precisando 6 semanas extras = 7 total.
+    # Um mês que começa no sábado (dow=5) ou domingo (dow=6) pode precisar de até 6 linhas.
     days_in_first_row = (7 - first_weekday_mon0) if first_weekday_mon0 != 0 else 7
     if first_weekday_mon0 == 0:
-        # mês começa na segunda — nenhuma semana parcial
         weeks_needed = (days_in_month + 6) // 7
     else:
         remaining_after_first = days_in_month - days_in_first_row
         weeks_needed = 1 + (remaining_after_first + 6) // 7 if remaining_after_first > 0 else 1
 
-    # Se o template não tem slots suficientes, sintetizar linhas extras usando o passo detectado.
+    # Só sintetizar linhas extras se necessário (caso o template seja mais curto que o mês exige)
     while len(week_start_rows) < weeks_needed:
         if len(week_start_rows) >= 2:
             step = week_start_rows[-1] - week_start_rows[-2]
         else:
-            step = 6  # fallback conservador
+            step = 6
         next_row = week_start_rows[-1] + step
         week_start_rows.append(next_row)
-        print(f"[INFO] Sintetizando linha de semana extra: row={next_row} (semanas necessárias={weeks_needed})")
+        print(f"[INFO] Linha de semana extra sintetizada: row={next_row} (necessárias={weeks_needed})")
 
     day_to_slot = {}
     current_day = 1
