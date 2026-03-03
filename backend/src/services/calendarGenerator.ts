@@ -411,7 +411,7 @@ export const generateCalendarForMonth = async (opts: GenerateMonthOptions) => {
     const prompt = promptBody.replace(/\{\{([A-Z_]+)\}\}/g, (_, k) => tokenMap[k] ?? `{{${k}}}`);
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
-    const modelsToTry = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
 
     let responseText = "";
     let usedModelName: string | null = null;

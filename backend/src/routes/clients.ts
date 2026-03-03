@@ -378,7 +378,7 @@ router.get("/:clientId/dashboard-metrics", async (req: AuthRequest, res: Respons
     const USD_TO_BRL = 5.80;
     type ModelPricing = { input: number; output: number };
     const MODEL_PRICING: Record<string, ModelPricing> = {
-      'gemini-2.0-flash': { input: 0.15, output: 1.25 },
+      'gemini-2.5-flash': { input: 0.15, output: 1.25 },
       'gemini-2.0-flash': { input: 0.075, output: 0.30 },
       'gemini-1.5-flash': { input: 0.075, output: 0.30 },
       'gemini-1.5-pro': { input: 1.25, output: 5.00 },
