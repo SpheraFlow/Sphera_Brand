@@ -65,7 +65,7 @@ const cleanAndParseBrandingJSON = (text: string) => {
     // 1. Tentar encontrar o primeiro '{' e o último '}'
     const firstBrace = text.indexOf('{');
     const lastBrace = text.lastIndexOf('}');
-    
+
     if (firstBrace !== -1 && lastBrace !== -1) {
       const jsonCandidate = text.substring(firstBrace, lastBrace + 1);
       try {
@@ -76,7 +76,7 @@ const cleanAndParseBrandingJSON = (text: string) => {
         console.warn("⚠️ Falha no parse do método 1, tentando método 2...");
       }
     }
-    
+
     // 2. Fallback: Limpar markdown e tentar parse
     const cleaned = text.replace(/```json/g, "").replace(/```/g, "").trim();
     const parsed = JSON.parse(cleaned);
@@ -252,8 +252,8 @@ Retorne APENAS o JSON, sem texto adicional.`;
   }
 });
 
-// GET /branding/:clienteId/versions - Lista versões (mais recentes primeiro)
-router.get("/branding/:clienteId/versions", async (req: Request, res: Response) => {
+// GET /:clienteId/versions - Lista versões (mais recentes primeiro)
+router.get("/:clienteId/versions", async (req: Request, res: Response) => {
   try {
     const { clienteId } = req.params;
 
@@ -276,8 +276,8 @@ router.get("/branding/:clienteId/versions", async (req: Request, res: Response) 
   }
 });
 
-// GET /branding/:clienteId/versions/:versionId - Retorna snapshot de uma versão
-router.get("/branding/:clienteId/versions/:versionId", async (req: Request, res: Response) => {
+// GET /:clienteId/versions/:versionId - Retorna snapshot de uma versão
+router.get("/:clienteId/versions/:versionId", async (req: Request, res: Response) => {
   try {
     const { clienteId, versionId } = req.params;
 
@@ -303,8 +303,8 @@ router.get("/branding/:clienteId/versions/:versionId", async (req: Request, res:
   }
 });
 
-// POST /branding/:clienteId/versions/:versionId/restore - Restaura uma versão
-router.post("/branding/:clienteId/versions/:versionId/restore", async (req: Request, res: Response) => {
+// POST /:clienteId/versions/:versionId/restore - Restaura uma versão
+router.post("/:clienteId/versions/:versionId/restore", async (req: Request, res: Response) => {
   try {
     const { clienteId, versionId } = req.params;
 
@@ -371,7 +371,7 @@ router.post("/branding/:clienteId/versions/:versionId/restore", async (req: Requ
 });
 
 // GET /branding/:clienteId - Retorna DNA de branding consolidado do cliente
-router.get("/branding/:clienteId", async (req: Request, res: Response) => {
+router.get("/:clienteId", async (req: Request, res: Response) => {
   try {
     const { clienteId } = req.params;
 
@@ -427,7 +427,7 @@ router.get("/branding/:clienteId", async (req: Request, res: Response) => {
 });
 
 // PUT /api/branding/:clienteId - Salva branding definitivo (Brand DNA 2.0)
-router.put("/branding/:clienteId", async (req: Request, res: Response) => {
+router.put("/:clienteId", async (req: Request, res: Response) => {
   try {
     const { clienteId } = req.params;
     const {

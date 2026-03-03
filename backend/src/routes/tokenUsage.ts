@@ -1,10 +1,14 @@
-import { Router, Request, Response } from "express";
+import { Router, Response } from "express";
 import { getTokenUsage, resetTokenUsage } from "../utils/tokenTracker";
+import { requireAuth, requirePermission, AuthRequest } from "../middlewares/requireAuth";
 
 const router = Router();
 
+// Todas as rotas de Token Usage exigem autenticação
+router.use(requireAuth);
+
 // GET /api/token-usage/:clienteId - Consultar uso de tokens de um cliente
-router.get("/:clienteId", async (req: Request, res: Response) => {
+router.get("/:clienteId", requirePermission('dashboard_view'), async (req: AuthRequest, res: Response) => {
   try {
     const { clienteId } = req.params;
 
@@ -37,8 +41,9 @@ router.get("/:clienteId", async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/token-usage/:clienteId/reset - Resetar contador de tokens
-router.post("/:clienteId/reset", async (req: Request, res: Response) => {
+// POST /api/token-usage/:clienteId/reset - Resetar contador de tokens (Apenas admin via dashboard_view ou clients_manage)
+// Vamos usar clients_manage pois envolver resetar billing/gastos
+router.post("/:clienteId/reset", requirePermission('clients_manage'), async (req: AuthRequest, res: Response) => {
   try {
     const { clienteId } = req.params;
 

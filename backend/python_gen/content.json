@@ -1,34 +1,30 @@
 {
-  "clienteId": "80ca5fb3-0cac-44b3-8478-23bbf04f44c9",
-  "months": [
-    "fevereiro 2026",
-    "janeiro 2026"
-  ],
   "defesa": {
-    "titulo": "PLANEJA\nMENTO",
-    "subtitulo": "CAMPANHA MENSAL",
-    "texto": "Clique em \"Preencher com IA\" para gerar uma defesa estratégica baseada no seu calendário."
+    "subtitulo": "Conexão, Valor e Reconhecimento.",
+    "texto_longo": "Nossa estratégia para Março de 2026 foca em estabelecer a marca como uma voz relevante e empática, combinando celebrações importantes com a oferta de valor prático. O objetivo é construir uma conexão genuína com o público, mostrando que a marca entende suas aspirações e desafios, seja na vida pessoal ou profissional. A abordagem é dupla: inspirar e capacitar.\n\nUtilizaremos datas comemorativas, como o Dia Internacional da Mulher, para fortalecer o posicionamento da marca em causas sociais importantes, gerando engajamento emocional com um post estático de homenagem. Complementaremos com conteúdo educacional e prático, como o carrossel \"3 Dicas para Organizar o Seu Dia\", que visa oferecer soluções tangíveis para problemas cotidianos, posicionando a marca como uma fonte confiável de informação útil e aplicável.\n\nA combinação desses formatos e temas visa não apenas aumentar o alcance e o engajamento, mas também solidificar a percepção de uma marca que se importa e entrega valor. Ao alternar entre conteúdo inspirador e prático, buscaremos gerar conversas, aumentar o tempo de permanência nas publicações e incentivar o compartilhamento, culminando no crescimento orgânico da comunidade e da lealdade à marca."
   },
   "grid": {
-    "titulo": "METAS\nDO MÊS",
-    "mes": "fevereiro 2026 | janeiro 2026",
-    "texto_longo": "Descrição das metas..."
+    "texto_longo": "As metas para este período em Março de 2026 são claras: elevar o engajamento do público em 20% através de interações significativas nas publicações, como curtidas, comentários e compartilhamentos. Buscamos também fortalecer a percepção da marca como um recurso valioso e confiável, medido pelo feedback qualitativo e pelo aumento no tempo médio de visualização dos conteúdos.\n\nAdicionalmente, pretendemos expandir nossa audiência em 15% com a atração de novos seguidores alinhados aos nossos valores, utilizando conteúdos que ressoam com suas necessidades e interesses. O posicionamento como uma marca que celebra datas importantes e oferece soluções práticas contribuirá para a construção de uma comunidade leal e engajada, pronta para interagir e advocate pela marca."
   },
   "slogan": {
-    "frase": "SUA FRASE\nIMPACTANTE AQUI.",
-    "legenda": "Conceito criativo"
+    "frase": "Conexão, Valor e Reconhecimento."
   },
   "desafios": {
-    "titulo": "NOVOS\nDESAFIOS",
-    "texto": "• Desafio 1\n• Desafio 2\n• Desafio 3",
     "itens": [
-      "Desafio 1",
-      "Desafio 2",
-      "Desafio 3"
+      "Manter relevância em feed saturado.",
+      "Gerar engajamento significativo.",
+      "Posicionar marca como autoridade.",
+      "Converter engajamento em valor.",
+      "Equilibrar conteúdo inspirador e prático.",
+      "Atrair novos seguidores qualificados.",
+      "Manter a consistência da marca.",
+      "Otimizar tempo e produtividade pessoal.",
+      "Conectar-se com datas importantes."
     ]
   },
   "planner": {
-    "mes": "fevereiro 2026 | janeiro 2026",
-    "nome_cliente": "Siena Beach Club"
-  }
+    "mes": "MARÇO | ABRIL | MAIO",
+    "nome_cliente": "f"
+  },
+  "clienteId": "b1ea0a74-7bd5-44dc-a293-9b50360aeb4c"
 }

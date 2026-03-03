@@ -31,8 +31,19 @@ import clientLogosRouter from "./routes/clientLogos";
 import presentationRouter from "./routes/presentation";
 import photoIdeasRouter from "./routes/photoIdeas";
 import tokenUsageRouter from "./routes/tokenUsage";
+import jobsRouter from "./routes/jobs";
+import promptTemplatesRouter from "./routes/promptTemplates";
+import promptOnboardingRouter from "./routes/promptOnboarding";
+import calendarItemsRouter from "./routes/calendarItems";
+import onboardingRouter from "./routes/onboarding";
+import clickupRouter from "./routes/clickup";
+import authRouter from "./routes/auth";
+import usersRouter from "./routes/users";
+import produtosRouter from "./routes/produtos";
+import { requireAuth } from "./middlewares/requireAuth";
 import db from "./config/database";
- import http from "http";
+import http from "http";
+import { startCalendarGenerationWorker } from "./jobs/calendarGenerationWorker";
 
 // Inicialização do Express
 const app = express();
@@ -53,14 +64,23 @@ app.use((req: Request, _res: Response, next) => {
   next();
 });
 
-// Middlewares
-// CONEXÃO DIRETA: Liberar CORS para permitir conexões diretas do frontend
+// CORS - suporta origem única ou lista separada por vírgula
+// Ex.: CORS_ORIGIN=http://localhost:3006
+// Ex.: CORS_ORIGIN=http://localhost:3006,http://localhost:3005,https://app.sphera.com
+// Nota: credentials: true removido — sistema não usa cookies/sessão.
+//       Reintroduzir junto com origin whitelist se auth por cookie for adotada.
+const _rawOrigin = (process.env.CORS_ORIGIN || 'http://localhost:3006').trim();
+const ALLOWED_ORIGIN: string | string[] = _rawOrigin.includes(',')
+  ? _rawOrigin.split(',').map((o) => o.trim()).filter(Boolean)
+  : _rawOrigin;
+
 app.use(cors({
-  origin: '*', // Permite qualquer origem (Modo Dev)
+  origin: ALLOWED_ORIGIN,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
-  credentials: true
+  // credentials: true — omitido (sem cookies/sessão no sistema atual)
 }));
+console.log(`🔒 [CORS] Origem(ns) permitida(s): ${Array.isArray(ALLOWED_ORIGIN) ? ALLOWED_ORIGIN.join(', ') : ALLOWED_ORIGIN}`);
 app.use(express.json({ strict: false }));
 app.use((req: Request, _res: Response, next) => {
   const contentType = String(req.headers['content-type'] || '').toLowerCase();
@@ -105,7 +125,7 @@ app.use((req: Request, _res: Response, next) => {
 
 // Rota de teste
 app.get("/", (_req: Request, res: Response) => {
-  res.json({ 
+  res.json({
     message: "MVP Backend ON",
     status: "running",
     timestamp: new Date().toISOString()
@@ -114,7 +134,7 @@ app.get("/", (_req: Request, res: Response) => {
 
 // Rota de health check
 app.get("/health", (_req: Request, res: Response) => {
-  res.json({ 
+  res.json({
     status: "healthy",
     uptime: process.uptime(),
     timestamp: new Date().toISOString()
@@ -129,11 +149,11 @@ app.get("/api/debug/tables", async (_req: Request, res: Response) => {
       FROM information_schema.tables 
       WHERE table_schema = 'public'
     `);
-    
+
     // Buscar colunas da tabela brand_rules se ela existir
     let columns: any[] = [];
     const hasRules = result.rows.find((r: any) => r.table_name === 'brand_rules');
-    
+
     if (hasRules) {
       const colsResult = await db.query(`
         SELECT column_name, data_type 
@@ -143,8 +163,8 @@ app.get("/api/debug/tables", async (_req: Request, res: Response) => {
       columns = colsResult.rows;
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       tables: result.rows.map((r: any) => r.table_name),
       brand_rules_columns: columns
     });
@@ -153,20 +173,34 @@ app.get("/api/debug/tables", async (_req: Request, res: Response) => {
   }
 });
 
-// Rotas da aplicação
+// Rotas públicas (não passam pelo requireAuth)
+app.use("/api/auth", authRouter);
+app.use("/api/webhooks", webhooksRouter);
+
+// Middlewares e Rotas Protegidas API baseadas no header Autorization
+app.use("/api", requireAuth);
+
+// Rotas da aplicação (Protegidas)
+app.use("/api/users", usersRouter);
 app.use("/api", postsRouter);
-app.use("/api", brandingRouter);
+app.use("/api/branding", brandingRouter);
 app.use("/api", calendarRouter);
-app.use("/api", webhooksRouter);
 app.use("/api/knowledge", knowledgeRouter);
 app.use("/api/clients", clientsRouter);
-app.use("/api", brandingUploadRouter);
-app.use("/api", promptChainsRouter);
-app.use("/api", datasComemorativasRoutes);
-app.use("/api", clientLogosRouter);
+app.use("/api/branding-upload", brandingUploadRouter);
+app.use("/api/prompt-chains", promptChainsRouter);
+app.use("/api/datas-comemorativas", datasComemorativasRoutes);
+app.use("/api/client-logos", clientLogosRouter);
 app.use("/api/presentation", presentationRouter);
-app.use("/api/photos", photoIdeasRouter);
+app.use("/api/photo-ideas", photoIdeasRouter);
 app.use("/api/token-usage", tokenUsageRouter);
+app.use("/api/jobs", jobsRouter); // Register jobs routes
+app.use("/api", promptTemplatesRouter);
+app.use("/api", promptOnboardingRouter);
+app.use("/api", onboardingRouter);
+app.use("/api", calendarItemsRouter);
+app.use("/api/clickup", clickupRouter);
+app.use("/api", produtosRouter);
 
 // Servir arquivos gerados pelo Python (Temporários)
 const presentationOutputPath = path.resolve(__dirname, "../python_gen/output");
@@ -186,6 +220,14 @@ const presentationsStoragePath = path.resolve(__dirname, "../storage/presentatio
 app.use(
   "/storage/presentations",
   express.static(presentationsStoragePath, {
+    setHeaders: (res) => setNoCacheHeaders(res as unknown as Response)
+  })
+);
+
+const deliveriesStoragePath = path.resolve(__dirname, "../storage/deliveries");
+app.use(
+  "/storage/deliveries",
+  express.static(deliveriesStoragePath, {
     setHeaders: (res) => setNoCacheHeaders(res as unknown as Response)
   })
 );
@@ -225,14 +267,14 @@ server.listen(PORT, () => {
   console.log(`🚀 Startup ID: ${STARTUP_ID}`);
   console.log(`📍 http://localhost:${PORT}`);
   console.log(`🚀 ============================================\n`);
-  
+
   checkEnvironment();
-  
+
   // Listar todas as rotas registradas
   console.log(`\n📋 ============================================`);
   console.log(`📋 ROTAS REGISTRADAS:`);
   console.log(`📋 ============================================`);
-  
+
   try {
     if (app._router && app._router.stack) {
       app._router.stack.forEach((r: any) => {
@@ -249,8 +291,11 @@ server.listen(PORT, () => {
   } catch (e) {
     console.log(`  ⚠️ Erro ao listar rotas:`, e);
   }
-  
+
   console.log(`📋 ============================================\n`);
+
+  // Iniciar Worker de Geração de Calendário
+  startCalendarGenerationWorker();
 });
 
 export default app;

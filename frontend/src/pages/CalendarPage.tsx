@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ContentMixSelector from '../components/ContentMixSelector';
 import PhotoIdeasModal from '../components/PhotoIdeasModal';
- 
-import api from '../services/api';
+import JobProgressPanel from '../components/Jobs/JobProgressPanel';
+
+import api, { jobsService, calendarItemsService, CalendarItem, CalendarItemStatus } from '../services/api';
+import { useJobPolling } from '../hooks/useJobPolling';
 import {
   format,
   startOfMonth,
@@ -26,8 +28,23 @@ interface Post {
   objetivo: string;
   image_generation_prompt?: string;
   referencias?: string; // links, fotos, notas de referência
-  status?: 'sugerido' | 'aprovado' | 'publicado';
+  status?: 'sugerido' | 'aprovado' | 'publicado' | 'needs_edit' | 'redo';
 }
+
+// Extrai o dia numérico de um post (suporta dia:number e data:"DD/MM")
+const getDiaFromPost = (post: Post): number => {
+  if (typeof (post as any).dia === 'number') return (post as any).dia as number;
+  const day = parseInt(String(post.data || '').split('/')[0] ?? '0', 10);
+  return isNaN(day) ? 0 : day;
+};
+
+// Chips de status disponíveis para ação rápida
+const STATUS_CHIPS = [
+  { status: 'approved' as CalendarItemStatus, icon: '✅', label: 'Aprovar', activeClass: 'bg-green-600 text-white', inactiveClass: 'bg-gray-700 text-gray-400 hover:bg-green-900 hover:text-green-300' },
+  { status: 'needs_edit' as CalendarItemStatus, icon: '✏️', label: 'Ajustar', activeClass: 'bg-yellow-600 text-white', inactiveClass: 'bg-gray-700 text-gray-400 hover:bg-yellow-900 hover:text-yellow-300' },
+  { status: 'redo' as CalendarItemStatus, icon: '🔄', label: 'Refazer', activeClass: 'bg-red-600 text-white', inactiveClass: 'bg-gray-700 text-gray-400 hover:bg-red-900 hover:text-red-300' },
+  { status: 'published' as CalendarItemStatus, icon: '📤', label: 'Publicado', activeClass: 'bg-blue-600 text-white', inactiveClass: 'bg-gray-700 text-gray-400 hover:bg-blue-900 hover:text-blue-300' },
+];
 
 interface ContentMix {
   reels: number;
@@ -58,10 +75,35 @@ const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 export default function CalendarPage() {
   const { clientId } = useParams<{ clientId: string }>();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Inicializar currentMonth a partir do query param ?month= (ex: "Março 2026")
+  // Isso permite que o CampaignWizard navegue direto para o mês gerado
+  const initMonth = (() => {
+    const monthParam = searchParams.get('month');
+    if (!monthParam) return new Date();
+    try {
+      const ptMap: Record<string, number> = {
+        janeiro: 0, fevereiro: 1, março: 2, marco: 2, abril: 3, maio: 4, junho: 5,
+        julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11
+      };
+      const parts = monthParam.toLowerCase().split(' ');
+      const mesIdx = ptMap[parts[0]];
+      const ano = parseInt(parts[parts.length - 1] || '', 10);
+      if (mesIdx !== undefined && !isNaN(ano)) {
+        return new Date(ano, mesIdx, 1);
+      }
+    } catch (_) { }
+    return new Date();
+  })();
+
   const [calendar, setCalendar] = useState<Calendar | null>(null);
+  // Map: "dia|tema|formato" → CalendarItem (rastreamento de aprovação por item)
+  const [calendarItemsMap, setCalendarItemsMap] = useState<Map<string, CalendarItem>>(new Map());
   const [clientName, setClientName] = useState<string>('');
   const [loading, setLoading] = useState(true);
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [currentMonth, setCurrentMonth] = useState(initMonth);
   const [selectedPost, setSelectedPost] = useState<{ post: Post; index: number } | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
@@ -75,6 +117,10 @@ export default function CalendarPage() {
 
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportMonthsSelected, setExportMonthsSelected] = useState<number[]>([]);
+
+  // Estado do Job (Async Generation)
+  const [pendingJobId, setPendingJobId] = useState<string | null>(null);
+  // Controla o polling (painel renderizado sempre que há job ativo ou recém-finalizado)
 
   // Estados para geração
   const [briefing, setBriefing] = useState('');
@@ -100,6 +146,9 @@ export default function CalendarPage() {
   const [editReferencias, setEditReferencias] = useState('');
   const [editStatus, setEditStatus] = useState<'sugerido' | 'aprovado' | 'publicado'>('sugerido');
   const [regenPostPrompt, setRegenPostPrompt] = useState('');
+  const [isExportingClickUp, setIsExportingClickUp] = useState(false);
+
+  const [carouselSlidesCount] = useState<number>(6);
 
   // Instruções por formato e referências do mês
   const [formatInstructions, setFormatInstructions] = useState<FormatInstructions>({
@@ -112,14 +161,14 @@ export default function CalendarPage() {
   const [monthReferences, setMonthReferences] = useState('');
   const [monthImages, setMonthImages] = useState<string[]>([]); // URLs das imagens
   const [showMonthReferencesModal, setShowMonthReferencesModal] = useState(false);
-  
+
   useEffect(() => {
     if (clientId) {
       loadCalendar();
       loadPromptChains();
       loadClientName();
     }
-  }, [clientId, currentMonth]); // Recarregar quando o mês mudar
+  }, [clientId, currentMonth]); // loadCalendar nao entra aqui: depende de clientId+currentMonth (mesmas deps), incluir causaria TDZ
 
   const loadClientName = async () => {
     if (!clientId) return;
@@ -134,6 +183,240 @@ export default function CalendarPage() {
     }
   };
 
+  useEffect(() => {
+    const savedJob = localStorage.getItem('pendingCalendarJob');
+    if (savedJob && clientId) {
+      try {
+        const { jobId, clientId: savedClientId, firstMonth } = JSON.parse(savedJob);
+        if (savedClientId === clientId) {
+          console.log('🔄 Recuperando job pendente:', jobId);
+          jobsService.getJobStatus(clientId, jobId)
+            .then((job) => {
+              const terminalStatuses = ['succeeded', 'completed', 'failed', 'canceled'];
+              if (terminalStatuses.includes(job.status)) {
+                console.log(`🗑️ Job já finalizado (${job.status}), limpando localStorage.`);
+                localStorage.removeItem('pendingCalendarJob');
+                if (job.status === 'succeeded' || job.status === 'completed') {
+                  // Navegar para o mês gerado se fornecido
+                  if (firstMonth) {
+                    const ptMap: Record<string, number> = {
+                      janeiro: 0, fevereiro: 1, março: 2, marco: 2, abril: 3, maio: 4, junho: 5,
+                      julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11
+                    };
+                    const parts = firstMonth.toLowerCase().split(' ');
+                    const mesIdx = ptMap[parts[0]];
+                    const ano = parseInt(parts[parts.length - 1] || '', 10);
+                    if (mesIdx !== undefined && !isNaN(ano)) {
+                      setCurrentMonth(new Date(ano, mesIdx, 1));
+                      return; // loadCalendar será disparado pelo useEffect de currentMonth
+                    }
+                  }
+                  loadCalendar();
+                }
+              } else {
+                setPendingJobId(jobId);
+              }
+            })
+            .catch(() => {
+              localStorage.removeItem('pendingCalendarJob');
+            });
+        }
+      } catch (e) {
+        console.error('Erro ao ler job pendente', e);
+      }
+    }
+  }, [clientId]); // nao incluir loadCalendar aqui — evita loop (loadCalendar muda com currentMonth)
+
+  // loadCalendar DEVE ficar aqui, antes de qualquer useEffect que o use.
+  // const nao e hoistado (TDZ) — declarar depois dos useEffects causa crash.
+  const loadCalendar = useCallback(async () => {
+    if (!clientId) return;
+    try {
+      setLoading(true);
+      setMonthReferences('');
+      setMonthImages([]);
+      setCalendarItemsMap(new Map());
+      const monthStr = format(currentMonth, 'MMMM yyyy', { locale: ptBR });
+      console.log('Carregando calendario: ' + monthStr);
+      const response = await api.get('/calendars/' + clientId + '?month=' + encodeURIComponent(monthStr));
+      const calendarData = response.data.calendar;
+
+      if (!calendarData) {
+        setCalendar(null);
+        return;
+      }
+
+      if (calendarData.metadata?.month_references) setMonthReferences(calendarData.metadata.month_references);
+      if (calendarData.metadata?.month_images && Array.isArray(calendarData.metadata.month_images)) {
+        setMonthImages(calendarData.metadata.month_images);
+      }
+
+      const rawPosts = Array.isArray(calendarData.posts) ? calendarData.posts : (
+        typeof calendarData.posts === 'string' ? JSON.parse(calendarData.posts) : []
+      );
+
+      // Extrai o número do mês do label salvo (ex: "Março 2026" → 3)
+      const mesNumFromLabel = (() => {
+        const token = (calendarData.mes || '').trim().toLowerCase().split(/\s+/)[0] || '';
+        const map: Record<string, number> = {
+          janeiro: 1, fevereiro: 2, março: 3, marco: 3, abril: 4, maio: 5, junho: 6,
+          julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
+        };
+        return map[token] ?? null;
+      })();
+
+      calendarData.posts = (Array.isArray(rawPosts) ? rawPosts : []).map((post: any) => {
+        const n = (v: any): string => {
+          if (v == null) return '';
+          if (typeof v === 'string') return v;
+          try { return JSON.stringify(v); } catch { return String(v); }
+        };
+
+        // Suporte ao schema canônico (dia: number) e legado (data: "DD/MM")
+        let data = n(post.data);
+        if (!data && typeof post.dia === 'number' && post.dia >= 1 && post.dia <= 31) {
+          const diaStr = String(post.dia).padStart(2, '0');
+          const mesStr = mesNumFromLabel ? String(mesNumFromLabel).padStart(2, '0') : '01';
+          data = `${diaStr}/${mesStr}`;
+        }
+
+        return {
+          data,
+          tema: n(post.tema),
+          formato: n(post.formato),
+          // instrucoes_visuais (schema canônico) → ideia_visual (legado)
+          ideia_visual: n(post.ideia_visual) || n(post.instrucoes_visuais),
+          // copy_inicial (schema canônico) → copy_sugestao (legado)
+          copy_sugestao: n(post.copy_sugestao) || n(post.copy_inicial),
+          objetivo: n(post.objetivo),
+          image_generation_prompt: n(post.image_generation_prompt),
+          referencias: n(post.referencias),
+          status: (post.status as Post['status']) || 'sugerido',
+        };
+      });
+      setCalendar(calendarData);
+
+      // Carregar calendar_items para tracking de aprovação (não-crítico)
+      try {
+        let items = await calendarItemsService.getItems(calendarData.id);
+
+        // Se não há items no DB (calendário antigo ou geração falhou),
+        // faz seed automático para que as métricas do Dashboard tenham base real.
+        if (items.length === 0 && calendarData.posts.length > 0) {
+          try {
+            items = await calendarItemsService.seedItems(calendarData.id);
+            console.log(`[CalendarPage] ${items.length} items semeados para o calendário.`);
+          } catch (seedErr) {
+            console.warn('[CalendarPage] Seed de calendar_items falhou (não-crítico):', seedErr);
+          }
+        }
+
+        const map = new Map<string, CalendarItem>();
+        for (const item of items) {
+          // trim para garantir consistência com getItemForPost e com o seed
+          const key = `${item.dia}|${(item.tema ?? '').trim()}|${(item.formato ?? '').trim()}`;
+          map.set(key, item);
+        }
+        setCalendarItemsMap(map);
+      } catch (_itemsErr) {
+        // Calendários antigos sem items: silencioso
+      }
+    } catch (error: any) {
+      console.error('Erro ao carregar calendario:', error);
+      if (error.response?.status === 404) setCalendar(null);
+      else alert('Erro ao carregar calendario: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setLoading(false);
+    }
+  }, [clientId, currentMonth]);
+
+  // Callbacks estaveis para useJobPolling — loadCalendar ja declarado acima
+  const handleJobSuccessCallback = useCallback((_result: any) => {
+    localStorage.removeItem('pendingCalendarJob');
+    // Não limpa o pendingJobId automaticamente para manter o painel visível mostrando "Concluído"
+    loadCalendar();
+  }, [loadCalendar]);
+
+  const handleJobErrorCallback = useCallback((errMsg: string) => {
+    console.error('Job falhou:', errMsg);
+    localStorage.removeItem('pendingCalendarJob');
+  }, []);
+
+  const handleJobCancelCallback = useCallback(() => {
+    localStorage.removeItem('pendingCalendarJob');
+    setPendingJobId(null);
+  }, []);
+
+  const {
+    job,
+  } = useJobPolling({
+    clientId: clientId || '',
+    jobId: pendingJobId,
+    enabled: !!pendingJobId && !!clientId,
+    onSuccess: handleJobSuccessCallback,
+    onError: handleJobErrorCallback,
+    onCancel: handleJobCancelCallback,
+  });
+
+  const handleJobCancelBtn = async () => {
+    if (!pendingJobId || !clientId) return;
+    try {
+      await jobsService.cancelJob(clientId, pendingJobId);
+      alert('Geração cancelada com sucesso.');
+      setPendingJobId(null);
+      localStorage.removeItem('pendingCalendarJob');
+    } catch (e: any) {
+      if (e.response?.status === 400 || e.response?.status === 404) {
+        // Já cancelado/finalizado/inexistente, limpa state local
+        setPendingJobId(null);
+        localStorage.removeItem('pendingCalendarJob');
+      } else {
+        alert('Erro ao cancelar: ' + (e.response?.data?.error || e.message));
+      }
+    }
+  };
+
+
+
+  /*
+  const generateSinglePostWithAI = async () => {
+    if (!calendar || !selectedPost) return;
+
+    try {
+      setIsRegeneratingPost(true);
+
+      const response = await api.post('/calendars/generate-single-post', {
+        calendarId: calendar.id,
+        postIndex: selectedPost.index,
+        data: editData,
+        formato: editFormato,
+        carouselSlidesCount,
+        customPrompt: regenPostPrompt,
+      });
+
+      const newPost: Post = response.data.post;
+      const updatedPosts = [...calendar.posts];
+      updatedPosts[selectedPost.index] = newPost;
+      setCalendar({ ...calendar, posts: updatedPosts });
+
+      setEditTema(newPost.tema || '');
+      setEditCopy(newPost.copy_sugestao || '');
+      setEditData(newPost.data || '');
+      setEditFormato(newPost.formato || '');
+      setEditIdeiaVisual(newPost.ideia_visual || '');
+      setEditObjetivo(newPost.objetivo || '');
+      setEditImagePrompt(newPost.image_generation_prompt || '');
+
+      alert('✅ Post gerado com IA (isolado) com sucesso!');
+    } catch (error: any) {
+      console.error('❌ Erro ao gerar post isolado com IA:', error);
+      alert('Erro ao gerar post isolado com IA: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setIsRegeneratingPost(false);
+    }
+  };
+  */
+
   const loadPromptChains = async () => {
     try {
       const response = await api.get(`/prompt-chains/${clientId}`);
@@ -143,75 +426,6 @@ export default function CalendarPage() {
     }
   };
 
-  const loadCalendar = async () => {
-    try {
-      setLoading(true);
-
-      // Resetar estados ao trocar de mês
-      setMonthReferences('');
-      setMonthImages([]);
-
-      // Buscar calendário do mês atual
-      const monthStr = format(currentMonth, 'MMMM yyyy', { locale: ptBR });
-      console.log(`📅 Carregando calendário do mês: ${monthStr}`);
-
-      // Resetar estados específicos do mês
-      setMonthReferences('');
-
-      const response = await api.get(`/calendars/${clientId}?month=${encodeURIComponent(monthStr)}`);
-
-      const calendarData = response.data.calendar;
-      
-      // Carregar referências do mês se existirem no metadata
-      if (calendarData.metadata?.month_references) {
-        setMonthReferences(calendarData.metadata.month_references);
-      }
-      if (calendarData.metadata?.month_images) {
-        setMonthImages(calendarData.metadata.month_images);
-      }
-      
-      calendarData.posts = calendarData.posts.map((post: any) => {
-        const normalizeText = (value: any): string => {
-          if (value === null || value === undefined) return '';
-          if (typeof value === 'string') return value;
-          // Se vier objeto/array do Gemini, transforma em string legível
-          try {
-            return JSON.stringify(value);
-          } catch {
-            return String(value);
-          }
-        };
-
-        const normalized: Post = {
-          data: normalizeText(post.data),
-          tema: normalizeText(post.tema),
-          formato: normalizeText(post.formato),
-          ideia_visual: normalizeText(post.ideia_visual),
-          copy_sugestao: normalizeText(post.copy_sugestao),
-          objetivo: normalizeText(post.objetivo),
-          image_generation_prompt: normalizeText(post.image_generation_prompt),
-          referencias: normalizeText(post.referencias),
-          status: (post.status as Post['status']) || 'sugerido',
-        };
-
-        return normalized;
-      });
-
-      setCalendar(calendarData);
-
-    } catch (error: any) {
-      console.error('Erro ao carregar calendário:', error);
-      if (error.response?.status === 404) {
-        // Não há calendário para este mês, mostrar estado vazio
-        setCalendar(null);
-      } else {
-        // Outro erro, mostrar mensagem
-        alert('Erro ao carregar calendário: ' + (error.response?.data?.error || error.message));
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleExportExcel = async () => {
     if (!calendar) {
@@ -359,37 +573,22 @@ export default function CalendarPage() {
     }
 
     const baseMonth = parseMonthLabelToNumber(calendar.mes) || (currentMonth.getMonth() + 1);
-    const defaultSelection = [
-      baseMonth,
-      baseMonth === 12 ? 1 : baseMonth + 1,
-      baseMonth >= 11 ? ((baseMonth + 2) % 12 || 12) : baseMonth + 2,
-    ];
+    const detected = detectMonthsFromCalendar(calendar);
 
-    const monthsOptions = getExportMonthOptions(calendar);
-    setExportMonthsSelected(defaultSelection.filter((m) => monthsOptions.includes(m)));
+    const selectionToUse = detected.length > 0
+      ? Array.from(new Set([baseMonth, ...detected])).sort((a, b) => a - b)
+      : [
+        baseMonth,
+        baseMonth === 12 ? 1 : baseMonth + 1,
+        baseMonth >= 11 ? ((baseMonth + 2) % 12 || 12) : baseMonth + 2,
+      ];
+
+    setExportMonthsSelected(selectionToUse);
     setShowExportModal(true);
   };
 
-  const getExportMonthOptions = (cal: Calendar): number[] => {
-    const baseMonth = parseMonthLabelToNumber(cal.mes) || (currentMonth.getMonth() + 1);
-    const triMonths = [
-      baseMonth,
-      baseMonth === 12 ? 1 : baseMonth + 1,
-      baseMonth >= 11 ? ((baseMonth + 2) % 12 || 12) : baseMonth + 2,
-    ];
-
-    const detected = detectMonthsFromCalendar(cal);
-    return Array.from(new Set([...triMonths, ...detected])).sort((a, b) => a - b);
-  };
-
   const openGenerateModal = () => {
-    // Define um mix padrão leve para evitar modal vazio
-    setMix({ reels: 2, static: 4, carousel: 4, stories: 2, photos: 0 });
-    setBriefing('');
-    setGenerationPrompt('');
-    setPeriodoDias(30);
-    setSpecificMonths([format(currentMonth, 'MMMM yyyy', { locale: ptBR })]);
-    setShowGenerateModal(true);
+    navigate(`/client/${clientId}/campaigns/new`);
   };
 
   const regeneratePostWithAI = async () => {
@@ -398,7 +597,7 @@ export default function CalendarPage() {
     try {
       setIsRegeneratingPost(true);
 
-      const response = await api.post('/calendars/regenerate-post', {
+      const response = await api.put('/calendars/regenerate-post', {
         calendarId: calendar.id,
         postIndex: selectedPost.index,
         newFormato: editFormato,
@@ -442,8 +641,7 @@ export default function CalendarPage() {
     try {
       setIsDeleting(true);
 
-      const monthStr = format(currentMonth, 'MMMM yyyy', { locale: ptBR });
-      await api.delete(`/calendars/${clientId}/${monthStr}`);
+      await api.delete(`/calendars/${clientId}/${calendar.mes}?includeDrafts=true`);
 
       alert('✅ Calendário excluído com sucesso!');
       loadCalendar(); // Recarregar (vai mostrar estado vazio)
@@ -479,23 +677,25 @@ export default function CalendarPage() {
         briefing,
         mes: format(currentMonth, 'MMMM yyyy', { locale: ptBR }),
         monthsCount: specificMonths.length,
-        specificMonths,
+        carouselSlidesCount,
         mix,
         generationPrompt,
+        chainId: selectedChainId || undefined,
         formatInstructions,
         monthReferences,
-        chainId: selectedChainId || undefined,
       });
 
-      console.log('✅ Calendário gerado:', response.data);
-      
-      const calendarsGenerated = response.data?.calendars?.length || 1;
-      const successMessage = calendarsGenerated > 1 
-        ? `✅ ${calendarsGenerated} calendários gerados com sucesso!`
-        : '✅ Calendário gerado com sucesso!';
-      
-      alert(successMessage);
+      const { jobId } = response.data;
+      console.log(`🚀 Job iniciado: ${jobId}`);
+
+      // Salvar job e iniciar painel de progresso
+      setPendingJobId(jobId);
+      localStorage.setItem('pendingCalendarJob', JSON.stringify({ jobId, clientId }));
+
+      // Fechar modal de configuração
       setShowGenerateModal(false);
+
+      // Limpar campos
       setBriefing('');
       setGenerationPrompt('');
       setSpecificMonths([]);
@@ -507,32 +707,9 @@ export default function CalendarPage() {
         photos: 0
       });
 
-      // Recarregar o calendário do mês atual após geração
-      loadCalendar();
     } catch (error: any) {
-      console.error('❌ Erro ao gerar calendário:', error);
-      
-      // Tratamento específico para 504 (Gateway Timeout) - geralmente proxy (Nginx/Cloudflare)
-      if (error.response?.status === 504) {
-        alert(
-          '⏳ A geração demorou mais que o limite do servidor (erro 504).\n\n' +
-          'Isso é comum quando você gera muitos posts ou múltiplos meses.\n\n' +
-          '✅ O processamento pode ainda estar ocorrendo no backend.\n' +
-          'Aguarde alguns minutos e recarregue a página para verificar se os calendários apareceram.'
-        );
-      }
-
-      // Tratamento específico para timeout
-      else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-        alert(
-          '⏳ A geração está demorando mais que o esperado.\n\n' +
-          'Isso é normal para calendários com muitos posts ou múltiplos meses.\n\n' +
-          '✅ A IA continua processando em segundo plano.\n' +
-          'Aguarde 1-2 minutos e recarregue a página para verificar se o calendário foi gerado.'
-        );
-      } else {
-        alert('Erro ao gerar calendário: ' + (error.response?.data?.error || error.message));
-      }
+      console.error('❌ Erro ao iniciar geração:', error);
+      alert('Erro ao iniciar geração: ' + (error.response?.data?.error || error.message));
     } finally {
       setIsGenerating(false);
     }
@@ -567,7 +744,7 @@ export default function CalendarPage() {
     // Encontrar o post que foi arrastado
     const postIndex = parseInt(result.draggableId.split('-')[1]);
     const updatedPosts = [...calendar.posts];
-    
+
     // Atualizar a data do post
     updatedPosts[postIndex] = {
       ...updatedPosts[postIndex],
@@ -593,7 +770,11 @@ export default function CalendarPage() {
     setEditObjetivo(post.objetivo || '');
     setEditImagePrompt(post.image_generation_prompt || '');
     setEditReferencias(post.referencias || '');
-    setEditStatus(post.status || 'sugerido');
+    // Normaliza status: needs_edit/redo não aparecem no modal de edição → trata como sugerido
+    const legacyStatus = (post.status === 'needs_edit' || post.status === 'redo')
+      ? 'sugerido'
+      : (post.status || 'sugerido');
+    setEditStatus(legacyStatus as 'sugerido' | 'aprovado' | 'publicado');
     setRegenPostPrompt(
       'Adapte este conteúdo para o novo formato mantendo a mesma estratégia, mas otimizando copy, ideia visual e objetivo para melhor desempenho.'
     );
@@ -605,6 +786,9 @@ export default function CalendarPage() {
 
   const savePost = async () => {
     if (!selectedPost || !calendar) return;
+
+    // Acessa o post original para poder encontrar ele no DB (caso o usuário edite o tema/formato)
+    const originalPost = calendar.posts[selectedPost.index];
 
     const updatedPosts = [...calendar.posts];
     updatedPosts[selectedPost.index] = {
@@ -621,9 +805,62 @@ export default function CalendarPage() {
 
     setCalendar({ ...calendar, posts: updatedPosts });
     await saveCalendar(updatedPosts);
-    
+
+    // Sincronizar o status com a tabela de métricas (calendar_items)
+    // Para n perder a referência, enviamos o dia/tema original
+    const dia = getDiaFromPost(originalPost);
+    if (dia) {
+      const statusMap: Record<string, CalendarItemStatus> = {
+        'sugerido': 'draft',
+        'aprovado': 'approved',
+        'needs_edit': 'needs_edit',
+        'redo': 'redo',
+        'publicado': 'published'
+      };
+      const apiStatus = statusMap[editStatus] || 'draft';
+
+      try {
+        await calendarItemsService.setItemStatus(
+          calendar.id, dia, (originalPost.tema || '').trim(), (originalPost.formato || '').trim(), apiStatus
+        );
+        try { new BroadcastChannel('sphera_metrics').postMessage({ clientId }); } catch { }
+      } catch (e) {
+        console.error('Erro ao sincronizar metrica:', e);
+      }
+    }
+
     alert('✅ Post atualizado com sucesso!');
     closeEditModal();
+  };
+
+  const exportToClickUp = async () => {
+    if (!calendar || !selectedPost || !clientId) return;
+
+    const postToExport: Post = {
+      data: editData,
+      tema: editTema,
+      formato: editFormato,
+      ideia_visual: editIdeiaVisual,
+      copy_sugestao: editCopy,
+      objetivo: editObjetivo,
+      image_generation_prompt: editImagePrompt,
+      referencias: editReferencias,
+      status: editStatus
+    };
+
+    try {
+      setIsExportingClickUp(true);
+      await api.post('/clickup/export', {
+        clienteId: clientId,
+        post: postToExport,
+      });
+      alert('✅ Post exportado com sucesso para o ClickUp!');
+    } catch (error: any) {
+      console.error('❌ Erro ao exportar para o ClickUp:', error);
+      alert('Erro ao exportar para o ClickUp: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setIsExportingClickUp(false);
+    }
   };
 
   const deletePost = async () => {
@@ -657,34 +894,119 @@ export default function CalendarPage() {
   const getFormatIcon = (formato: string) => {
     const lower = formato?.toLowerCase() || '';
     if (lower.includes('reel')) return '🎬';
-    if (lower.includes('carrossel')) return '📸';
-    if (lower.includes('static')) return '🖼️';
-    if (lower.includes('stories')) return '📱';
+    if (lower.includes('carrossel')) return '🎠';
+    if (lower.includes('foto')) return '📷';
+    if (lower.includes('static') || lower.includes('arte')) return '🖼️';
+    if (lower.includes('storie') || lower.includes('story')) return '📱';
     return '📄';
   };
 
   const getStatusColor = (status?: string) => {
     switch (status) {
       case 'aprovado':
+      case 'approved':
         return 'border-l-green-500 bg-green-500/10';
       case 'publicado':
+      case 'published':
         return 'border-l-blue-500 bg-blue-500/10';
+      case 'needs_edit':
+        return 'border-l-yellow-400 bg-yellow-400/10';
+      case 'redo':
+        return 'border-l-red-500 bg-red-500/10';
       default:
-        return 'border-l-yellow-500 bg-yellow-500/10';
+        return 'border-l-gray-500 bg-gray-500/10';
+    }
+  };
+
+  // Retorna o CalendarItem do banco para um post (null se não existir)
+  // Normaliza tema/formato com trim para garantir match com o que o seed armazena
+  const getItemForPost = (post: Post): CalendarItem | null => {
+    const dia = getDiaFromPost(post);
+    if (!dia) return null;
+    const key = `${dia}|${(post.tema ?? '').trim()}|${(post.formato ?? '').trim()}`;
+    return calendarItemsMap.get(key) ?? null;
+  };
+
+  // Status efetivo para cor do card: prefere item.status quando já foi revisado,
+  // senão usa post.status (atualizado imediatamente no click, persistido no JSON)
+  const getCardStatus = (post: Post): string => {
+    const s = getItemForPost(post)?.status;
+    return s && s !== 'draft' ? s : (post.status ?? 'sugerido');
+  };
+
+  // Resumo de status dos posts — atualiza reativamente quando calendarItemsMap ou calendar mudam
+  const postStatusSummary = useMemo(() => {
+    if (!calendar) return null;
+    const counts = { total: 0, aprovado: 0, revisao: 0, pendente: 0, publicado: 0 };
+    for (const post of calendar.posts) {
+      counts.total++;
+      const s = getCardStatus(post);
+      if (s === 'aprovado' || s === 'approved') counts.aprovado++;
+      else if (s === 'publicado' || s === 'published') counts.publicado++;
+      else if (s === 'needs_edit' || s === 'redo') counts.revisao++;
+      else counts.pendente++;
+    }
+    return counts;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendar, calendarItemsMap]);
+
+  // Atualiza status via PATCH (com fallback para update no JSON)
+  const quickUpdateStatus = async (post: Post, postIndex: number, newStatus: CalendarItemStatus) => {
+    // Mapear CalendarItemStatus → Post.status legado
+    const legacyStatusMap: Record<CalendarItemStatus, Post['status']> = {
+      draft: 'sugerido',
+      approved: 'aprovado',
+      needs_edit: 'needs_edit',
+      redo: 'redo',
+      published: 'publicado',
+    };
+    const newLegacyStatus = legacyStatusMap[newStatus];
+
+    // 1. Atualizar post.status imediatamente (cor do card sem depender do map)
+    if (calendar) {
+      const updatedPosts = [...calendar.posts];
+      updatedPosts[postIndex] = { ...updatedPosts[postIndex], status: newLegacyStatus };
+      setCalendar({ ...calendar, posts: updatedPosts });
+
+      // Essa função já foi construída no CalendarPage, enviando a req pro JSON:
+      saveCalendar(updatedPosts);
+    }
+
+    // 2. Persistir status no DB (garante que dashboard-metrics reflita a aprovação)
+    const dia = getDiaFromPost(post);
+    if (calendar && dia > 0) {
+      try {
+        const createdOrUpdated = await calendarItemsService.setItemStatus(
+          calendar.id, dia, post.tema.trim(), post.formato.trim(), newStatus
+        );
+
+        // Atualiza o state local p o badge de revisões funcionar
+        const makeKey = (d: number, t: string, f: string) => `${d}|${(t || '').trim()}|${(f || '').trim()}`;
+        setCalendarItemsMap(prev => {
+          const next = new Map(prev);
+          next.set(makeKey(createdOrUpdated.dia, createdOrUpdated.tema, createdOrUpdated.formato), createdOrUpdated);
+          return next;
+        });
+
+        // Sinaliza ao Dashboard que métricas estão stale
+        try { new BroadcastChannel('sphera_metrics').postMessage({ clientId }); } catch { }
+      } catch (err) {
+        console.error('Falha ao criar/atualizar calendar_item:', err);
+      }
     }
   };
 
   const getPostsForDay = (dayStr: string): { post: Post; index: number }[] => {
     if (!calendar) return [];
-    
+
     return calendar.posts
       .map((post, index) => ({ post, index }))
       .filter(({ post }) => {
         // Tentar fazer match com diferentes formatos de data
         const postDate = post.data;
-        return postDate === dayStr || 
-               postDate === dayStr.replace(/^0/, '') || // Remove zero à esquerda
-               postDate.includes(dayStr);
+        return postDate === dayStr ||
+          postDate === dayStr.replace(/^0/, '') || // Remove zero à esquerda
+          postDate.includes(dayStr);
       });
   };
 
@@ -692,7 +1014,7 @@ export default function CalendarPage() {
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
   const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
-  
+
   // Adicionar dias vazios no início para alinhar com o dia da semana
   const startDayOfWeek = getDay(monthStart);
   const emptyDays = Array(startDayOfWeek).fill(null);
@@ -791,7 +1113,7 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* Modal de Geração */}
+        {/* Modal de Geração — branch sem calendário */}
         {showGenerateModal && (
           <GenerateModal
             mix={mix}
@@ -816,6 +1138,17 @@ export default function CalendarPage() {
           />
         )}
 
+        {/* Painel de Progresso da Geração — branch sem calendário */}
+        {pendingJobId && clientId && job && (
+          <div className="w-full max-w-4xl mt-6">
+            <JobProgressPanel
+              job={job}
+              onCancel={handleJobCancelBtn}
+              onDismissPanel={() => setPendingJobId(null)}
+            />
+          </div>
+        )}
+
         {/* Modal de Ideias de Fotos */}
         <PhotoIdeasModal
           isOpen={showPhotoIdeasModal}
@@ -831,6 +1164,15 @@ export default function CalendarPage() {
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
+        {/* Painel de Progresso da Geração — branch com calendário */}
+        {pendingJobId && clientId && job && (
+          <JobProgressPanel
+            job={job}
+            onCancel={handleJobCancelBtn}
+            onDismissPanel={() => setPendingJobId(null)}
+          />
+        )}
+
         {/* Header */}
         <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
           <div>
@@ -839,7 +1181,7 @@ export default function CalendarPage() {
               {calendar.posts.length} posts planejados • Arraste para reorganizar
             </p>
           </div>
-          
+
           <div className="flex items-center gap-3">
             {isSaving && (
               <span className="text-yellow-400 text-sm animate-pulse">💾 Salvando...</span>
@@ -870,6 +1212,31 @@ export default function CalendarPage() {
           </div>
         </div>
 
+        {/* Barra de status dos posts — atualiza em tempo real ao aprovar/reprovar */}
+        {postStatusSummary && postStatusSummary.total > 0 && (
+          <div className="mb-4 flex flex-wrap gap-2 no-print">
+            <span className="text-xs text-gray-400 px-3 py-1.5 bg-gray-800/60 rounded-full border border-gray-700">
+              📋 {postStatusSummary.total} posts
+            </span>
+            <span className="text-xs font-semibold px-3 py-1.5 bg-green-500/10 text-green-400 rounded-full border border-green-500/30">
+              ✅ {postStatusSummary.aprovado} aprovados
+            </span>
+            {postStatusSummary.revisao > 0 && (
+              <span className="text-xs font-semibold px-3 py-1.5 bg-yellow-500/10 text-yellow-400 rounded-full border border-yellow-500/30">
+                ✏️ {postStatusSummary.revisao} para revisar
+              </span>
+            )}
+            {postStatusSummary.publicado > 0 && (
+              <span className="text-xs font-semibold px-3 py-1.5 bg-blue-500/10 text-blue-400 rounded-full border border-blue-500/30">
+                📤 {postStatusSummary.publicado} publicados
+              </span>
+            )}
+            <span className="text-xs px-3 py-1.5 bg-gray-700/50 text-gray-400 rounded-full border border-gray-600">
+              ⏳ {postStatusSummary.pendente} pendentes
+            </span>
+          </div>
+        )}
+
         {/* Navegação do Mês */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
           <div className="flex items-center justify-between bg-gray-800/50 rounded-xl p-4 no-print">
@@ -879,11 +1246,11 @@ export default function CalendarPage() {
             >
               ← Anterior
             </button>
-            
+
             <h2 className="text-xl font-bold capitalize">
               {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
             </h2>
-            
+
             <button
               onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
               className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
@@ -908,7 +1275,7 @@ export default function CalendarPage() {
                 ✏️ Editar
               </button>
             </div>
-            
+
             {/* Texto */}
             {monthReferences && (
               <div className="text-xs text-gray-300 whitespace-pre-wrap mb-3">
@@ -949,12 +1316,20 @@ export default function CalendarPage() {
         {/* Legenda */}
         <div className="mb-4 flex flex-wrap gap-4 text-xs md:text-sm no-print">
           <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-            <span className="text-gray-400">Sugerido</span>
+            <div className="w-3 h-3 rounded-full bg-gray-500"></div>
+            <span className="text-gray-400">Rascunho</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-green-500"></div>
             <span className="text-gray-400">Aprovado</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
+            <span className="text-gray-400">Ajustar</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-red-500"></div>
+            <span className="text-gray-400">Refazer</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-blue-500"></div>
@@ -968,98 +1343,147 @@ export default function CalendarPage() {
             <div className="bg-gray-800/30 rounded-xl overflow-hidden border border-gray-700">
               {/* Header dos dias da semana */}
               <div className="grid grid-cols-7 bg-gray-800">
-              {WEEKDAYS.map((day) => (
-                <div
-                  key={day}
-                  className="p-2 md:p-3 text-center text-xs md:text-sm font-semibold text-gray-400 border-b border-gray-700"
-                >
-                  {day}
-                </div>
-              ))}
-            </div>
+                {WEEKDAYS.map((day) => (
+                  <div
+                    key={day}
+                    className="p-2 md:p-3 text-center text-xs md:text-sm font-semibold text-gray-400 border-b border-gray-700"
+                  >
+                    {day}
+                  </div>
+                ))}
+              </div>
 
-            {/* Grid dos dias */}
-            <div className="grid grid-cols-7">
-              {/* Dias vazios no início */}
-              {emptyDays.map((_, index) => (
-                <div
-                  key={`empty-${index}`}
-                  className="min-h-[100px] md:min-h-[140px] bg-gray-900/50 border-b border-r border-gray-700/50"
-                />
-              ))}
+              {/* Grid dos dias */}
+              <div className="grid grid-cols-7">
+                {/* Dias vazios no início */}
+                {emptyDays.map((_, index) => (
+                  <div
+                    key={`empty-${index}`}
+                    className="min-h-[100px] md:min-h-[140px] bg-gray-900/50 border-b border-r border-gray-700/50"
+                  />
+                ))}
 
-              {/* Dias do mês */}
-              {daysInMonth.map((day) => {
-                const dayStr = format(day, 'dd/MM');
-                const dayPosts = getPostsForDay(dayStr);
-                const isCurrentDay = isToday(day);
+                {/* Dias do mês */}
+                {daysInMonth.map((day) => {
+                  const dayStr = format(day, 'dd/MM');
+                  const dayPosts = getPostsForDay(dayStr);
+                  const isCurrentDay = isToday(day);
 
-                return (
-                  <Droppable droppableId={dayStr} key={dayStr}>
-                    {(provided, snapshot) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.droppableProps}
-                        className={`min-h-[100px] md:min-h-[140px] p-1 md:p-2 border-b border-r border-gray-700/50 transition-colors ${
-                          snapshot.isDraggingOver ? 'bg-blue-500/20' : ''
-                        } ${isCurrentDay ? 'bg-blue-900/20' : ''}`}
-                      >
-                        {/* Número do dia */}
-                        <div className={`text-xs md:text-sm font-semibold mb-1 ${
-                          isCurrentDay ? 'text-blue-400' : 'text-gray-400'
-                        }`}>
-                          {format(day, 'd')}
-                        </div>
+                  return (
+                    <Droppable droppableId={dayStr} key={dayStr}>
+                      {(provided, snapshot) => (
+                        <div
+                          ref={provided.innerRef}
+                          {...provided.droppableProps}
+                          className={`min-h-[100px] md:min-h-[140px] p-1 md:p-2 border-b border-r border-gray-700/50 transition-colors ${snapshot.isDraggingOver ? 'bg-blue-500/20' : ''
+                            } ${isCurrentDay ? 'bg-blue-900/20' : ''}`}
+                        >
+                          {/* Número do dia */}
+                          <div className={`text-xs md:text-sm font-semibold mb-1 ${isCurrentDay ? 'text-blue-400' : 'text-gray-400'
+                            }`}>
+                            {format(day, 'd')}
+                          </div>
 
-                        {/* Posts do dia */}
-                        <div className="space-y-1">
-                          {dayPosts.map(({ post, index }, i) => (
-                            <Draggable
-                              key={`post-${index}`}
-                              draggableId={`post-${index}`}
-                              index={i}
-                            >
-                              {(provided, snapshot) => (
-                                <div
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  {...provided.dragHandleProps}
-                                  onClick={() => openEditModal(post, index)}
-                                  className={`p-1.5 md:p-2 rounded-md border-l-4 cursor-pointer transition-all text-xs ${
-                                    getStatusColor(post.status)
-                                  } ${
-                                    snapshot.isDragging ? 'shadow-lg scale-105 opacity-90' : 'hover:scale-[1.02]'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-1 mb-0.5">
-                                    <span className="text-sm">{getFormatIcon(post.formato)}</span>
-                                    <span className="font-medium truncate text-[10px] md:text-xs">
-                                      {post.formato}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center justify-between gap-1">
-                                    <div className="text-[10px] md:text-xs text-gray-300 truncate flex-1">
-                                      {post.tema}
+                          {/* Posts do dia */}
+                          <div className="space-y-1">
+                            {dayPosts.map(({ post, index }, i) => (
+                              <Draggable
+                                key={`post-${index}`}
+                                draggableId={`post-${index}`}
+                                index={i}
+                              >
+                                {(provided, snapshot) => (
+                                  <div
+                                    ref={provided.innerRef}
+                                    {...provided.draggableProps}
+                                    {...provided.dragHandleProps}
+                                    onClick={() => openEditModal(post, index)}
+                                    className={`p-1.5 md:p-2 rounded-md border-l-4 cursor-pointer transition-all text-xs ${getStatusColor(getCardStatus(post))
+                                      } ${snapshot.isDragging ? 'shadow-lg scale-105 opacity-90' : 'hover:scale-[1.02]'
+                                      }`}
+                                  >
+                                    <div className="flex items-center gap-1 mb-0.5">
+                                      <span className="text-sm">{getFormatIcon(post.formato)}</span>
+                                      <span className="font-medium truncate text-[10px] md:text-xs">
+                                        {post.formato}
+                                      </span>
                                     </div>
-                                    {post.referencias && (
-                                      <span className="text-xs" title="Tem referências">📎</span>
+                                    <div className="flex items-center justify-between gap-1">
+                                      <div className="text-[10px] md:text-xs text-gray-300 truncate flex-1">
+                                        {post.tema}
+                                      </div>
+                                      {post.referencias && (
+                                        <span className="text-xs" title="Tem referências">📎</span>
+                                      )}
+                                    </div>
+                                    {/* Revisões badge */}
+                                    {(getItemForPost(post)?.revisions_count ?? 0) > 0 && (
+                                      <div className="text-[9px] text-gray-500 mt-0.5">
+                                        {getItemForPost(post)!.revisions_count}× rev.
+                                      </div>
                                     )}
+                                    {/* Quick-status chips — stopPropagation evita abrir modal */}
+                                    <div
+                                      className="flex gap-0.5 mt-1 flex-wrap"
+                                      onClick={e => e.stopPropagation()}
+                                    >
+                                      {STATUS_CHIPS.map(chip => {
+                                        const itemStatus = getItemForPost(post)?.status;
+                                        const isActive = itemStatus === chip.status;
+                                        return (
+                                          <button
+                                            key={chip.status}
+                                            title={chip.label}
+                                            onClick={() => quickUpdateStatus(post, index, chip.status)}
+                                            className={`text-[9px] px-1 py-0.5 rounded transition-colors ${isActive ? chip.activeClass : chip.inactiveClass}`}
+                                          >
+                                            {chip.icon}
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
-                            </Draggable>
-                          ))}
+                                )}
+                              </Draggable>
+                            ))}
+                          </div>
+                          {provided.placeholder}
                         </div>
-                        {provided.placeholder}
-                      </div>
-                    )}
-                  </Droppable>
-                );
-              })}
+                      )}
+                    </Droppable>
+                  );
+                })}
               </div>
             </div>
           </div>
         </DragDropContext>
+
+        {/* Modal de Geração — branch com calendário */}
+        {showGenerateModal && (
+          <GenerateModal
+            mix={mix}
+            setMix={setMix}
+            briefing={briefing}
+            setBriefing={setBriefing}
+            generationPrompt={generationPrompt}
+            setGenerationPrompt={setGenerationPrompt}
+            periodoDias={periodoDias}
+            setPeriodoDias={setPeriodoDias}
+            baseMonthDate={currentMonth}
+            specificMonths={specificMonths}
+            setSpecificMonths={setSpecificMonths}
+            formatInstructions={formatInstructions}
+            setFormatInstructions={setFormatInstructions}
+            promptChains={promptChains}
+            selectedChainId={selectedChainId}
+            setSelectedChainId={setSelectedChainId}
+            isGenerating={isGenerating}
+            onGenerate={generateCalendar}
+            onClose={() => setShowGenerateModal(false)}
+          />
+        )}
+
+
 
         {showExportModal && calendar && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
@@ -1081,105 +1505,94 @@ export default function CalendarPage() {
               </div>
 
               <div className="space-y-4 mb-5">
-                {getExportMonthOptions(calendar).length === 0 ? (
-                  <div className="text-sm text-gray-300 bg-gray-900/50 border border-gray-700 rounded-lg p-4 text-center">
-                    ⚠️ Nenhum mês detectado (posts sem data em formato reconhecível).
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <button
+                      onClick={() => {
+                        setExportMonthsSelected([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+                      }}
+                      className="text-xs px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-lg transition-colors"
+                    >
+                      ✓ Selecionar Todos
+                    </button>
+                    <button
+                      onClick={() => setExportMonthsSelected([])}
+                      className="text-xs px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors"
+                    >
+                      ✕ Limpar Seleção
+                    </button>
                   </div>
-                ) : (
-                  <>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <button
-                        onClick={() => {
-                          const allMonths = getExportMonthOptions(calendar);
-                          setExportMonthsSelected(allMonths);
-                        }}
-                        className="text-xs px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 rounded-lg transition-colors"
-                      >
-                        ✓ Selecionar Todos
-                      </button>
-                      <button
-                        onClick={() => setExportMonthsSelected([])}
-                        className="text-xs px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg transition-colors"
-                      >
-                        ✕ Limpar Seleção
-                      </button>
-                    </div>
 
-                    {(() => {
-                      const isTri = Number(calendar.periodo) >= 90 || Number(calendar.periodo) === 3;
-                      if (!isTri) return null;
+                  {(() => {
+                    const isTri = Number(calendar.periodo) >= 90 || Number(calendar.periodo) === 3;
+                    if (!isTri) return null;
 
-                      const baseMonth = parseMonthLabelToNumber(calendar.mes) || (currentMonth.getMonth() + 1);
-                      const m1 = baseMonth;
-                      const m2 = baseMonth === 12 ? 1 : baseMonth + 1;
-                      const m3 = baseMonth >= 11 ? ((baseMonth + 2) % 12 || 12) : baseMonth + 2;
-                      const triMonths = [m1, m2, m3].sort((a, b) => a - b);
-                      const isTriSelected = triMonths.every((m) => exportMonthsSelected.includes(m)) && exportMonthsSelected.length === 3;
+                    const baseMonth = parseMonthLabelToNumber(calendar.mes) || (currentMonth.getMonth() + 1);
+                    const m1 = baseMonth;
+                    const m2 = baseMonth === 12 ? 1 : baseMonth + 1;
+                    const m3 = baseMonth >= 11 ? ((baseMonth + 2) % 12 || 12) : baseMonth + 2;
+                    const triMonths = [m1, m2, m3].sort((a, b) => a - b);
+                    const isTriSelected = triMonths.every((m) => exportMonthsSelected.includes(m)) && exportMonthsSelected.length === 3;
 
-                      return (
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            onClick={() => {
-                              const options = getExportMonthOptions(calendar);
-                              const filtered = triMonths.filter((m) => options.includes(m));
-                              setExportMonthsSelected(filtered);
-                            }}
-                            className={`text-xs px-3 py-1.5 rounded-lg transition-colors border ${
-                              isTriSelected
-                                ? 'bg-blue-600 text-white border-blue-400'
-                                : 'bg-gray-900/50 text-gray-300 border-gray-700 hover:border-blue-500/50 hover:bg-gray-900'
+                    return (
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => {
+                            setExportMonthsSelected(triMonths);
+                          }}
+                          className={`text-xs px-3 py-1.5 rounded-lg transition-colors border ${isTriSelected
+                            ? 'bg-blue-600 text-white border-blue-400'
+                            : 'bg-gray-900/50 text-gray-300 border-gray-700 hover:border-blue-500/50 hover:bg-gray-900'
                             }`}
-                            title="Selecionar o trimestre do calendário"
-                          >
-                            Selecionar Trimestre
-                          </button>
-                        </div>
-                      );
-                    })()}
+                          title="Selecionar o trimestre do calendário"
+                        >
+                          Selecionar Trimestre
+                        </button>
+                      </div>
+                    );
+                  })()}
 
-                    <div className="grid grid-cols-3 gap-3">
-                      {getExportMonthOptions(calendar).map((m) => {
-                        const checked = exportMonthsSelected.includes(m);
-                        return (
-                          <button
-                            key={m}
-                            onClick={() => {
-                              if (checked) {
-                                setExportMonthsSelected((prev) => prev.filter((x) => x !== m));
-                              } else {
-                                setExportMonthsSelected((prev) => Array.from(new Set([...prev, m])).sort((a, b) => a - b));
-                              }
-                            }}
-                            className={`
+                  <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((m) => {
+                      const checked = exportMonthsSelected.includes(m);
+                      return (
+                        <button
+                          key={m}
+                          onClick={() => {
+                            if (checked) {
+                              setExportMonthsSelected((prev) => prev.filter((x) => x !== m));
+                            } else {
+                              setExportMonthsSelected((prev) => Array.from(new Set([...prev, m])).sort((a, b) => a - b));
+                            }
+                          }}
+                          className={`
                               relative px-4 py-3 rounded-lg font-medium transition-all text-sm
-                              ${
-                                checked
-                                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 border-2 border-blue-400'
-                                  : 'bg-gray-900/50 text-gray-300 border-2 border-gray-700 hover:border-blue-500/50 hover:bg-gray-900'
-                              }
+                              ${checked
+                              ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 border-2 border-blue-400'
+                              : 'bg-gray-900/50 text-gray-300 border-2 border-gray-700 hover:border-blue-500/50 hover:bg-gray-900'
+                            }
                             `}
-                          >
-                            {checked && (
-                              <span className="absolute top-1 right-1 text-xs">✓</span>
-                            )}
-                            <div className="text-center">
-                              {getMonthName(m)}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <div className="text-xs text-gray-400 text-center">
-                      {exportMonthsSelected.length === 0 ? (
-                        'Nenhum mês selecionado'
-                      ) : exportMonthsSelected.length === 1 ? (
-                        `1 mês selecionado: ${getMonthName(exportMonthsSelected[0])}`
-                      ) : (
-                        `${exportMonthsSelected.length} meses selecionados: ${exportMonthsSelected.map(m => getMonthName(m)).join(', ')}`
-                      )}
-                    </div>
-                  </>
-                )}
+                        >
+                          {checked && (
+                            <span className="absolute top-1 right-1 text-xs">✓</span>
+                          )}
+                          <div className="text-center">
+                            {getMonthName(m)}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-xs text-gray-400 text-center">
+                    {exportMonthsSelected.length === 0 ? (
+                      'Nenhum mês selecionado'
+                    ) : exportMonthsSelected.length === 1 ? (
+                      `1 mês selecionado: ${getMonthName(exportMonthsSelected[0])}`
+                    ) : (
+                      `${exportMonthsSelected.length} meses selecionados: ${exportMonthsSelected.map(m => getMonthName(m)).join(', ')}`
+                    )}
+                  </div>
+                </>
               </div>
 
               <div className="flex justify-end gap-3">
@@ -1238,6 +1651,8 @@ export default function CalendarPage() {
             onRegeneratePost={regeneratePostWithAI}
             isDeletingPost={isDeletingPost}
             onDeletePost={deletePost}
+            isExportingClickUp={isExportingClickUp}
+            onExportClickUp={exportToClickUp}
             onSave={savePost}
             onClose={closeEditModal}
           />
@@ -1275,7 +1690,7 @@ export default function CalendarPage() {
               <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
                 📎 Referências do Mês
               </h3>
-              
+
               <div className="space-y-6">
                 {/* Texto */}
                 <div>
@@ -1326,14 +1741,14 @@ export default function CalendarPage() {
                       />
                     </label>
                   </div>
-                  
+
                   {monthImages.length > 0 ? (
                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                       {monthImages.map((imgUrl, idx) => (
                         <div key={idx} className="relative group aspect-square bg-gray-900 rounded-lg overflow-hidden border border-gray-700">
-                          <img 
-                            src={imgUrl} 
-                            alt={`Ref ${idx}`} 
+                          <img
+                            src={imgUrl}
+                            alt={`Ref ${idx}`}
                             className="w-full h-full object-cover"
                           />
                           <button
@@ -1387,6 +1802,7 @@ export default function CalendarPage() {
             </div>
           </div>
         )}
+        {/* Job progress is now handled by JobProgressPanel at the top of the page */}
       </div>
     </div>
   );
@@ -1408,8 +1824,8 @@ interface EditModalProps {
   setEditObjetivo: (v: string) => void;
   editImagePrompt: string;
   setEditImagePrompt: (v: string) => void;
-   editReferencias: string;
-   setEditReferencias: (v: string) => void;
+  editReferencias: string;
+  setEditReferencias: (v: string) => void;
   editStatus: 'sugerido' | 'aprovado' | 'publicado';
   setEditStatus: (v: 'sugerido' | 'aprovado' | 'publicado') => void;
   regenPostPrompt: string;
@@ -1418,6 +1834,8 @@ interface EditModalProps {
   onRegeneratePost: () => void;
   isDeletingPost: boolean;
   onDeletePost: () => void;
+  isExportingClickUp: boolean;
+  onExportClickUp: () => void;
   onSave: () => void;
   onClose: () => void;
 }
@@ -1437,6 +1855,8 @@ function EditModal({
   onRegeneratePost,
   isDeletingPost,
   onDeletePost,
+  isExportingClickUp,
+  onExportClickUp,
   onSave,
   onClose
 }: EditModalProps) {
@@ -1453,199 +1873,209 @@ function EditModal({
             <button onClick={onClose} className="text-gray-400 hover:text-white text-2xl">×</button>
           </div>
 
-        <div className="space-y-4 mb-6">
-          {/* Card 1 - Informações do Post */}
-          <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-200">📌 Informações do Post</h3>
+          <div className="space-y-4 mb-6">
+            {/* Card 1 - Informações do Post */}
+            <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-200">📌 Informações do Post</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Data (DD/MM)</label>
+                  <input
+                    type="text"
+                    value={editData}
+                    onChange={(e) => setEditData(e.target.value)}
+                    placeholder="Ex: 15/01"
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Formato</label>
+                  <select
+                    value={editFormato}
+                    onChange={(e) => setEditFormato(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="Arte">🖼️ Arte</option>
+                    <option value="Carrossel">🎠 Carrossel</option>
+                    <option value="Reels">🎬 Reels</option>
+                    <option value="Foto">📷 Foto</option>
+                    <option value="Story">📱 Story</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Tema</label>
+                  <input
+                    type="text"
+                    value={editTema}
+                    onChange={(e) => setEditTema(e.target.value)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Status</label>
+                  <select
+                    value={editStatus}
+                    onChange={(e) => setEditStatus(e.target.value as any)}
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="sugerido">⏳ Sugerido</option>
+                    <option value="aprovado">✅ Aprovado</option>
+                    <option value="publicado">🚀 Publicado</option>
+                  </select>
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+
+            {/* Card 2 - Conteúdo do Post */}
+            <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-200">✍️ Conteúdo</h3>
+              </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Data (DD/MM)</label>
+                <label className="block text-xs text-gray-400 mb-1">Legenda</label>
+                <textarea
+                  value={editCopy}
+                  onChange={(e) => setEditCopy(e.target.value)}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 min-h-[110px]"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Objetivo</label>
                 <input
                   type="text"
-                  value={editData}
-                  onChange={(e) => setEditData(e.target.value)}
-                  placeholder="Ex: 15/01"
+                  value={editObjetivo}
+                  onChange={(e) => setEditObjetivo(e.target.value)}
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Formato</label>
-                <select
-                  value={editFormato}
-                  onChange={(e) => setEditFormato(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500"
-                >
-                  <option value="Reels">🎬 Reels</option>
-                  <option value="Carrossel">📸 Carrossel</option>
-                  <option value="Static">🖼️ Static</option>
-                  <option value="Stories">📱 Stories</option>
-                </select>
+                <label className="block text-xs text-gray-400 mb-1">Ideia visual</label>
+                <textarea
+                  value={editIdeiaVisual}
+                  onChange={(e) => setEditIdeiaVisual(e.target.value)}
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 min-h-[80px]"
+                />
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs text-gray-400 mb-1">Tema</label>
-                <input
-                  type="text"
-                  value={editTema}
-                  onChange={(e) => setEditTema(e.target.value)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500"
+                <label className="block text-xs text-gray-400 mb-1">Referências (links, fotos, notas)</label>
+                <textarea
+                  value={editReferencias}
+                  onChange={(e) => setEditReferencias(e.target.value)}
+                  placeholder="Cole aqui links de posts, referências visuais ou anotações para este conteúdo."
+                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus:border-blue-500 min-h-[80px]"
                 />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Status</label>
-                <select
-                  value={editStatus}
-                  onChange={(e) => setEditStatus(e.target.value as any)}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500"
-                >
-                  <option value="sugerido">⏳ Sugerido</option>
-                  <option value="aprovado">✅ Aprovado</option>
-                  <option value="publicado">🚀 Publicado</option>
-                </select>
-              </div>
-            </div>
-          </div>
+            {/* Card 3 - Criativo & IA (avançado) */}
+            <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-4 space-y-3">
+              <button
+                type="button"
+                onClick={() => setShowAdvancedIA(!showAdvancedIA)}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <span className="text-sm font-semibold text-gray-200 flex items-center gap-2">
+                  🎨 Criativo & IA
+                  <span className="text-[11px] text-gray-500 font-normal">(opcional)</span>
+                </span>
+                <span className="text-xs text-gray-400">
+                  {showAdvancedIA ? 'Esconder' : 'Mostrar'}
+                </span>
+              </button>
 
-          {/* Card 2 - Conteúdo do Post */}
-          <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-4 space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-gray-200">✍️ Conteúdo</h3>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Legenda</label>
-              <textarea
-                value={editCopy}
-                onChange={(e) => setEditCopy(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 min-h-[110px]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Objetivo</label>
-              <input
-                type="text"
-                value={editObjetivo}
-                onChange={(e) => setEditObjetivo(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Ideia visual</label>
-              <textarea
-                value={editIdeiaVisual}
-                onChange={(e) => setEditIdeiaVisual(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 min-h-[80px]"
-              />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Referências (links, fotos, notas)</label>
-              <textarea
-                value={editReferencias}
-                onChange={(e) => setEditReferencias(e.target.value)}
-                placeholder="Cole aqui links de posts, referências visuais ou anotações para este conteúdo."
-                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus:border-blue-500 min-h-[80px]"
-              />
-            </div>
-          </div>
-
-          {/* Card 3 - Criativo & IA (avançado) */}
-          <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-4 space-y-3">
-            <button
-              type="button"
-              onClick={() => setShowAdvancedIA(!showAdvancedIA)}
-              className="w-full flex items-center justify-between text-left"
-            >
-              <span className="text-sm font-semibold text-gray-200 flex items-center gap-2">
-                🎨 Criativo & IA
-                <span className="text-[11px] text-gray-500 font-normal">(opcional)</span>
-              </span>
-              <span className="text-xs text-gray-400">
-                {showAdvancedIA ? 'Esconder' : 'Mostrar'}
-              </span>
-            </button>
-
-            {showAdvancedIA && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs text-gray-400">Prompt de imagem (IA)</label>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(editImagePrompt);
-                        alert('Prompt copiado para a área de transferência!');
-                      }}
-                      className="text-blue-400 hover:text-blue-300 text-xs flex items-center gap-1"
-                      title="Copiar prompt"
-                    >
-                      📋 Copiar
-                    </button>
+              {showAdvancedIA && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs text-gray-400">Prompt de imagem (IA)</label>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(editImagePrompt);
+                          alert('Prompt copiado para a área de transferência!');
+                        }}
+                        className="text-blue-400 hover:text-blue-300 text-xs flex items-center gap-1"
+                        title="Copiar prompt"
+                      >
+                        📋 Copiar
+                      </button>
+                    </div>
+                    <textarea
+                      value={editImagePrompt}
+                      onChange={(e) => setEditImagePrompt(e.target.value)}
+                      placeholder="Prompt técnico para Midjourney, DALL-E, etc."
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus:border-blue-500 min-h-[90px] font-mono"
+                    />
+                    <p className="text-[11px] text-gray-500">
+                      Ajuste este prompt antes de usar em ferramentas de IA generativa.
+                    </p>
                   </div>
-                  <textarea
-                    value={editImagePrompt}
-                    onChange={(e) => setEditImagePrompt(e.target.value)}
-                    placeholder="Prompt técnico para Midjourney, DALL-E, etc."
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus:border-blue-500 min-h-[90px] font-mono"
-                  />
-                  <p className="text-[11px] text-gray-500">
-                    Ajuste este prompt antes de usar em ferramentas de IA generativa.
-                  </p>
-                </div>
 
-                <div className="space-y-2">
-                  <label className="block text-xs text-gray-400">Prompt para regenerar este post com IA</label>
-                  <textarea
-                    value={regenPostPrompt}
-                    onChange={(e) => setRegenPostPrompt(e.target.value)}
-                    placeholder="Explique como a IA deve adaptar este post ao novo formato (foco, tom, tipo de conteúdo, etc.)."
-                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus:border-blue-500 min-h-[90px]"
-                  />
+                  <div className="space-y-2">
+                    <label className="block text-xs text-gray-400">Prompt para regenerar este post com IA</label>
+                    <textarea
+                      value={regenPostPrompt}
+                      onChange={(e) => setRegenPostPrompt(e.target.value)}
+                      placeholder="Explique como a IA deve adaptar este post ao novo formato (foco, tom, tipo de conteúdo, etc.)."
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-xs focus:outline-none focus:border-blue-500 min-h-[90px]"
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
-        </div>
 
-        <div className="space-y-3">
-          <div className="flex flex-col md:flex-row gap-3">
-            <button
-              onClick={onRegeneratePost}
-              disabled={isRegeneratingPost}
-              className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-60 py-3 rounded-lg font-medium transition-colors"
-            >
-              {isRegeneratingPost ? '🔁 Regenerando com IA...' : '🔁 Regenerar Post com IA'}
-            </button>
-            <button
-              onClick={onSave}
-              className="flex-1 bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-medium transition-colors"
-            >
-              💾 Salvar Alterações
-            </button>
-          </div>
-          <div className="flex flex-col md:flex-row gap-3">
-            <button
-              onClick={onClose}
-              className="flex-1 bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-medium transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={onDeletePost}
-              disabled={isDeletingPost}
-              className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:opacity-60 py-3 rounded-lg font-medium transition-colors"
-            >
-              {isDeletingPost ? '🗑️ Excluindo Post...' : '🗑️ Excluir Post'}
-            </button>
+          <div className="space-y-3">
+            <div className="flex flex-col md:flex-row gap-3">
+              <button
+                onClick={onExportClickUp}
+                disabled={isExportingClickUp}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:bg-green-800 disabled:opacity-60 py-3 rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                {isExportingClickUp ? '⏳ Exportando...' : '📤 Exportar para ClickUp'}
+              </button>
+            </div>
+            <div className="flex flex-col md:flex-row gap-3">
+              <button
+                onClick={onRegeneratePost}
+                disabled={isRegeneratingPost}
+                className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:bg-purple-800 disabled:opacity-60 py-3 rounded-lg font-medium transition-colors"
+              >
+                {isRegeneratingPost ? '🔁 Regenerando com IA...' : '🔁 Regenerar Post com IA'}
+              </button>
+              <button
+                onClick={onSave}
+                className="flex-1 bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-medium transition-colors"
+              >
+                💾 Salvar Alterações
+              </button>
+            </div>
+            <div className="flex flex-col md:flex-row gap-3">
+              <button
+                onClick={onClose}
+                className="flex-1 bg-gray-700 hover:bg-gray-600 py-3 rounded-lg font-medium transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={onDeletePost}
+                disabled={isDeletingPost}
+                className="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-red-800 disabled:opacity-60 py-3 rounded-lg font-medium transition-colors"
+              >
+                {isDeletingPost ? '🗑️ Excluindo Post...' : '🗑️ Excluir Post'}
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
+    );
   } catch (error) {
     console.error('❌ Erro no EditModal:', error);
     return (
@@ -1755,11 +2185,10 @@ function GenerateModal({
                         setSpecificMonths(ordered);
                       }
                     }}
-                    className={`p-3 rounded-lg border text-left transition-all flex flex-col ${
-                      isSelected
-                        ? 'bg-blue-600/20 border-blue-500 text-blue-100'
-                        : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:border-gray-500 hover:bg-gray-700'
-                    }`}
+                    className={`p-3 rounded-lg border text-left transition-all flex flex-col ${isSelected
+                      ? 'bg-blue-600/20 border-blue-500 text-blue-100'
+                      : 'bg-gray-700/50 border-gray-600 text-gray-400 hover:border-gray-500 hover:bg-gray-700'
+                      }`}
                   >
                     <span className="capitalize font-bold text-sm">{monthName}</span>
                     <span className="text-xs opacity-70">{year}</span>
@@ -1816,44 +2245,53 @@ function GenerateModal({
                   Use estes campos para dar instruções específicas para cada tipo de conteúdo. Elas serão
                   combinadas ao DNA da marca e ao briefing.
                 </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-              <div className="space-y-1">
-                <label className="block text-[11px] text-gray-400">Reels</label>
-                <textarea
-                  value={formatInstructions.reels}
-                  onChange={(e) => setFormatInstructions({ ...formatInstructions, reels: e.target.value })}
-                  placeholder="Ex.: Reels mais dinâmicos, com cortes rápidos e CTA forte nos 3s finais."
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-500 min-h-[70px]"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-[11px] text-gray-400">Posts estáticos</label>
-                <textarea
-                  value={formatInstructions.static}
-                  onChange={(e) => setFormatInstructions({ ...formatInstructions, static: e.target.value })}
-                  placeholder="Ex.: Layout minimalista, foco em tipografia e uma ideia central por peça."
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-500 min-h-[70px]"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-[11px] text-gray-400">Carrosséis</label>
-                <textarea
-                  value={formatInstructions.carousel}
-                  onChange={(e) => setFormatInstructions({ ...formatInstructions, carousel: e.target.value })}
-                  placeholder="Ex.: Conteúdos educativos em 5-7 cards, com passo-a-passo e CTA no final."
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-500 min-h-[70px]"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="block text-[11px] text-gray-400">Stories</label>
-                <textarea
-                  value={formatInstructions.stories}
-                  onChange={(e) => setFormatInstructions({ ...formatInstructions, stories: e.target.value })}
-                  placeholder="Ex.: Sequências curtas, bastidores e enquetes para engajamento diário."
-                  className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-500 min-h-[70px]"
-                />
-              </div>
-            </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div className="space-y-1">
+                    <label className="block text-[11px] text-gray-400">🎬 Reels</label>
+                    <textarea
+                      value={formatInstructions.reels}
+                      onChange={(e) => setFormatInstructions({ ...formatInstructions, reels: e.target.value })}
+                      placeholder="Ex.: Reels mais dinâmicos, com cortes rápidos e CTA forte nos 3s finais."
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-500 min-h-[70px]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[11px] text-gray-400">🖼️ Arte (Post estático)</label>
+                    <textarea
+                      value={formatInstructions.static}
+                      onChange={(e) => setFormatInstructions({ ...formatInstructions, static: e.target.value })}
+                      placeholder="Ex.: Layout minimalista, foco em tipografia e uma ideia central por peça."
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-500 min-h-[70px]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[11px] text-gray-400">🎠 Carrossel</label>
+                    <textarea
+                      value={formatInstructions.carousel}
+                      onChange={(e) => setFormatInstructions({ ...formatInstructions, carousel: e.target.value })}
+                      placeholder="Ex.: Conteúdos educativos em 5-7 cards, com passo-a-passo e CTA no final."
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-500 min-h-[70px]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[11px] text-gray-400">📷 Foto</label>
+                    <textarea
+                      value={formatInstructions.photos}
+                      onChange={(e) => setFormatInstructions({ ...formatInstructions, photos: e.target.value })}
+                      placeholder="Ex.: Fotos ambientais do estúdio, produtos em uso, bastidores de produção."
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-500 min-h-[70px]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="block text-[11px] text-gray-400">📱 Story</label>
+                    <textarea
+                      value={formatInstructions.stories}
+                      onChange={(e) => setFormatInstructions({ ...formatInstructions, stories: e.target.value })}
+                      placeholder="Ex.: Sequências curtas, bastidores e enquetes para engajamento diário."
+                      className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-500 min-h-[70px]"
+                    />
+                  </div>
+                </div>
               </>
             )}
           </div>
@@ -1891,21 +2329,19 @@ function GenerateModal({
                         ℹ️ Quando usar?
                       </a>
                     </div>
-                    
+
                     {/* Cards de Chains */}
                     <div className="space-y-2">
                       <div
                         onClick={() => setSelectedChainId('')}
-                        className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
-                          selectedChainId === ''
-                            ? 'border-blue-500 bg-blue-500/10'
-                            : 'border-gray-600 bg-gray-700/50 hover:border-gray-500'
-                        }`}
+                        className={`p-2.5 rounded-lg border cursor-pointer transition-all ${selectedChainId === ''
+                          ? 'border-blue-500 bg-blue-500/10'
+                          : 'border-gray-600 bg-gray-700/50 hover:border-gray-500'
+                          }`}
                       >
                         <div className="flex items-center gap-2">
-                          <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
-                            selectedChainId === '' ? 'border-blue-500' : 'border-gray-500'
-                          }`}>
+                          <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${selectedChainId === '' ? 'border-blue-500' : 'border-gray-500'
+                            }`}>
                             {selectedChainId === '' && <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
                           </div>
                           <div className="flex-1">
@@ -1919,16 +2355,14 @@ function GenerateModal({
                         <div
                           key={chain.id}
                           onClick={() => setSelectedChainId(chain.id)}
-                          className={`p-2.5 rounded-lg border cursor-pointer transition-all ${
-                            selectedChainId === chain.id
-                              ? 'border-purple-500 bg-purple-500/10'
-                              : 'border-gray-600 bg-gray-700/50 hover:border-gray-500'
-                          }`}
+                          className={`p-2.5 rounded-lg border cursor-pointer transition-all ${selectedChainId === chain.id
+                            ? 'border-purple-500 bg-purple-500/10'
+                            : 'border-gray-600 bg-gray-700/50 hover:border-gray-500'
+                            }`}
                         >
                           <div className="flex items-start gap-2">
-                            <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center mt-0.5 flex-shrink-0 ${
-                              selectedChainId === chain.id ? 'border-purple-500' : 'border-gray-500'
-                            }`}>
+                            <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center mt-0.5 flex-shrink-0 ${selectedChainId === chain.id ? 'border-purple-500' : 'border-gray-500'
+                              }`}>
                               {selectedChainId === chain.id && <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />}
                             </div>
                             <div className="flex-1 min-w-0">
@@ -1985,7 +2419,7 @@ function GenerateModal({
               <div className="flex flex-col items-center gap-1">
                 <span className="text-base">⏳ Gerando {selectedCount > 1 ? `${selectedCount} meses` : 'calendário'}...</span>
                 <span className="text-xs text-blue-200 opacity-80">
-                  {selectedCount > 1 
+                  {selectedCount > 1
                     ? `Isso pode levar ${Math.ceil(selectedCount * 1.5)}-${Math.ceil(selectedCount * 3)} minutos`
                     : 'Aguarde alguns instantes'}
                 </span>

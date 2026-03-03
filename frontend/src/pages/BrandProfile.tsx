@@ -1,4 +1,4 @@
-import { useState, useEffect, type ChangeEvent } from 'react';
+import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../services/api';
 import { getArchetypeInfo, JUNG_ARCHETYPES } from '../utils/jungArchetypes';
@@ -52,10 +52,10 @@ export default function BrandProfile() {
   const RENDER_ID = Date.now();
   console.log(`\n🔴 [FRONTEND VIVO] BrandProfile renderizado - ID: ${RENDER_ID}`);
   console.log(`📍 Timestamp: ${new Date().toISOString()}`);
-  
+
   const { clientId } = useParams<{ clientId: string }>();
   console.log(`🆔 Cliente ID da URL: ${clientId}`);
-  
+
   // Estado inicial com valores vazios
   const emptyBranding: BrandingData = {
     visual_style: { colors: [], fonts: [], archeType: '' },
@@ -104,6 +104,7 @@ export default function BrandProfile() {
 
   // Estado para controlar se há rascunho restaurado
   const [hasDraftRestored, setHasDraftRestored] = useState(false);
+  const ignoreAutoSave = useRef(false);
 
   // Inputs temporários
   const [newColor, setNewColor] = useState('');
@@ -205,6 +206,7 @@ export default function BrandProfile() {
     try {
       await api.post(`/branding/${clientId}/versions/${versionId}/restore`, {});
       const refreshed = await api.get(`/branding/${clientId}`);
+      ignoreAutoSave.current = true; // Evitar salvar como rascunho imediatamente
       setBranding(refreshed.data?.branding || emptyBranding);
       setIsNewBrand(false);
       setIsEditing(false);
@@ -225,15 +227,21 @@ export default function BrandProfile() {
   // Auto-save: sempre que o branding mudar, salva no localStorage
   useEffect(() => {
     if (branding && Object.keys(branding).length > 0 && !loading) {
+      if (ignoreAutoSave.current) {
+        console.log('🛡️ [AUTO-SAVE] Ignorando salvamento (dados vindos do backend)');
+        ignoreAutoSave.current = false;
+        return;
+      }
+
       // Só salva se não for dados vazios iniciais
       const hasContent = (branding.visual_style?.colors?.length ?? 0) > 0 ||
-                        branding.tone_of_voice?.description ||
-                        branding.audience?.persona ||
-                        (branding.keywords?.length ?? 0) > 0 ||
-                        branding.archetype ||
-                        branding.usp ||
-                        (branding.anti_keywords?.length ?? 0) > 0 ||
-                        branding.niche;
+        branding.tone_of_voice?.description ||
+        branding.audience?.persona ||
+        (branding.keywords?.length ?? 0) > 0 ||
+        branding.archetype ||
+        branding.usp ||
+        (branding.anti_keywords?.length ?? 0) > 0 ||
+        branding.niche;
 
       if (hasContent) {
         saveToLocalStorage(branding);
@@ -278,6 +286,7 @@ export default function BrandProfile() {
       console.log('📥 [LOAD BRANDING] Resposta recebida:', response.data);
       console.log('📥 [LOAD BRANDING] Branding data:', response.data.branding);
 
+      ignoreAutoSave.current = true; // Evitar salvar como rascunho ao carregar do banco
       setBranding(response.data.branding);
       setIsNewBrand(false);
       setHasDraftRestored(false);
@@ -743,23 +752,23 @@ export default function BrandProfile() {
                 <p className="text-gray-400">
                   {isNewBrand ? 'Criar identidade visual e estratégica' : 'Identidade visual e estratégica'}
                 </p>
-            </div>
-          </div>
-
-          {/* Aviso de Rascunho Restaurado */}
-          {hasDraftRestored && (
-            <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4 mb-4">
-              <div className="flex items-center gap-2 text-yellow-400">
-                <span className="text-lg">💾</span>
-                <div>
-                  <div className="font-semibold">Rascunho restaurado!</div>
-                  <div className="text-sm">Restauramos seu trabalho não salvo automaticamente.</div>
-                </div>
               </div>
             </div>
-          )}
 
-          {/* Botões de Ação */}
+            {/* Aviso de Rascunho Restaurado */}
+            {hasDraftRestored && (
+              <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4 mb-4">
+                <div className="flex items-center gap-2 text-yellow-400">
+                  <span className="text-lg">💾</span>
+                  <div>
+                    <div className="font-semibold">Rascunho restaurado!</div>
+                    <div className="text-sm">Restauramos seu trabalho não salvo automaticamente.</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Botões de Ação */}
             <div className="flex gap-3">
               <button
                 onClick={() => setShowUploadModal(true)}
@@ -776,7 +785,7 @@ export default function BrandProfile() {
               >
                 🕘 Versões
               </button>
-              
+
               {!isEditing ? (
                 <button
                   onClick={startEditing}
@@ -948,7 +957,7 @@ export default function BrandProfile() {
               <span className="text-2xl">🎨</span>
               <h2 className="text-xl font-semibold">Paleta de Cores</h2>
             </div>
-            
+
             {isEditing && (
               <div className="mb-4 flex gap-2">
                 <input
@@ -1001,7 +1010,7 @@ export default function BrandProfile() {
               <span className="text-2xl">🔤</span>
               <h2 className="text-xl font-semibold">Tipografia</h2>
             </div>
-            
+
             {isEditing && (
               <div className="mb-4 flex gap-2">
                 <input
@@ -1058,7 +1067,7 @@ export default function BrandProfile() {
               <span className="text-2xl">💬</span>
               <h2 className="text-xl font-semibold">Tom de Voz</h2>
             </div>
-            
+
             {isEditing ? (
               <>
                 <div className="mb-3">
@@ -1086,7 +1095,7 @@ export default function BrandProfile() {
                   placeholder="Ex: Direto e educativo, com energia e foco em resultados. Evitar formalidade excessiva."
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 mb-4 focus:outline-none focus:border-blue-500 min-h-[100px]"
                 />
-                
+
                 <div className="mb-2 text-sm text-gray-400">Palavras-chave do tom:</div>
                 <div className="flex gap-2 mb-3">
                   <input
@@ -1108,7 +1117,7 @@ export default function BrandProfile() {
             ) : (
               <p className="text-gray-300 mb-4">{toneDescription || 'Não definido'}</p>
             )}
-            
+
             {toneKeywords.length > 0 && (
               <div className="flex flex-wrap gap-2">
                 {toneKeywords.map((keyword, index) => (
@@ -1146,7 +1155,7 @@ export default function BrandProfile() {
                 {archetypeInfo?.emoji || '🙂'}
               </div>
             </div>
-            
+
             <div className="mb-4">
               <div className="text-sm text-gray-400 mb-2">Persona</div>
               {isEditing ? (
@@ -1182,7 +1191,7 @@ export default function BrandProfile() {
                 <p className="text-gray-300">{persona || 'Não definido'}</p>
               )}
             </div>
-            
+
             <div>
               <div className="text-sm text-gray-400 mb-2">Demografia</div>
               {isEditing ? (
@@ -1230,7 +1239,7 @@ export default function BrandProfile() {
               </div>
             </div>
           )}
-          
+
           {isEditing && (
             <div className="mb-4 flex gap-2">
               <input
@@ -1478,7 +1487,7 @@ export default function BrandProfile() {
                     file:cursor-pointer cursor-pointer
                     border border-gray-600 rounded-lg p-2"
                 />
-                
+
                 {/* Preview das Imagens */}
                 {uploadImages.length > 0 && (
                   <div className="mt-4 grid grid-cols-3 gap-3">

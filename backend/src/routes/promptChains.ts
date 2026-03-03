@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import db from "../config/database";
+import { updateTokenUsage } from "../utils/tokenTracker";
 
 const router = Router();
 
@@ -212,14 +213,20 @@ router.post("/prompt-chains/execute/:chainId", async (req: Request, res: Respons
           result = await model.generateContent(filledPrompt);
           text = result.response.text();
           console.log(`✅ [DEBUG] Sucesso com ${modelName} (step ${step.order})`);
+
+          // Rastrear tokens gastos neste step da chain
+          const usageMetadata = result.response.usageMetadata;
+          if (usageMetadata) {
+            await updateTokenUsage(clientId, usageMetadata, "prompt_chain_step", modelName);
+          }
           break;
         } catch (modelError: any) {
           console.warn(`⚠️ [DEBUG] ${modelName} falhou (step ${step.order}):`, modelError.message);
-          
+
           if (modelName === modelsToTry[modelsToTry.length - 1]) {
             throw new Error(`Todos os modelos falharam no step ${step.order}. Erro final: ${modelError.message}`);
           }
-          
+
           console.log("⏳ [DEBUG] Aguardando 2s antes do próximo modelo...");
           await new Promise(resolve => setTimeout(resolve, 2000));
         }

@@ -1,0 +1,43 @@
+{
+    "$schema": "https://json.schemastore.org/claude-code-settings.json",
+    "permissions": {
+        "allow": [
+            "Bash(npm run dev)",
+            "Bash(npm run dev:backend)",
+            "Bash(npm run dev:frontend)",
+            "Bash(npm run dev:fresh)",
+            "Bash(npm run kill-ports)",
+            "Bash(npm run build)",
+            "Bash(npm run test)",
+            "Bash(npm run preview)",
+            "Bash(npm run migrate:*)",
+            "Bash(npm run seed:datas)",
+            "Bash(npx ts-node *)",
+            "Bash(npx tsc *)",
+            "Bash(node dist/index.js)",
+            "Bash(nodemon *)",
+            "Bash(vite *)"
+        ],
+        "deny": [
+            "Read(**/.env)",
+            "Read(**/.env.*)",
+            "Edit(**/.env)",
+            "Edit(**/.env.*)",
+            "Read(**/*.pem)",
+            "Read(**/*.key)",
+            "Edit(**/*.pem)",
+            "Edit(**/*.key)",
+            "Read(**/secrets/**)",
+            "Edit(**/secrets/**)",
+            "Read(**/node_modules/**)",
+            "Read(**/build/**)",
+            "Read(**/dist/**)",
+            "Read(**/.next/**)",
+            "Read(**/coverage/**)",
+            "Read(**/logs/**)",
+            "Read(**/*.log)",
+            "Bash(curl *)",
+            "Bash(wget *)"
+        ]
+    }
+}

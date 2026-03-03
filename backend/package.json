@@ -11,8 +11,13 @@
     "migrate:branding": "ts-node db/migrate_branding_fix.ts",
     "migrate:calendarios": "ts-node db/migrate_calendarios_fix.ts",
     "migrate:contexto": "ts-node db/migrate_contexto_temporal.ts",
+    "migrate:missing": "ts-node db/migrate_missing_cols.ts",
+    "migrate:jobs": "ts-node db/migrate_calendar_jobs.ts",
+    "migrate:prompt-templates": "ts-node db/migrate_prompt_templates.ts",
+    "migrate:prompt-templates-v2": "ts-node db/migrate_prompt_templates_v2.ts",
     "seed:datas": "psql $POSTGRES_DB < db/seeds/datas_comemorativas.sql",
-    "migrate:all": "npm run migrate:branding && npm run migrate:calendarios && npm run migrate:contexto",
+    "migrate:calendar-items": "ts-node db/migrate_calendar_items.ts",
+    "migrate:all": "npm run migrate:branding && npm run migrate:calendarios && npm run migrate:contexto && npm run migrate:jobs && npm run migrate:prompt-templates && npm run migrate:prompt-templates-v2 && npm run migrate:calendar-items",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -21,9 +26,11 @@
   "dependencies": {
     "@google/generative-ai": "^0.21.0",
     "axios": "^1.13.2",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.0",
+    "jsonwebtoken": "^9.0.3",
     "multer": "^1.4.5-lts.1",
     "pg": "^8.16.3",
     "puppeteer": "^24.31.0",
@@ -31,8 +38,10 @@
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.5",
+    "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^1.4.12",
     "@types/node": "^24.10.1",
     "@types/pg": "^8.11.10",

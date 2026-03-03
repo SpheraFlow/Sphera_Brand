@@ -18,8 +18,16 @@ export async function getDatasComemorativas(
   let where = `EXTRACT(MONTH FROM data) = $1 AND EXTRACT(YEAR FROM data) = $2`;
 
   if (categorias && categorias.length > 0) {
-    params.push(categorias);
-    where += ` AND categorias ?| $3`;
+    // O operador JSONB ?| é case-sensitive.
+    // Usamos EXISTS + lower() para comparação case-insensitive.
+    // As categorias no banco ficam como ["Saúde", "Feriado"] (capitalizadas),
+    // mas passamos os filtros em minúsculas para garantir a correspondência.
+    params.push(categorias.map(c => c.toLowerCase()));
+    where += `
+      AND EXISTS (
+        SELECT 1 FROM jsonb_array_elements_text(categorias) AS cat
+        WHERE lower(cat) = ANY($3::text[])
+      )`;
   }
 
   const query = `

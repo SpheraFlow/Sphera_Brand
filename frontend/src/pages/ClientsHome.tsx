@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Calendar } from 'lucide-react';
 import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import ImagePreview from '../components/ImagePreview';
 import { resolveAssetUrl, withCacheBust, stripCacheBust } from '../utils/assetHelpers';
 import { getArchetypeInfo } from '../utils/jungArchetypes';
@@ -12,6 +13,7 @@ interface Cliente {
   status: string;
   avatarUrl: string | null;
   categorias_nicho?: string[];
+  clickup_list_id?: string;
   criado_em: string;
   archetype?: string;
 }
@@ -25,6 +27,7 @@ interface ClientCalendarOverview {
 }
 
 export default function ClientsHome() {
+  const { hasPermission } = useAuth();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewClientModal, setShowNewClientModal] = useState(false);
@@ -37,6 +40,7 @@ export default function ClientsHome() {
   const [nichoQuery, setNichoQuery] = useState<string>('');
   const [loadingNichoSuggestions, setLoadingNichoSuggestions] = useState(false);
   const [savingNicho, setSavingNicho] = useState(false);
+  const [nichoClickupListId, setNichoClickupListId] = useState<string>('');
   const [calendarsOverview, setCalendarsOverview] = useState<Record<string, ClientCalendarOverview>>({});
   const [brokenLogoClients, setBrokenLogoClients] = useState<Set<string>>(() => new Set());
   const [logoOverrides, setLogoOverrides] = useState<Record<string, string>>(() => {
@@ -51,6 +55,8 @@ export default function ClientsHome() {
   const navigate = useNavigate();
 
   // Helpers agora vêm de assetHelpers.ts
+  const canManageClients = hasPermission('clients_manage');
+  const canGenerateContent = hasPermission('content_generate');
 
   const markLogoBroken = (clientId: string) => {
     setBrokenLogoClients((prev) => {
@@ -66,6 +72,7 @@ export default function ClientsHome() {
     const current = Array.isArray(cliente.categorias_nicho) ? cliente.categorias_nicho : [];
     setNichoSelected(current.map((c) => String(c).trim()).filter(Boolean));
     setNichoQuery('');
+    setNichoClickupListId(cliente.clickup_list_id || '');
     setShowNichoModal(true);
 
     (async () => {
@@ -89,6 +96,7 @@ export default function ClientsHome() {
       setSavingNicho(true);
       await api.put(`/clients/${nichoClientId}`, {
         categorias_nicho: nichoSelected,
+        clickup_list_id: nichoClickupListId.trim() || undefined
       });
       setShowNichoModal(false);
       await loadClientes();
@@ -348,12 +356,14 @@ export default function ClientsHome() {
               >
                 📅 Calendário Estratégico
               </button>
-              <button
-                onClick={() => setShowNewClientModal(true)}
-                className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-colors"
-              >
-                + Novo Cliente
-              </button>
+              {canManageClients && (
+                <button
+                  onClick={() => setShowNewClientModal(true)}
+                  className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-colors"
+                >
+                  + Novo Cliente
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -365,178 +375,186 @@ export default function ClientsHome() {
             <div className="text-gray-400 text-lg mb-4">
               Nenhum cliente cadastrado ainda
             </div>
-            <button
-              onClick={() => setShowNewClientModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-colors"
-            >
-              Criar Primeiro Cliente
-            </button>
+            {canManageClients && (
+              <button
+                onClick={() => setShowNewClientModal(true)}
+                className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-colors"
+              >
+                Criar Primeiro Cliente
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {clientes.map((cliente) => {
               const archetypeInfo = getArchetypeInfo(cliente.archetype);
               const overview = calendarsOverview[cliente.id];
-              
+
               return (
-              <div
-                key={cliente.id}
-                className="bg-gray-800 border border-gray-700 rounded-xl p-6 hover:border-blue-500 transition-all shadow-sm hover:shadow-lg cursor-pointer group"
-              >
-                {/* Avatar/Ícone */}
-                <div className="flex items-center mb-4">
-                  <div className="relative">
-                    <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xl font-bold overflow-hidden">
-                    {(logoOverrides[cliente.id] || cliente.avatarUrl) && !brokenLogoClients.has(cliente.id) ? (
-                      <ImagePreview
-                        src={withCacheBust(stripCacheBust(resolveAssetUrl(logoOverrides[cliente.id] || (cliente.avatarUrl as string))))}
-                        alt={cliente.nome}
-                        className="w-full h-full object-cover"
-                        onError={() => markLogoBroken(cliente.id)}
-                        fallback={<span className="text-xl font-bold">{getInitials(cliente.nome)}</span>}
-                      />
-                    ) : (
-                      getInitials(cliente.nome)
-                    )}
+                <div
+                  key={cliente.id}
+                  className="bg-gray-800 border border-gray-700 rounded-xl p-6 hover:border-blue-500 transition-all shadow-sm hover:shadow-lg cursor-pointer group"
+                >
+                  {/* Avatar/Ícone */}
+                  <div className="flex items-center mb-4">
+                    <div className="relative">
+                      <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center text-white text-xl font-bold overflow-hidden">
+                        {(logoOverrides[cliente.id] || cliente.avatarUrl) && !brokenLogoClients.has(cliente.id) ? (
+                          <ImagePreview
+                            src={withCacheBust(stripCacheBust(resolveAssetUrl(logoOverrides[cliente.id] || (cliente.avatarUrl as string))))}
+                            alt={cliente.nome}
+                            className="w-full h-full object-cover"
+                            onError={() => markLogoBroken(cliente.id)}
+                            fallback={<span className="text-xl font-bold">{getInitials(cliente.nome)}</span>}
+                          />
+                        ) : (
+                          getInitials(cliente.nome)
+                        )}
+                      </div>
+                      {archetypeInfo && (
+                        <div
+                          className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-gray-700 border-2 border-gray-800 flex items-center justify-center text-sm"
+                          title={`Arquétipo: ${archetypeInfo.label}`}
+                        >
+                          {archetypeInfo.emoji}
+                        </div>
+                      )}
                     </div>
-                    {archetypeInfo && (
-                      <div
-                        className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-gray-700 border-2 border-gray-800 flex items-center justify-center text-sm"
-                        title={`Arquétipo: ${archetypeInfo.label}`}
-                      >
-                        {archetypeInfo.emoji}
+                    <div className="ml-4 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-xl font-semibold group-hover:text-blue-400 transition-colors">
+                          {cliente.nome}
+                        </h3>
+                        {overview && overview.pendingCount > 0 && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-500/20 text-orange-300 border border-orange-500/30">
+                            {overview.pendingCount}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">
+                        {cliente.status}
+                      </p>
+                    </div>
+                    {canManageClients && (
+                      <div className="ml-2 flex flex-col items-end gap-1">
+                        <label
+                          className="text-xs text-gray-400 hover:text-blue-400 underline cursor-pointer"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span
+                            onClick={() => {
+                              const input = document.getElementById(`logo-input-${cliente.id}`) as HTMLInputElement | null;
+                              input?.click();
+                            }}
+                          >
+                            Logo PNG
+                          </span>
+                        </label>
+                        <input
+                          id={`logo-input-${cliente.id}`}
+                          type="file"
+                          accept="image/png,image/jpeg,image/jpg,image/webp"
+                          className="hidden"
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => handleUploadLogo(cliente.id, e.target.files?.[0])}
+                        />
+                        <button
+                          className="text-[11px] text-red-400 hover:text-red-300"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteClient(cliente.id, cliente.nome);
+                          }}
+                        >
+                          Excluir
+                        </button>
                       </div>
                     )}
                   </div>
-                  <div className="ml-4 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-xl font-semibold group-hover:text-blue-400 transition-colors">
-                        {cliente.nome}
-                      </h3>
-                      {overview && overview.pendingCount > 0 && (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-500/20 text-orange-300 border border-orange-500/30">
-                          {overview.pendingCount}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-gray-400 mt-1">
-                      {cliente.status}
-                    </p>
-                  </div>
-                  <div className="ml-2 flex flex-col items-end gap-1">
-                    <label
-                      className="text-xs text-gray-400 hover:text-blue-400 underline cursor-pointer"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <span
-                        onClick={() => {
-                          const input = document.getElementById(`logo-input-${cliente.id}`) as HTMLInputElement | null;
-                          input?.click();
-                        }}
-                      >
-                        Logo PNG
-                      </span>
-                    </label>
-                    <input
-                      id={`logo-input-${cliente.id}`}
-                      type="file"
-                      accept="image/png,image/jpeg,image/jpg,image/webp"
-                      className="hidden"
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => handleUploadLogo(cliente.id, e.target.files?.[0])}
-                    />
-                    <button
-                      className="text-[11px] text-red-400 hover:text-red-300"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteClient(cliente.id, cliente.nome);
-                      }}
-                    >
-                      Excluir
-                    </button>
-                  </div>
-                </div>
 
-                {/* Visão Rápida do Calendário */}
-                <div className="text-xs text-gray-300 mb-4 space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-gray-400">
-                      Criado em {new Date(cliente.criado_em).toLocaleDateString('pt-BR')}
-                    </span>
-                    <button
-                      className="text-[11px] text-gray-400 hover:text-blue-300 underline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openNichoModal(cliente);
-                      }}
-                      title="Defina as categorias/nicho do cliente para filtrar datas relevantes automaticamente"
-                      type="button"
-                    >
-                      Nicho
-                    </button>
-                  </div>
-
-                  {Array.isArray(cliente.categorias_nicho) && cliente.categorias_nicho.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {cliente.categorias_nicho.slice(0, 3).map((c) => (
-                        <span
-                          key={c}
-                          className="px-2 py-1 rounded-full bg-gray-700 text-gray-200 text-[11px] border border-gray-600"
-                          title="Categoria do nicho"
-                        >
-                          {c}
-                        </span>
-                      ))}
-                      {cliente.categorias_nicho.length > 3 && (
-                        <span className="px-2 py-1 rounded-full bg-gray-700 text-gray-300 text-[11px] border border-gray-600">
-                          +{cliente.categorias_nicho.length - 3}
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  {overview && (
+                  {/* Visão Rápida do Calendário */}
+                  <div className="text-xs text-gray-300 mb-4 space-y-2">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-gray-400">
-                        Próximo deadline:{' '}
-                        <span className="text-gray-100">
-                          {overview.deadlineLabel}
-                        </span>
+                        Criado em {new Date(cliente.criado_em).toLocaleDateString('pt-BR')}
                       </span>
-                      <span className={`inline-flex items-center justify-center px-2 py-1 rounded-full text-[11px] border ${overview.statusColorClass}`}>
-                        {overview.statusIcon}
-                      </span>
+                      {canManageClients && (
+                        <button
+                          className="text-[11px] text-gray-400 hover:text-blue-300 underline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openNichoModal(cliente);
+                          }}
+                          title="Defina as categorias/nicho do cliente e a Integração ClickUp"
+                          type="button"
+                        >
+                          Configurações
+                        </button>
+                      )}
                     </div>
-                  )}
-                </div>
 
-                {/* Botões de Ação Rápida */}
-                <div className="flex gap-2">
-                  <button
-                    className="flex-1 flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 py-2 rounded-lg font-medium transition-colors text-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/client/${cliente.id}/branding`);
-                    }}
-                    title="Ver DNA da Marca"
-                  >
-                    <FileText className="w-4 h-4" />
-                    DNA
-                  </button>
-                  <button
-                    className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium transition-colors text-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/client/${cliente.id}/calendar`);
-                    }}
-                    title="Gerar Novo Calendário"
-                  >
-                    <Calendar className="w-4 h-4" />
-                    Calendário
-                  </button>
+                    {Array.isArray(cliente.categorias_nicho) && cliente.categorias_nicho.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {cliente.categorias_nicho.slice(0, 3).map((c) => (
+                          <span
+                            key={c}
+                            className="px-2 py-1 rounded-full bg-gray-700 text-gray-200 text-[11px] border border-gray-600"
+                            title="Categoria do nicho"
+                          >
+                            {c}
+                          </span>
+                        ))}
+                        {cliente.categorias_nicho.length > 3 && (
+                          <span className="px-2 py-1 rounded-full bg-gray-700 text-gray-300 text-[11px] border border-gray-600">
+                            +{cliente.categorias_nicho.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {overview && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-gray-400">
+                          Próximo deadline:{' '}
+                          <span className="text-gray-100">
+                            {overview.deadlineLabel}
+                          </span>
+                        </span>
+                        <span className={`inline-flex items-center justify-center px-2 py-1 rounded-full text-[11px] border ${overview.statusColorClass}`}>
+                          {overview.statusIcon}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Botões de Ação Rápida */}
+                  <div className="flex gap-2">
+                    <button
+                      className="flex-1 flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 py-2 rounded-lg font-medium transition-colors text-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/client/${cliente.id}/branding`);
+                      }}
+                      title="Ver DNA da Marca"
+                    >
+                      <FileText className="w-4 h-4" />
+                      DNA
+                    </button>
+                    {canGenerateContent && (
+                      <button
+                        className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 py-2 rounded-lg font-medium transition-colors text-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/client/${cliente.id}/calendar`);
+                        }}
+                        title="Gerar Novo Calendário"
+                      >
+                        <Calendar className="w-4 h-4" />
+                        Calendário
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
+              );
             })}
           </div>
         )}
@@ -584,7 +602,7 @@ export default function ClientsHome() {
           <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md border border-gray-700">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-bold">Nicho do cliente</h2>
+                <h2 className="text-2xl font-bold">Configurações do Cliente</h2>
                 <p className="text-gray-400 text-sm mt-1">{nichoClientName}</p>
               </div>
               <button
@@ -679,7 +697,24 @@ export default function ClientsHome() {
               </p>
             </div>
 
-            <div className="mt-5 flex gap-3">
+            <div className="mt-6">
+              <label className="block text-sm font-medium text-gray-300 mb-1">
+                Integração ClickUp (ID da Lista)
+              </label>
+              <input
+                type="text"
+                value={nichoClickupListId}
+                onChange={(e) => setNichoClickupListId(e.target.value)}
+                placeholder="Ex: 900200845510"
+                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 mt-1 focus:outline-none focus:border-blue-500 text-sm"
+                disabled={savingNicho}
+              />
+              <p className="text-gray-500 text-xs mt-2">
+                O ID onde as tarefas dos posts aprovados serão exportadas (ex: últimos números da URL da lista no ClickUp).
+              </p>
+            </div>
+
+            <div className="mt-6 flex gap-3">
               <button
                 onClick={() => setShowNichoModal(false)}
                 className="flex-1 bg-gray-700 hover:bg-gray-600 py-2 rounded-lg font-medium transition-colors"

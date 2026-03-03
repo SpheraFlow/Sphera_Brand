@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowLeft } from 'lucide-react';
 import api from '../services/api';
 
 type DataComemorativa = {
@@ -240,6 +242,13 @@ export default function GeneralCalendarPage() {
         <div className="max-w-7xl mx-auto px-6 py-6">
           <div className="flex items-start justify-between gap-4 flex-col md:flex-row">
             <div>
+              <Link
+                to="/"
+                className="inline-flex items-center text-sm text-gray-400 hover:text-white mb-4 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Voltar para o Início
+              </Link>
               <h1 className="text-3xl font-bold">Calendário Geral</h1>
               <p className="text-gray-400 mt-1">
                 Central de datas e feriados para orientar todos os calendários de conteúdo

@@ -120,7 +120,7 @@ def render_defesa(data, output_name):
     draw = ImageDraw.Draw(img)
     
     layout = _layout_by_id(data.get('layout'))
-    print(f"🔍 [DEBUG] Layout recebido para defesa: {layout}")
+    print(f"[DEBUG] Layout recebido para defesa: {layout}")
 
     font_subtitle = load_font('poppins-bold.ttf', 22)
     font_body = load_font('lato-regular.ttf', 22)

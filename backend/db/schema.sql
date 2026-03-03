@@ -1,28 +1,41 @@
 -- Habilitar extensão UUID
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Dropar tabelas existentes (ordem inversa por causa das FKs)
-DROP TABLE IF EXISTS generated_ideas CASCADE;
-DROP TABLE IF EXISTS client_prompts CASCADE;
-DROP TABLE IF EXISTS brand_rules CASCADE;
-DROP TABLE IF EXISTS brand_docs CASCADE;
-DROP TABLE IF EXISTS calendarios CASCADE;
-DROP TABLE IF EXISTS branding CASCADE;
-DROP TABLE IF EXISTS posts_processados CASCADE;
-DROP TABLE IF EXISTS posts_originais CASCADE;
-DROP TABLE IF EXISTS posts CASCADE;
-DROP TABLE IF EXISTS clientes CASCADE;
+-- ⚠️  ATENÇÃO: DROP TABLE removido intencionalmente.
+-- Para resetar COMPLETAMENTE o banco execute schema_reset.sql (DESTRUTIVO).
+-- Este arquivo é seguro e idempotente (IF NOT EXISTS em todas as tabelas).
+
+-- Tabela de usuários
+CREATE TABLE IF NOT EXISTS users (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  nome          TEXT NOT NULL,
+  email         TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role          TEXT NOT NULL DEFAULT 'atendente' CHECK (role IN ('admin', 'atendente')),
+  ativo         BOOLEAN NOT NULL DEFAULT TRUE,
+  criado_em     TIMESTAMP DEFAULT NOW()
+);
 
 -- Tabela de clientes
-CREATE TABLE clientes (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  nome TEXT NOT NULL,
+CREATE TABLE IF NOT EXISTS clientes (
+  id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  nome               TEXT NOT NULL,
   persona_atualizada TEXT,
-  criado_em TIMESTAMP DEFAULT NOW()
+  categorias_nicho   JSONB DEFAULT '[]'::jsonb,
+  logo_url           TEXT,
+  clickup_list_id    TEXT,
+  criado_em          TIMESTAMP DEFAULT NOW()
+);
+
+-- Relação usuário <-> cliente (atendentes)
+CREATE TABLE IF NOT EXISTS user_clientes (
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  cliente_id UUID NOT NULL REFERENCES clientes(id) ON DELETE CASCADE,
+  PRIMARY KEY (user_id, cliente_id)
 );
 
 -- Tabela de posts
-CREATE TABLE posts (
+CREATE TABLE IF NOT EXISTS posts (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   cliente_id UUID NOT NULL,
   titulo TEXT,
@@ -33,7 +46,7 @@ CREATE TABLE posts (
 );
 
 -- Tabela de posts originais (vindo do n8n/webhook)
-CREATE TABLE posts_originais (
+CREATE TABLE IF NOT EXISTS posts_originais (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   cliente_id UUID NOT NULL,
   imagem_path TEXT NOT NULL,
@@ -45,7 +58,7 @@ CREATE TABLE posts_originais (
 );
 
 -- Tabela de posts processados
-CREATE TABLE posts_processados (
+CREATE TABLE IF NOT EXISTS posts_processados (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   post_id UUID NOT NULL,
   metadata JSONB,
@@ -55,7 +68,7 @@ CREATE TABLE posts_processados (
 );
 
 -- Tabela de branding intelligence
-CREATE TABLE branding (
+CREATE TABLE IF NOT EXISTS branding (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   cliente_id UUID NOT NULL,
   visual_style JSONB,
@@ -67,8 +80,34 @@ CREATE TABLE branding (
   CONSTRAINT unique_cliente_branding UNIQUE (cliente_id)
 );
 
+ -- Migration para gerenciar usuários e auth
+\i 'src/database/migrations/create_users_table.sql'
+
+-- Migration para Update the users Table JSONB permissions
+\i 'src/database/migrations/update_users_permissions.sql'
+
+-- Migration para atualizar jobs de calendário
+\i 'src/database/migrations/update_calendar_jobs.sql'
+
+-- Tabela de jobs de geração de calendário (criada antes de calendarios por conta da FK)
+CREATE TABLE IF NOT EXISTS calendar_generation_jobs (
+  id UUID PRIMARY KEY,
+  cliente_id UUID NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'succeeded', 'failed', 'canceled')),
+  progress INTEGER NOT NULL DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
+  current_step TEXT,
+  payload JSONB NOT NULL DEFAULT '{}',
+  result_calendar_ids UUID[],
+  error JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  started_at TIMESTAMPTZ,
+  finished_at TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT fk_cliente_job FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
+);
+
 -- Tabela de calendários editoriais
-CREATE TABLE calendarios (
+CREATE TABLE IF NOT EXISTS calendarios (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   cliente_id UUID NOT NULL,
   periodo INTEGER,
@@ -77,15 +116,38 @@ CREATE TABLE calendarios (
   calendario_json JSONB,
   dias JSONB,  -- Opcional: usado para formato legado
   metadata JSONB,
+  status TEXT NOT NULL DEFAULT 'published',
+  generation_job_id UUID REFERENCES calendar_generation_jobs(id) ON DELETE SET NULL,
   criado_em TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW(),
   CONSTRAINT fk_cliente_calendario FOREIGN KEY (cliente_id) REFERENCES clientes(id) ON DELETE CASCADE
 );
 
+-- Itens individuais de calendário (tracking de aprovação, revisões, publicação)
+CREATE TABLE IF NOT EXISTS calendar_items (
+  id                 UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  cliente_id         UUID NOT NULL,
+  calendario_id      UUID NOT NULL,
+  dia                INTEGER NOT NULL,
+  tema               TEXT NOT NULL DEFAULT '',
+  formato            TEXT NOT NULL DEFAULT '',
+  status             TEXT NOT NULL DEFAULT 'draft'
+                     CHECK (status IN ('draft', 'approved', 'needs_edit', 'redo', 'published')),
+  revisions_count    INTEGER NOT NULL DEFAULT 0,
+  first_generated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  approved_at        TIMESTAMPTZ,
+  published_at       TIMESTAMPTZ,
+  last_updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_by         UUID,
+  notes              TEXT,
+  CONSTRAINT fk_ci_cliente    FOREIGN KEY (cliente_id)    REFERENCES clientes(id)    ON DELETE CASCADE,
+  CONSTRAINT fk_ci_calendario FOREIGN KEY (calendario_id) REFERENCES calendarios(id) ON DELETE CASCADE
+);
+
 -- NOVAS TABELAS (Gestão de Conhecimento)
 
 -- Tabela de documentos da marca
-CREATE TABLE brand_docs (
+CREATE TABLE IF NOT EXISTS brand_docs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   cliente_id UUID NOT NULL,
   tipo TEXT NOT NULL,
@@ -95,7 +157,7 @@ CREATE TABLE brand_docs (
 );
 
 -- Tabela de regras da marca
-CREATE TABLE brand_rules (
+CREATE TABLE IF NOT EXISTS brand_rules (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   cliente_id UUID NOT NULL,
   regra TEXT NOT NULL,
@@ -107,7 +169,7 @@ CREATE TABLE brand_rules (
 );
 
 -- Tabela de biblioteca de prompts
-CREATE TABLE client_prompts (
+CREATE TABLE IF NOT EXISTS client_prompts (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   cliente_id UUID NOT NULL,
   titulo TEXT NOT NULL,
@@ -119,7 +181,7 @@ CREATE TABLE client_prompts (
 );
 
 -- Tabela de histórico de gerações
-CREATE TABLE generated_ideas (
+CREATE TABLE IF NOT EXISTS generated_ideas (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   cliente_id UUID NOT NULL,
   tipo TEXT NOT NULL,
@@ -148,8 +210,15 @@ CREATE INDEX IF NOT EXISTS idx_brand_docs_cliente_id ON brand_docs(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_brand_rules_cliente_id ON brand_rules(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_client_prompts_cliente_id ON client_prompts(cliente_id);
 CREATE INDEX IF NOT EXISTS idx_generated_ideas_cliente_id ON generated_ideas(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_user_clientes_user ON user_clientes(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_clientes_cliente ON user_clientes(cliente_id);
+CREATE INDEX IF NOT EXISTS idx_calendar_items_calendario ON calendar_items(calendario_id);
+CREATE INDEX IF NOT EXISTS idx_calendar_items_cliente_status ON calendar_items(cliente_id, status);
+CREATE INDEX IF NOT EXISTS idx_calendar_items_cliente_generated ON calendar_items(cliente_id, first_generated_at DESC);
 
 -- Comentários
+COMMENT ON TABLE users IS 'Tabela de usuários do sistema (admin/atendente)';
+COMMENT ON TABLE user_clientes IS 'Vínculo de atendentes a clientes específicos';
 COMMENT ON TABLE clientes IS 'Tabela de clientes do sistema';
 COMMENT ON TABLE posts IS 'Tabela de posts dos clientes';
 COMMENT ON TABLE posts_originais IS 'Tabela de posts importados via webhook (n8n)';

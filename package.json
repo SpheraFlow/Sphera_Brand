@@ -1,4 +1,11 @@
 {
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev": "start cmd /k \"npm run dev:backend\" & start cmd /k \"npm run dev:frontend\"",
+    "kill-ports": "powershell -ExecutionPolicy Bypass -File scripts/kill-ports.ps1",
+    "dev:fresh": "npm run kill-ports && start cmd /k \"npm run dev:backend\" & start cmd /k \"npm run dev:frontend\""
+  },
   "dependencies": {
     "dotenv": "^17.2.3",
     "pg": "^8.16.3"

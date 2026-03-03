@@ -8,14 +8,14 @@ const router = Router();
 // Rota para gerar ideias de fotos baseadas na campanha do mês
 router.post("/generate-photo-ideas", async (req: Request, res: Response) => {
   console.log("\n📸 [DEBUG] ROTA /generate-photo-ideas ACIONADA");
-  
+
   try {
     const { clienteId, mes, briefing, quantity } = req.body;
-    
+
     if (!clienteId || !mes) {
-      return res.status(400).json({ 
-        success: false, 
-        error: "clienteId e mes são obrigatórios" 
+      return res.status(400).json({
+        success: false,
+        error: "clienteId e mes são obrigatórios"
       });
     }
 
@@ -27,7 +27,7 @@ router.post("/generate-photo-ideas", async (req: Request, res: Response) => {
       "SELECT * FROM branding WHERE cliente_id = $1 ORDER BY updated_at DESC LIMIT 1",
       [clienteId]
     );
-    
+
     const branding = brandingResult.rows[0] || {
       visual_style: "Padrão",
       tone_of_voice: "Neutro",
@@ -88,13 +88,13 @@ Retorne APENAS um JSON válido neste formato:
 }`;
 
     console.log("🤖 [DEBUG] Enviando para Gemini...");
-    
+
     if (!process.env.GOOGLE_API_KEY) {
       throw new Error("GOOGLE_API_KEY não configurada");
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-    
+
     let result;
     let responseText = "";
 
@@ -106,7 +106,7 @@ Retorne APENAS um JSON válido neste formato:
         const model = genAI.getGenerativeModel({ model: modelName });
         result = await model.generateContent(prompt);
         responseText = result.response.text();
-        
+
         // Log de uso de tokens
         const usageMetadata = result.response.usageMetadata;
         if (usageMetadata) {
@@ -114,20 +114,20 @@ Retorne APENAS um JSON válido neste formato:
           console.log(`📊 [TOKENS PHOTO IDEAS] Prompt Tokens: ${usageMetadata.promptTokenCount || 0}`);
           console.log(`📊 [TOKENS PHOTO IDEAS] Completion Tokens: ${usageMetadata.candidatesTokenCount || 0}`);
           console.log(`📊 [TOKENS PHOTO IDEAS] Total Tokens: ${usageMetadata.totalTokenCount || 0}`);
-          
+
           // Atualizar contador de tokens do cliente
           await updateTokenUsage(clienteId, usageMetadata, "photo_ideas_generation", modelName);
         }
-        
+
         console.log(`✅ [DEBUG] Sucesso com ${modelName}`);
         break;
       } catch (modelError: any) {
         console.warn(`⚠️ [DEBUG] ${modelName} falhou:`, modelError.message);
-        
+
         if (modelName === modelsToTry[modelsToTry.length - 1]) {
           throw new Error(`Todos os modelos falharam. Erro final: ${modelError.message}`);
         }
-        
+
         console.log("⏳ [DEBUG] Aguardando 2s antes do próximo modelo...");
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
@@ -137,14 +137,14 @@ Retorne APENAS um JSON válido neste formato:
 
     // 5. Extrair JSON da resposta
     let jsonStr = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-    
+
     const startIdx = jsonStr.indexOf('{');
     const endIdx = jsonStr.lastIndexOf('}');
-    
+
     if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
       jsonStr = jsonStr.substring(startIdx, endIdx + 1);
     }
-    
+
     const photoIdeas = JSON.parse(jsonStr);
 
     console.log("✅ [DEBUG] Ideias de fotos geradas com sucesso");
@@ -156,14 +156,14 @@ Retorne APENAS um JSON válido neste formato:
 
   } catch (error: any) {
     console.error("❌ Erro ao gerar ideias de fotos:", error);
-    
+
     if (error instanceof SyntaxError && error.message.includes('JSON')) {
       return res.status(500).json({
         success: false,
         error: "A IA retornou um formato inválido. Tente novamente."
       });
     }
-    
+
     return res.status(500).json({
       success: false,
       error: error.message || "Erro ao gerar ideias de fotos"

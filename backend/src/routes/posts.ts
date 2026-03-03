@@ -12,7 +12,7 @@ const uploadDir = path.resolve(__dirname, '../../storage/uploads');
 
 if (!fs.existsSync(uploadDir)) {
 
-  fs.mkdirSync(uploadDir, { recursive: true });
+    fs.mkdirSync(uploadDir, { recursive: true });
 
 }
 
@@ -22,19 +22,19 @@ if (!fs.existsSync(uploadDir)) {
 
 const storage = multer.diskStorage({
 
-  destination: (_req, _file, cb) => {
+    destination: (_req, _file, cb) => {
 
-    cb(null, uploadDir);
+        cb(null, uploadDir);
 
-  },
+    },
 
-  filename: (_req, file, cb) => {
+    filename: (_req, file, cb) => {
 
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
 
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+        cb(null, uniqueSuffix + path.extname(file.originalname));
 
-  }
+    }
 
 });
 
@@ -52,7 +52,7 @@ router.post("/process-post", (req: Request, res: Response, next: NextFunction) =
 
     const uploadMiddleware = upload.any();
 
-    
+
 
     uploadMiddleware(req, res, (err: any) => {
 
@@ -64,7 +64,7 @@ router.post("/process-post", (req: Request, res: Response, next: NextFunction) =
 
             res.status(500).json({ error: "Falha no upload físico", details: err.message });
 
-            return; 
+            return;
 
         }
 
@@ -74,7 +74,7 @@ router.post("/process-post", (req: Request, res: Response, next: NextFunction) =
 
     });
 
-}, async (req: Request, res: Response): Promise<void> => { 
+}, async (req: Request, res: Response): Promise<void> => {
 
     // Promise<void> para garantir consistência
 
@@ -86,7 +86,7 @@ router.post("/process-post", (req: Request, res: Response, next: NextFunction) =
 
         const files = req.files as Express.Multer.File[] | undefined;
 
-        
+
 
         if (!files || files.length === 0) {
 
@@ -145,11 +145,11 @@ router.post("/process-post", (req: Request, res: Response, next: NextFunction) =
                     break;
                 } catch (modelError: any) {
                     console.warn(`⚠️ [DEBUG] ${modelName} falhou:`, modelError.message);
-                    
+
                     if (modelName === modelsToTry[modelsToTry.length - 1]) {
                         throw new Error(`Todos os modelos falharam. Erro final: ${modelError.message}`);
                     }
-                    
+
                     console.log("⏳ [DEBUG] Aguardando 2s antes do próximo modelo...");
                     await new Promise(resolve => setTimeout(resolve, 2000));
                 }
@@ -157,11 +157,11 @@ router.post("/process-post", (req: Request, res: Response, next: NextFunction) =
 
             console.log("✅ [IA] Sucesso.");
 
-            res.json({ 
-                success: true, 
-                message: "Arquivo processado", 
+            res.json({
+                success: true,
+                message: "Arquivo processado",
                 analysis: responseText,
-                file: file.filename 
+                file: file.filename
             });
             return;
 
@@ -192,13 +192,13 @@ router.post("/upload-post", upload.single("file"), (req: Request, res: Response)
 
     }
 
-    res.json({ 
+    res.json({
 
-        success: true, 
+        success: true,
 
-        postId: "temp-" + Date.now(), 
+        postId: "temp-" + Date.now(),
 
-        filePath: req.file.filename 
+        filePath: req.file.filename
 
     });
 

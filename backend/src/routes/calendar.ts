@@ -8,15 +8,7 @@ import fs from "fs";
 
 const router = Router();
 
-// Utilitário simples de substituição de variáveis em templates de prompt
-const applyTemplate = (template: string, vars: Record<string, any>): string => {
-  return template.replace(/{{\s*([a-zA-Z0-9_\.]+)\s*}}/g, (_match, key) => {
-    const value = vars[key];
-    if (value === undefined || value === null) return "";
-    if (typeof value === "string") return value;
-    return JSON.stringify(value);
-  });
-};
+
 
 async function syncFeriadosBrasilApi(anoNum: number): Promise<void> {
   // Fonte: BrasilAPI (sem chave): https://brasilapi.com.br/api/feriados/v1/{ano}
@@ -61,694 +53,130 @@ router.post("/datas-comemorativas/sync", async (req: Request, res: Response) => 
   }
 });
 
-const buildFallbackDatasResumoTexto = (mesNum: number, anoNum: number, nicheText: string) => {
-  const niche = (nicheText || "").toLowerCase();
-
-  const baseByMonth: Record<number, { day: number; title: string }[]> = {
-    1: [
-      { day: 1, title: "Confraternização Universal" },
-      { day: 30, title: "Dia da Saudade" },
-    ],
-    2: [
-      { day: 4, title: "Dia Mundial do Câncer" },
-    ],
-    3: [
-      { day: 8, title: "Dia Internacional da Mulher" },
-      { day: 20, title: "Início do Outono" },
-    ],
-    4: [
-      { day: 7, title: "Dia Mundial da Saúde" },
-      { day: 22, title: "Dia da Terra" },
-    ],
-    5: [
-      { day: 1, title: "Dia do Trabalho" },
-    ],
-    6: [
-      { day: 12, title: "Dia dos Namorados" },
-      { day: 21, title: "Início do Inverno" },
-    ],
-    7: [
-      { day: 20, title: "Dia do Amigo" },
-      { day: 26, title: "Dia dos Avós" },
-    ],
-    8: [
-      { day: 11, title: "Dia dos Pais" },
-      { day: 27, title: "Dia do Psicólogo" },
-    ],
-    9: [
-      { day: 7, title: "Independência do Brasil" },
-      { day: 23, title: "Início da Primavera" },
-    ],
-    10: [
-      { day: 12, title: "Dia das Crianças" },
-      { day: 31, title: "Halloween" },
-    ],
-    11: [
-      { day: 2, title: "Finados" },
-      { day: 15, title: "Proclamação da República" },
-    ],
-    12: [
-      { day: 24, title: "Véspera de Natal" },
-      { day: 25, title: "Natal" },
-      { day: 31, title: "Réveillon" },
-    ],
-  };
-
-  const nicheExtra: { day: number; title: string }[] = [];
-  if (niche.includes("treino") || niche.includes("academ") || niche.includes("fitness") || niche.includes("corrida") || niche.includes("esporte")) {
-    nicheExtra.push({ day: 6, title: "Dia Nacional do Esporte" });
-    nicheExtra.push({ day: 7, title: "Dia Mundial da Saúde" });
-  }
-  if (niche.includes("saúde") || niche.includes("saude") || niche.includes("clínica") || niche.includes("clinica") || niche.includes("terapia") || niche.includes("psico")) {
-    nicheExtra.push({ day: 10, title: "Dia Mundial da Saúde Mental" });
-    nicheExtra.push({ day: 27, title: "Dia Nacional de Combate ao Câncer" });
-  }
-
-  const list = [...(baseByMonth[mesNum] || []), ...nicheExtra];
-  if (list.length === 0) return "";
-
-  const monthStr = String(mesNum).padStart(2, "0");
-  return list
-    .map((d) => `- ${String(d.day).padStart(2, "0")}/${monthStr}/${anoNum}: ${d.title}`)
-    .join("\n");
-};
-
 router.post("/generate-calendar", async (req: Request, res: Response) => {
-  console.log("\n🛑 [DEBUG] ROTA /generate-calendar ACIONADA");
-  console.log(`📦 [DEBUG] Payload completo:`, JSON.stringify(req.body, null, 2));
+  console.log("\n🛑 [DEBUG] ROTA /generate-calendar ACIONADA (Async Job)");
 
   try {
-    const { clienteId, briefing, mes, periodo, mix, generationPrompt, chainId, formatInstructions, monthReferences, monthsCount } = req.body;
+    const {
+      clienteId,
+      briefing,
+      periodo,
+      mix,
+      generationPrompt, // Prompt adicional ou custom instructions
+      chainId, // Se vier de uma Chain
+      formatInstructions, // Instruções específicas por formato
+      monthReferences, // Referências para o mês
+      chainOutputFinal, // Contexto vindo de uma chain anterior
+      mes, // Mês específico opcional (ex: "Janeiro 2024")
+      produtosFocoIds // IDs dos produtos escolhidos
+    } = req.body;
 
-    console.log(`➡️ [DEBUG] Cliente ID: ${clienteId}`);
-    console.log(`➡️ [DEBUG] Briefing: ${briefing}`);
-    if (generationPrompt) {
-      console.log(`➡️ [DEBUG] Prompt avançado do usuário: ${generationPrompt}`);
+    // 1. Validar Inputs
+    if (!clienteId) {
+      return res.status(400).json({ error: "Client ID é obrigatório." });
     }
 
-    // Buscar Branding
-    console.log("🔍 [DEBUG] Buscando branding...");
-    const brandingResult = await db.query("SELECT * FROM branding WHERE cliente_id = $1", [clienteId]);
-    let branding = brandingResult.rows[0];
+    // Normalização do Período
+    let periodoFinal = 30;
+    if (periodo === "quinzenal" || periodo === 15) periodoFinal = 15;
+    if (periodo === "mensal" || periodo === 30) periodoFinal = 30;
+    if (periodo === "trimestral" || periodo === 90) periodoFinal = 90;
 
-    // Buscar categorias/nicho do cliente (se houver)
-    let categoriasNicho: string[] = [];
-    try {
-      const clientRes = await db.query(
-        "SELECT categorias_nicho FROM clientes WHERE id = $1",
-        [clienteId]
-      );
-      const raw = clientRes.rows?.[0]?.categorias_nicho;
-      if (Array.isArray(raw)) {
-        categoriasNicho = raw.map((c: any) => String(c).trim()).filter(Boolean);
-      }
-    } catch (_e) {
-      categoriasNicho = [];
-    }
-
-    if (!branding) {
-      console.log("⚠️ [DEBUG] Branding não encontrado. Usando Fallback.");
-      branding = {
-        visual_style: "Padrão",
-        tone_of_voice: "Neutro",
-        audience: "Geral"
-      };
-      
-      // Se não tiver branding e nem briefing, aborta
-      if (!briefing) {
-        console.error("❌ [ERRO] Sem branding e sem briefing.");
-        return res.status(400).json({ error: "É necessário fornecer um briefing ou ter branding analisado." });
-      }
-    }
-
-    // variável para armazenar o contexto final vindo da Prompt Chain (se houver)
-    let chainOutputFinal: string | null = null;
-
-    // 2.1 Se chainId foi fornecido, executar a Prompt Chain antes de montar o prompt principal
-    if (chainId) {
-      console.log("🤖 [DEBUG] Executando Prompt Chain antes da geração do calendário...");
-      try {
-        const chainResult = await db.query(
-          "SELECT * FROM prompt_chains WHERE id = $1",
-          [chainId]
-        );
-
-        if (chainResult.rows.length === 0) {
-          console.warn("⚠️ [DEBUG] Prompt Chain não encontrada para id:", chainId);
-        } else {
-          const chain = chainResult.rows[0];
-          const steps: any[] = (chain.steps || []).sort(
-            (a: any, b: any) => (a.order || 0) - (b.order || 0)
-          );
-
-          const genAIForChain = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
-          const stepOutputs: string[] = [];
-
-          for (let i = 0; i < steps.length; i++) {
-            const step = steps[i];
-            const tmpl: string = step.prompt_template || "";
-            const filledPrompt = applyTemplate(tmpl, {
-              branding,
-              briefing: briefing || "",
-              mes: mes || "",
-              mix,
-              step_1_output: stepOutputs[0],
-              step_2_output: stepOutputs[1],
-              step_3_output: stepOutputs[2],
-              previous_output: stepOutputs[stepOutputs.length - 1],
-            });
-
-            console.log(`🤖 [DEBUG] Executando step ${i + 1} da chain...`);
-            const model = genAIForChain.getGenerativeModel({ model: "gemini-2.5-flash" });
-            const result = await model.generateContent(filledPrompt);
-            const text = result.response.text();
-            console.log(
-              `✅ [DEBUG] Step ${i + 1} concluído. Tamanho do output:`,
-              text.length
-            );
-            stepOutputs.push(text);
-          }
-
-          if (stepOutputs.length > 0) {
-            const lastOutput = stepOutputs[stepOutputs.length - 1] ?? "";
-            chainOutputFinal = lastOutput;
-          }
-        }
-      } catch (chainError) {
-        console.error("❌ [ERRO] Falha ao executar Prompt Chain:", chainError);
-      }
-    }
-
-    console.log(`➡️ [DEBUG] Mês: "${mes}"`);
-    console.log(`➡️ [DEBUG] Mix de Conteúdo:`, mix);
-    console.log(`➡️ [DEBUG] Instruções por formato:`, formatInstructions);
-    console.log(`➡️ [DEBUG] Referências do mês:`, monthReferences);
-    if (chainId) {
-      console.log(`➡️ [DEBUG] Prompt Chain selecionada: ${chainId}`);
-    }
-
-    // Validar se o mix foi fornecido e tem conteúdo válido
-    if (!mix || typeof mix !== 'object') {
-      console.error("❌ [ERRO] Mix de conteúdo não fornecido ou inválido:", mix);
-      return res.status(400).json({ error: "Mix de conteúdo é obrigatório." });
-    }
-
-    // Calcular total de posts e validar
-    const totalPosts = (mix.reels || 0) + (mix.static || 0) + (mix.carousel || 0) + (mix.stories || 0) + (mix.photos || 0);
-
-    console.log(`📊 [DEBUG] Cálculo: reels=${mix.reels}, static=${mix.static}, carousel=${mix.carousel}, stories=${mix.stories}, photos=${mix.photos}, total=${totalPosts}`);
-
-    if (totalPosts === 0) {
-      console.error("❌ [ERRO] Total de posts deve ser maior que 0");
-      return res.status(400).json({ error: "Selecione pelo menos 1 tipo de conteúdo." });
-    }
-
-    console.log(`✅ [DEBUG] Total de posts a gerar: ${totalPosts}`);
-
-    const periodoFinal = typeof periodo === 'number' ? periodo : 30;
-
-    // Lógica de Seleção de Meses:
-    // 1. Se vier 'specificMonths' (array de strings ex: ["Janeiro 2025", "Fevereiro 2025"]), usa direto.
-    // 2. Se não, usa a lógica antiga de 'mes' inicial + 'monthsCount'.
-    
+    // Lógica de Meses
     let monthsToGenerate: string[] = [];
 
-    if (Array.isArray(req.body.specificMonths) && req.body.specificMonths.length > 0) {
-      monthsToGenerate = req.body.specificMonths;
-      console.log(`📅 [DEBUG] Meses específicos selecionados:`, monthsToGenerate);
+    if (req.body.monthsToGenerate && Array.isArray(req.body.monthsToGenerate) && req.body.monthsToGenerate.length > 0) {
+      monthsToGenerate = req.body.monthsToGenerate;
+      console.log(`✅ [DEBUG] Usando meses diretos do corpo da requisição:`, monthsToGenerate);
     } else {
-      const monthsCountNum = (() => {
-        const n = parseInt(String(monthsCount ?? "1"), 10);
-        if (!isNaN(n) && n >= 1 && n <= 12) return n;
-        return 1;
-      })();
-
-      const buildMonthLabelList = (startMesLabel: string, count: number): string[] => {
+      const buildMonthLabelList = (startMesLabel: string, count: number) => {
         const labels: string[] = [];
         try {
           const parts = startMesLabel.trim().split(" ");
-
           if (parts.length < 2) return [startMesLabel];
-          const possibleYear = parts[parts.length - 1] ?? "";
-          const anoNum = parseInt(possibleYear, 10);
-          const mesNome = parts.slice(0, -1).join(" ").toLowerCase();
-          const mapaMeses: Record<string, number> = {
-            janeiro: 1, fevereiro: 2, marco: 3, março: 3, abril: 4, maio: 5, junho: 6,
-            julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
+
+          const mesNome = (parts[0] || "").toLowerCase();
+          const anoStr = parts[parts.length - 1] || "";
+          const ano = parseInt(anoStr, 10);
+
+          const map: Record<string, number> = {
+            janeiro: 0, fevereiro: 1, marco: 2, março: 2, abril: 3, maio: 4, junho: 5,
+            julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11
           };
-          const mesNum = mapaMeses[mesNome] || 1;
+
+          let currentMonthIdx = map[mesNome];
+          let currentYear = ano;
+
+          if (currentMonthIdx === undefined || isNaN(currentYear)) return [startMesLabel];
 
           for (let i = 0; i < count; i++) {
-            const m = mesNum + i;
-            const y = anoNum + Math.floor((m - 1) / 12);
-            const mm = ((m - 1) % 12) + 1;
-            const monthNamePt = {
-              1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho",
-              7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro",
-            }[mm];
-            labels.push(`${monthNamePt} ${y}`);
+            const d = new Date(currentYear, currentMonthIdx + i, 1);
+            const monthName = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(d);
+            const monthNameCap = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+            const y = d.getFullYear();
+            labels.push(`${monthNameCap} ${y}`);
           }
-          return labels;
         } catch (_e) {
-          return [startMesLabel];
+          labels.push(startMesLabel);
         }
+        return labels;
       };
 
-      monthsToGenerate = (mes && typeof mes === "string")
-        ? buildMonthLabelList(mes, monthsCountNum)
-        : ["Geral"];
+      if (mes && typeof mes === "string") {
+        const count = periodoFinal === 90 ? 3 : 1;
+        monthsToGenerate = buildMonthLabelList(mes, count);
+      } else {
+        const count = periodoFinal === 90 ? 3 : 1;
+        const d = new Date();
+        d.setMonth(d.getMonth() + 1);
+        const mStr = new Intl.DateTimeFormat('pt-BR', { month: 'long' }).format(d);
+        const mCap = mStr.charAt(0).toUpperCase() + mStr.slice(1);
+        const startLabel = `${mCap} ${d.getFullYear()}`;
+        monthsToGenerate = buildMonthLabelList(startLabel, count);
+      }
     }
 
-    const distributeMixAcrossMonths = (baseMix: any, monthsCountToDistribute: number): any[] => {
-      const safeMonths = Math.max(1, monthsCountToDistribute || 1);
-      const keys = ["reels", "static", "carousel", "stories", "photos"] as const;
+    console.log(`✅ [DEBUG] Meses para geração:`, monthsToGenerate);
 
-      const result: any[] = Array.from({ length: safeMonths }, () => ({
-        reels: 0,
-        static: 0,
-        carousel: 0,
-        stories: 0,
-        photos: 0,
-      }));
+    // CRIAÇÃO DO JOB
+    const { randomUUID } = await import('crypto');
+    const jobId = randomUUID();
 
-      for (const k of keys) {
-        const total = Math.max(0, parseInt(String(baseMix?.[k] ?? 0), 10) || 0);
-        const base = Math.floor(total / safeMonths);
-        let remainder = total % safeMonths;
-        for (let i = 0; i < safeMonths; i++) {
-          result[i][k] = base + (remainder > 0 ? 1 : 0);
-          if (remainder > 0) remainder--;
-        }
-      }
-
-      return result;
+    const jobPayload = {
+      clienteId,
+      briefing,
+      periodo: periodoFinal,
+      mix,
+      monthlyMix: req.body.monthlyMix || null,  // mix por mês (opcional)
+      generationPrompt,
+      chainId,
+      formatInstructions,
+      monthReferences,
+      monthsToGenerate,
+      chainOutputFinal,
+      produtosFocoIds
     };
 
-    const buildDatasResumoTextoForMes = async (mesLabel: string): Promise<string> => {
-      let datasResumoTexto = "";
-      if (mesLabel && typeof mesLabel === "string") {
-        try {
-          const parts = mesLabel.trim().split(" ");
-
-          if (parts.length < 2) {
-            throw new Error("Formato de mês inválido para extração de ano.");
-          }
-
-          const possibleYear = parts[parts.length - 1] ?? "";
-          const anoNum = parseInt(possibleYear, 10);
-
-          if (isNaN(anoNum)) {
-            throw new Error("Ano inválido em 'mes'.");
-          }
-
-          const mesNome = parts.slice(0, -1).join(" ").toLowerCase();
-
-          const mapaMeses: Record<string, number> = {
-            janeiro: 1,
-            fevereiro: 2,
-            marco: 3,
-            março: 3,
-            abril: 4,
-            maio: 5,
-            junho: 6,
-            julho: 7,
-            agosto: 8,
-            setembro: 9,
-            outubro: 10,
-            novembro: 11,
-            dezembro: 12,
-          };
-
-          const mesNum = mapaMeses[mesNome];
-
-          const keywordsTextForNiche = Array.isArray(branding?.keywords)
-            ? branding.keywords.join(", ")
-            : branding?.keywords || "";
-          const nicheText = `${briefing || ""} ${branding.tone_of_voice || ""} ${branding.audience || ""} ${keywordsTextForNiche}`;
-
-          // Fallback: se o cliente não tiver nicho definido, inferir algumas categorias simples pelas keywords/briefing
-          const categoriasInferidas: string[] = [];
-          const nicheLower = nicheText.toLowerCase();
-          if (nicheLower.includes("saude") || nicheLower.includes("saúde") || nicheLower.includes("clinica") || nicheLower.includes("clínica") || nicheLower.includes("medic") || nicheLower.includes("nutri")) {
-            categoriasInferidas.push("saude");
-          }
-          if (nicheLower.includes("fitness") || nicheLower.includes("academ") || nicheLower.includes("treino") || nicheLower.includes("corrida") || nicheLower.includes("esporte")) {
-            categoriasInferidas.push("fitness");
-          }
-          if (nicheLower.includes("kids") || nicheLower.includes("crian") || nicheLower.includes("pediatr") || nicheLower.includes("escola") || nicheLower.includes("infantil")) {
-            categoriasInferidas.push("kids");
-          }
-          if (nicheLower.includes("psico") || nicheLower.includes("terapia") || nicheLower.includes("saude mental") || nicheLower.includes("saúde mental")) {
-            categoriasInferidas.push("psicologia");
-          }
-
-          const categoriasParaBusca = Array.from(
-            new Set([
-              ...(categoriasNicho || []),
-              ...(categoriasInferidas || []),
-              "geral",
-              "feriado",
-            ])
-          ).filter(Boolean);
-
-          if (mesNum && anoNum) {
-            await syncFeriadosBrasilApi(anoNum);
-
-            console.log(`📅 [DEBUG] Buscando datas comemorativas para ${mesNum}/${anoNum}...`);
-
-            try {
-              const whereCategorias = categoriasParaBusca.length > 0 ? "AND categorias ?| $3" : "";
-              const params: any[] = [mesNum, anoNum];
-              if (categoriasParaBusca.length > 0) params.push(categoriasParaBusca);
-
-              const datasResult = await db.query(
-                `SELECT data::text as data, titulo, categorias, relevancia, descricao
-                 FROM datas_comemorativas
-                 WHERE EXTRACT(MONTH FROM data) = $1 AND EXTRACT(YEAR FROM data) = $2
-                 ${whereCategorias}
-                 ORDER BY data ASC, relevancia DESC`,
-                params
-              );
-
-              if (datasResult.rows.length > 0) {
-                datasResumoTexto = datasResult.rows
-                  .map((d: any) => {
-                    const mesStr = String(mesNum).padStart(2, "0");
-                    const raw = String(d.data || "").slice(0, 10); // YYYY-MM-DD
-                    const parts = raw.split("-");
-                    const dia = (parts[2] || "").padStart(2, "0");
-                    const cats = Array.isArray(d.categorias) ? d.categorias.join(", ") : "";
-                    const desc = String(d.descricao || "").trim();
-                    const descBlock = desc ? `\n  orientação: ${desc}` : "";
-                    return `- ${dia}/${mesStr}/${anoNum}: ${d.titulo} (${cats}) [relevância ${d.relevancia ?? 0}]${descBlock}`;
-                  })
-                  .join("\n");
-              }
-            } catch (_dbDatasError: any) {
-              datasResumoTexto = "";
-            }
-
-            if (!datasResumoTexto) {
-              datasResumoTexto = buildFallbackDatasResumoTexto(mesNum, anoNum, nicheText);
-            }
-          }
-        } catch (_e) {
-          datasResumoTexto = "";
-        }
-      }
-      return datasResumoTexto;
-    };
-
-    // 1. Validar API Key
-    if (!process.env.GOOGLE_API_KEY) {
-      console.error("❌ [ERRO] API Key do Google não encontrada no .env");
-      return res.status(500).json({ error: "Configuração de IA ausente." });
-    }
-    console.log("✅ [DEBUG] API Key detectada.");
-
-    // 3. Buscar Regras (Knowledge)
-    console.log("🔍 [DEBUG] Buscando regras da marca...");
-    const rulesResult = await db.query("SELECT regra FROM brand_rules WHERE cliente_id = $1 AND ativa = true", [clienteId]);
-    const rules = rulesResult.rows.map((r: any) => `- ${r.regra}`).join("\n");
-    console.log(`✅ [DEBUG] ${rulesResult.rows.length} regras encontradas.`);
-
-    // 4. Buscar documentos de DNA da marca (brand_docs)
-    console.log("🔍 [DEBUG] Buscando documentos de DNA da marca...");
-    const docsResult = await db.query(
-      "SELECT tipo, conteudo_texto FROM brand_docs WHERE cliente_id = $1",
-      [clienteId]
-    );
-    const docsResumo = docsResult.rows
-      .map((d: any) => `- (${d.tipo}) ${d.conteudo_texto}`)
-      .join("\n");
-    console.log(`✅ [DEBUG] ${docsResult.rows.length} documentos de DNA encontrados.`);
-
-    // 5. Normalizar campos de branding (JSONB) para texto legível
-    const toneText =
-      typeof branding.tone_of_voice === "string"
-        ? branding.tone_of_voice
-        : JSON.stringify(branding.tone_of_voice);
-    const visualText =
-      typeof branding.visual_style === "string"
-        ? branding.visual_style
-        : JSON.stringify(branding.visual_style);
-    const audienceText =
-      typeof branding.audience === "string"
-        ? branding.audience
-        : JSON.stringify(branding.audience);
-    const keywordsText = Array.isArray(branding.keywords)
-      ? branding.keywords.join(", ")
-      : branding.keywords || "";
-
-    let effectiveGenerationPrompt = generationPrompt || "";
-    if (chainOutputFinal) {
-      effectiveGenerationPrompt = `${effectiveGenerationPrompt}\n\n# Contexto gerado pela Prompt Chain:\n${chainOutputFinal}`;
-    }
-
-    const hojeISO = new Date().toISOString().slice(0, 10);
-
-    const cleanAndParseJSON = (text: string) => {
-      const sanitize = (rawText: string) => {
-        const withoutFences = String(rawText || "")
-          .replace(/```json/gi, "")
-          .replace(/```/g, "")
-          .trim();
-
-        // Remove caracteres de controle que quebram JSON (exceto \n, \r, \t)
-        return withoutFences.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
-      };
-
-      const cleanedText = sanitize(text);
-      const candidates: string[] = [];
-
-      const firstArray = cleanedText.indexOf("[");
-      const lastArray = cleanedText.lastIndexOf("]");
-      if (firstArray !== -1 && lastArray !== -1 && lastArray > firstArray) {
-        candidates.push(cleanedText.substring(firstArray, lastArray + 1));
-      }
-
-      const firstObj = cleanedText.indexOf("{");
-      const lastObj = cleanedText.lastIndexOf("}");
-      if (firstObj !== -1 && lastObj !== -1 && lastObj > firstObj) {
-        candidates.push(cleanedText.substring(firstObj, lastObj + 1));
-      }
-
-      candidates.push(cleanedText);
-
-      for (const cand of candidates) {
-        try {
-          return JSON.parse(cand);
-        } catch (e: any) {
-          console.error("⚠️ [DEBUG] Erro ao fazer parse do trecho extraído:", e?.message || e);
-        }
-      }
-
-      throw new Error("Não foi possível interpretar JSON retornado pela IA.");
-    };
-
-    const trendsBlock = "";
-
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
-    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
-
-    const resultsByMonth: any[] = [];
-    const failedMonths: any[] = [];
-    let continuityContext = "";
-
-    const isTrimestral = periodoFinal === 90;
-    const mixesByMonth: any[] = isTrimestral
-      ? distributeMixAcrossMonths(mix, monthsToGenerate.length)
-      : monthsToGenerate.map(() => mix);
-
-    for (let monthIndex = 0; monthIndex < monthsToGenerate.length; monthIndex++) {
-      const mesToGenerate = monthsToGenerate[monthIndex] ?? "Geral";
-      const mixForThisMonth = mixesByMonth[monthIndex] || mix;
-      const totalPostsForThisMonth =
-        (mixForThisMonth.reels || 0) +
-        (mixForThisMonth.static || 0) +
-        (mixForThisMonth.carousel || 0) +
-        (mixForThisMonth.stories || 0) +
-        (mixForThisMonth.photos || 0);
-
-      try {
-        const datasResumoTexto = await buildDatasResumoTextoForMes(mesToGenerate);
-
-        const prompt = `
-          Atue como Strategist Planner.
-
-          Crie um Planejamento de Conteúdo contendo EXATAMENTE esta quantidade de posts (nem mais, nem menos):
-
-          - ${mixForThisMonth.reels || 0} roteiros de REELS (Vídeo vertical, dinâmico).
-          - ${mixForThisMonth.static || 0} posts ESTÁTICOS (Imagem única).
-          - ${mixForThisMonth.carousel || 0} CARROSSÉIS (Conteúdo denso/lista).
-          - ${mixForThisMonth.stories || 0} sequências de STORIES.
-          - ${mixForThisMonth.photos || 0} IDEIAS DE FOTOS (Conceitos visuais para sessões fotográficas).
-
-          Total de itens: ${totalPostsForThisMonth}.
-
-          INSTRUÇÃO DE DISTRIBUIÇÃO:
-          Distribua esses ${totalPostsForThisMonth} posts ao longo do mês de ${mesToGenerate || mes || "Próximo Mês"} de forma lógica e espaçada (ex: terças e quintas, ou a cada 2 dias). Não agrupe tudo no dia 1.
-
-          DNA DA MARCA (use isso como referência principal, acima de qualquer suposição genérica):
-          - Tom de Voz (detalhado): ${toneText}
-          - Estilo Visual (diretrizes): ${visualText}
-          - Público-Alvo (personas, dores, desejos): ${audienceText}
-          - Palavras-chave estratégicas: ${keywordsText}
-
-          INSTRUÇÕES ESPECÍFICAS POR FORMATO (quando fornecidas):
-          - Reels: ${formatInstructions?.reels || 'Sem instruções adicionais para Reels.'}
-          - Posts estáticos: ${formatInstructions?.static || 'Sem instruções adicionais para posts estáticos.'}
-          - Carrosséis: ${formatInstructions?.carousel || 'Sem instruções adicionais para carrosséis.'}
-          - Stories: ${formatInstructions?.stories || 'Sem instruções adicionais para Stories.'}
-          - Ideias de Fotos: ${formatInstructions?.photos || 'Para ideias de fotos, foque em conceitos visuais criativos, locações, ângulos, iluminação e mood. Seja específico e técnico para orientar fotógrafos.'}
-
-          DATAS COMEMORATIVAS/RELEVANTES DO MÊS (use como base obrigatória):
-          ${datasResumoTexto || 'Sem lista prévia. Você DEVE levantar datas relevantes reais do mês e usá-las no planejamento.'}
-
-          ${trendsBlock ? `\nTRENDS (use como inspiração adicional, mantendo coerência com o DNA da marca):\n${trendsBlock}\n` : ''}
-
-          DATA ATUAL (referência): ${hojeISO}
-
-          REGRAS OBRIGATÓRIAS (Não viole em hipótese alguma):
-          ${rules}
-
-          BRIEFING DO CLIENTE (contexto tático desta leva de conteúdos):
-          "${briefing || 'Foco em engajamento e autoridade.'}"
-
-          REFERÊNCIAS GERAIS PARA ESTE MÊS (links, campanhas anteriores, benchmarks, etc.):
-          ${monthReferences || 'Nenhuma referência específica fornecida para este mês.'}
-
-          CONTINUIDADE ENTRE MESES (mantenha consistência estratégica e aproveite campanhas em andamento):
-          ${continuityContext || 'Primeiro mês da geração. Ainda não há meses anteriores gerados nesta execução.'}
-
-          INSTRUÇÕES AVANÇADAS DO ESTRATEGISTA (se fornecidas pelo usuário ou pela Prompt Chain):
-          ${effectiveGenerationPrompt || 'Use seu melhor julgamento estratégico mantendo consistência com o DNA de marca e as regras acima.'}
-
-          DOCUMENTOS DA MARCA (resumo de guias, posicionamento, manifesto, etc):
-          ${docsResumo || 'Nenhum documento adicional cadastrado. Use apenas o DNA e o briefing acima.'}
-
-          INSTRUÇÃO ESPECIAL PARA PROMPTS DE ARTE:
-          Para cada post, gere também um campo 'image_generation_prompt' técnico para ferramentas de IA generativa (Midjourney, DALL-E, etc.).
-
-          Este prompt deve seguir esta estrutura específica:
-          '[Descrição detalhada da cena/conteúdo] + [Estilo visual da marca (use as diretrizes acima)] + [Paleta de cores predominante alinhada ao branding] + [Iluminação e mood adequados ao tema] + [Composição e ângulo apropriados]'.
-
-          Seja específico, técnico e pronto para uso direto. Escreva em inglês para compatibilidade com ferramentas de IA.
-
-          Retorne APENAS um JSON puro (sem markdown) com este formato array:
-          [
-            {
-              "data": "DD/MM",
-              "tema": "...",
-              "formato": "Reels/Carrossel/Static/Stories/Photos",
-              "ideia_visual": "...",
-              "copy_sugestao": "...",
-              "objetivo": "...",
-              "image_generation_prompt": "..."
-            }
-          ]
-
-          IMPORTANTE: Para formato 'Photos', seja ainda mais detalhado no campo 'ideia_visual' incluindo: locação, ângulo, iluminação, composição, props, vestuário e mood desejado.
-        `;
-
-        console.log("🚀 [DEBUG] Enviando para Gemini...");
-        let responseText = "";
-        let usedModelName: string | null = null;
-        for (const modelName of modelsToTry) {
-          try {
-            console.log(`🤖 [DEBUG] Tentando modelo: ${modelName}...`);
-            const model = genAI.getGenerativeModel({ model: modelName });
-            const result = await model.generateContent(prompt);
-            responseText = result.response.text();
-            usedModelName = modelName;
-
-            const usageMetadata = result.response.usageMetadata;
-            if (usageMetadata) {
-              await updateTokenUsage(clienteId, usageMetadata, "calendar_generation", modelName);
-            }
-            break;
-          } catch (modelError: any) {
-            if (modelName === modelsToTry[modelsToTry.length - 1]) {
-              throw new Error(`Todos os modelos falharam. Erro final: ${modelError.message}`);
-            }
-            await new Promise(resolve => setTimeout(resolve, 2000));
-          }
-        }
-
-        console.log("🧹 [DEBUG] Limpando resposta do Gemini...");
-        const rawCalendarData = cleanAndParseJSON(responseText);
-
-        let calendarData = rawCalendarData;
-        if (Array.isArray(rawCalendarData)) {
-          const seen = new Set<string>();
-          const uniquePosts = rawCalendarData.filter((post: any) => {
-            const key = `${post.data}|${post.tema}|${post.formato}`;
-            if (seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          });
-          calendarData = uniquePosts.slice(0, totalPostsForThisMonth);
-        }
-
-        console.log("� [DEBUG] Salvando no banco...");
-        const mesFinal = mesToGenerate || "Geral";
-        const metadata = {
-          month_references: monthReferences || null,
-          format_instructions: formatInstructions || null,
-        };
-
-        const saved = await db.query(
-          "INSERT INTO calendarios (cliente_id, mes, calendario_json, periodo, metadata) VALUES ($1, $2, $3, $4, $5) RETURNING id",
-          [clienteId, mesFinal, JSON.stringify(calendarData), periodoFinal, metadata]
-        );
-
-        try {
-          if (Array.isArray(calendarData)) {
-            const temas = calendarData
-              .slice(0, 12)
-              .map((p: any) => String(p?.tema || "").trim())
-              .filter(Boolean);
-            continuityContext = `${continuityContext}\n\nMÊS JÁ GERADO: ${mesFinal}\nTEMAS (amostra):\n${temas.slice(0, 8).map((t: string) => `- ${t}`).join("\n")}`;
-          }
-        } catch (_e) {
-          // ignore
-        }
-
-        resultsByMonth.push({
-          calendarId: saved.rows[0].id,
-          mes: mesFinal,
-          model: usedModelName,
-          postsCount: Array.isArray(calendarData) ? calendarData.length : 0,
-        });
-
-        console.log(`✅ [DEBUG] Mês ${mesFinal} gerado com sucesso!`);
-      } catch (monthError: any) {
-        console.error(`❌ [DEBUG] Erro ao gerar mês ${mesToGenerate}:`, monthError.message);
-        failedMonths.push({
-          mes: mesToGenerate,
-          error: monthError.message,
-        });
-      }
-    }
-
-    if (resultsByMonth.length === 0 && failedMonths.length > 0) {
-      return res.status(500).json({
-        success: false,
-        error: "Todos os meses falharam na geração.",
-        failedMonths,
-      });
-    }
-
-    return res.json({
+    console.log(`🚀 [JOB] Criando job ${jobId} para cliente ${clienteId}`);
+
+    await db.query(`
+      INSERT INTO calendar_generation_jobs (
+        id, cliente_id, status, progress, payload, created_at
+      ) VALUES ($1, $2, 'pending', 0, $3, NOW())
+    `, [jobId, clienteId, JSON.stringify(jobPayload)]);
+
+    return res.status(202).json({
       success: true,
-      calendars: resultsByMonth,
-      failedMonths: failedMonths.length > 0 ? failedMonths : undefined,
+      message: "Geração iniciada em background.",
+      jobId,
+      monthsToGenerate
     });
+
   } catch (error: any) {
-    console.error("❌ Erro ao gerar calendário:", error);
+    console.error("❌ Erro ao iniciar job:", error);
     return res.status(500).json({
       success: false,
-      error: "Erro ao gerar calendário.",
+      error: "Erro ao iniciar job.",
       details: error.message,
     });
   }
@@ -825,13 +253,13 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
 
       CONTEXTO DA MARCA:
       - Tom de Voz: ${branding.tone_of_voice}
-      - Estilo Visual: ${branding.visual_style}
-      - Público: ${branding.audience}
+    - Estilo Visual: ${branding.visual_style}
+    - Público: ${branding.audience}
 
-      REGRAS OBRIGATÓRIAS (Não viole):
+      REGRAS OBRIGATÓRIAS(Não viole):
       ${rules}
 
-      POST ATUAL (referência):
+      POST ATUAL(referência):
       {
         "data": "${originalPost.data}",
         "tema": "${originalPost.tema}",
@@ -842,7 +270,7 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
         "image_generation_prompt": "${originalPost.image_generation_prompt || ""}"
       }
 
-      INSTRUÇÕES DO ESTRATEGISTA (opcional):
+      INSTRUÇÕES DO ESTRATEGISTA(opcional):
       Adapte o conteúdo para o novo formato mantendo a essência estratégica, mas otimizando copy, ideia visual e objetivo para aumentar desempenho.
 
       SAÍDA ESPERADA:
@@ -870,31 +298,34 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
 
     for (const modelName of modelsToTry) {
       try {
-        console.log(`🤖 [DEBUG] Tentando modelo (regen): ${modelName}...`);
-        const model = genAI.getGenerativeModel({ model: modelName });
+        console.log(`🤖[DEBUG] Tentando modelo(regen): ${modelName}...`);
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: { responseMimeType: "application/json" }
+        });
         result = await model.generateContent(regenPrompt);
         responseText = result.response.text();
 
         // Log de uso de tokens
         const usageMetadata = result.response.usageMetadata;
         if (usageMetadata) {
-          console.log(`📊 [TOKENS REGEN] Modelo: ${modelName}`);
-          console.log(`📊 [TOKENS REGEN] Prompt Tokens: ${usageMetadata.promptTokenCount || 0}`);
-          console.log(`📊 [TOKENS REGEN] Completion Tokens: ${usageMetadata.candidatesTokenCount || 0}`);
-          console.log(`📊 [TOKENS REGEN] Total Tokens: ${usageMetadata.totalTokenCount || 0}`);
+          console.log(`📊[TOKENS REGEN] Modelo: ${modelName}`);
+          console.log(`📊[TOKENS REGEN] Prompt Tokens: ${usageMetadata.promptTokenCount || 0}`);
+          console.log(`📊[TOKENS REGEN] Completion Tokens: ${usageMetadata.candidatesTokenCount || 0}`);
+          console.log(`📊[TOKENS REGEN] Total Tokens: ${usageMetadata.totalTokenCount || 0}`);
 
           // Atualizar contador de tokens do cliente
           await updateTokenUsage(calendar.cliente_id, usageMetadata, "post_regeneration", modelName);
         }
 
-        console.log(`✅ [DEBUG] Resposta recebida do ${modelName} (tamanho: ${responseText.length})`);
+        console.log(`✅[DEBUG] Resposta recebida do ${modelName}(tamanho: ${responseText.length})`);
         break; // Sucesso
       } catch (modelError: any) {
-        console.warn(`⚠️ [DEBUG] ${modelName} falhou em regen:`, modelError.message);
+        console.warn(`⚠️[DEBUG] ${modelName} falhou em regen: `, modelError.message);
 
         if (modelName === modelsToTry[modelsToTry.length - 1]) {
           // Se foi o último, não tem mais o que fazer
-          throw new Error(`Todos os modelos falharam em regen. Erro final: ${modelError.message}`);
+          throw new Error(`Todos os modelos falharam em regen.Erro final: ${modelError.message} `);
         }
 
         console.log("⏳ [DEBUG] Aguardando 2s antes do próximo modelo...");
@@ -907,7 +338,7 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
       const trimmed = text.trim();
       // Remover possíveis blocos de código markdown
       const cleaned = trimmed
-        .replace(/```json/gi, "")
+        .replace(/```json\s*/gi, "")
         .replace(/```/g, "")
         .trim();
 
@@ -957,6 +388,55 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
   }
 });
 
+// GET /api/calendars/:clientId/list - Lista todos os calendários de um cliente (para CampaignsList)
+router.get("/calendars/:clientId/list", async (req: Request, res: Response) => {
+  try {
+    const { clientId } = req.params;
+    const includeDrafts = req.query.includeDrafts === 'true';
+
+    let statusFilter = "AND status = 'published'";
+    if (includeDrafts) statusFilter = "";
+
+    const result = await db.query(`
+      SELECT 
+        c.id,
+        c.mes,
+        c.periodo,
+        c.status,
+        c.criado_em,
+        c.updated_at,
+        c.generation_job_id,
+        jsonb_array_length(c.calendario_json::jsonb) AS posts_count,
+        j.status AS job_status,
+        j.current_step AS job_step
+      FROM calendarios c
+      LEFT JOIN calendar_generation_jobs j ON j.id = c.generation_job_id
+      WHERE c.cliente_id = $1 ${statusFilter}
+      ORDER BY c.criado_em DESC
+      LIMIT 50
+    `, [clientId]);
+
+    return res.json({
+      success: true,
+      calendars: result.rows.map(r => ({
+        id: r.id,
+        mes: r.mes,
+        periodo: r.periodo,
+        status: r.status,
+        postsCount: parseInt(r.posts_count) || 0,
+        criadoEm: r.criado_em,
+        updatedAt: r.updated_at,
+        jobId: r.generation_job_id,
+        jobStatus: r.job_status,
+        jobStep: r.job_step
+      }))
+    });
+  } catch (error: any) {
+    console.error("❌ Erro ao listar calendários:", error);
+    return res.status(500).json({ success: false, error: "Erro ao listar calendários." });
+  }
+});
+
 // GET /api/calendars/:clientId - Retorna calendário do mês atual ou o último
 router.get("/calendars/:clientId", async (req: Request, res: Response) => {
   try {
@@ -969,13 +449,27 @@ router.get("/calendars/:clientId", async (req: Request, res: Response) => {
     let query;
     let params;
 
+    const includeDrafts = req.query.includeDrafts === 'true';
+
+    // Base params
+    params = [clientId];
+    let statusFilter = "AND status = 'published'";
+    if (includeDrafts) {
+      statusFilter = ""; // Traz tudo (draft e published)
+    }
+
     if (month && typeof month === 'string') {
       // Buscar calendário específico do mês
-      console.log(`🔍 [DEBUG] Buscando calendário específico do mês: "${month}"`);
+      // Normaliza o mês removendo preposições (ex: 'Agosto de 2026' == 'Agosto 2026')
+      // para compatibilidade entre Intl.DateTimeFormat e date-fns
+      console.log(`🔍 [DEBUG] Buscando calendário específico do mês: "${month}" (includeDrafts=${includeDrafts})`);
       query = `
-        SELECT id, cliente_id, mes, calendario_json, periodo, criado_em, updated_at, metadata
+        SELECT id, cliente_id, mes, calendario_json, periodo, criado_em, updated_at, metadata, status
         FROM calendarios
-        WHERE cliente_id = $1 AND mes = $2
+        WHERE cliente_id = $1
+          AND LOWER(REGEXP_REPLACE(mes, '\\s+(de|do|da)\\s+', ' ', 'gi')) =
+              LOWER(REGEXP_REPLACE($2, '\\s+(de|do|da)\\s+', ' ', 'gi'))
+          ${statusFilter}
         ORDER BY criado_em DESC
         LIMIT 1
       `;
@@ -983,9 +477,9 @@ router.get("/calendars/:clientId", async (req: Request, res: Response) => {
     } else {
       // Buscar último calendário
       query = `
-        SELECT id, cliente_id, mes, calendario_json, periodo, criado_em, updated_at, metadata
+        SELECT id, cliente_id, mes, calendario_json, periodo, criado_em, updated_at, metadata, status
         FROM calendarios
-        WHERE cliente_id = $1
+        WHERE cliente_id = $1 ${statusFilter}
         ORDER BY criado_em DESC
         LIMIT 1
       `;
@@ -1022,7 +516,8 @@ router.get("/calendars/:clientId", async (req: Request, res: Response) => {
         periodo: calendar.periodo,
         metadata: calendar.metadata || {},
         createdAt: calendar.criado_em,
-        updatedAt: calendar.updated_at
+        updatedAt: calendar.updated_at,
+        status: calendar.status
       }
     });
   } catch (error: any) {
@@ -1143,18 +638,84 @@ router.put("/calendars/post/:calendarId/:postIndex", async (req: Request, res: R
   }
 });
 
+// DELETE /api/calendars/post/:calendarId/:postIndex - Exclui um post específico
+router.delete("/calendars/post/:calendarId/:postIndex", async (req: Request, res: Response) => {
+  try {
+    const { calendarId, postIndex } = req.params;
+
+    console.log(`🗑️ Excluindo post ${postIndex} do calendário ${calendarId}`);
+
+    if (!calendarId || !postIndex) {
+      return res.status(400).json({
+        success: false,
+        error: "calendarId e postIndex são obrigatórios."
+      });
+    }
+
+    const result = await db.query(
+      "SELECT calendario_json FROM calendarios WHERE id = $1",
+      [calendarId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Calendário não encontrado."
+      });
+    }
+
+    const posts = result.rows[0].calendario_json;
+    const index = parseInt(postIndex as string, 10);
+
+    if (index < 0 || index >= posts.length) {
+      return res.status(400).json({
+        success: false,
+        error: "Índice de post inválido."
+      });
+    }
+
+    // Remove o post
+    posts.splice(index, 1);
+
+    await db.query(
+      `UPDATE calendarios 
+       SET calendario_json = $1, 
+           updated_at = NOW() 
+       WHERE id = $2`,
+      [JSON.stringify(posts), calendarId]
+    );
+
+    console.log("✅ Post excluído com sucesso");
+
+    return res.json({
+      success: true,
+      message: "Post excluído com sucesso."
+    });
+  } catch (error) {
+    console.error("❌ Erro ao excluir post:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Erro ao excluir post."
+    });
+  }
+});
+
 // DELETE /api/calendars/:clientId/:month - Exclui calendário completo do mês
 router.delete("/calendars/:clientId/:month", async (req: Request, res: Response) => {
   try {
     const { clientId, month } = req.params;
 
-    console.log(`🗑️ Excluindo calendário do mês ${month} para cliente: ${clientId}`);
+    const includeDrafts = req.query.includeDrafts === 'true';
 
-    // Primeiro, buscar o calendário para confirmar que existe
-    const result = await db.query(
-      "SELECT id FROM calendarios WHERE cliente_id = $1 AND mes = $2",
-      [clientId, month]
-    );
+    console.log(`🗑️ Excluindo calendário do mês ${month} para cliente: ${clientId} (includeDrafts=${includeDrafts})`);
+
+    let query = "SELECT id FROM calendarios WHERE cliente_id = $1 AND LOWER(mes) = LOWER($2) AND status = 'published'";
+    if (includeDrafts) {
+      query = "SELECT id FROM calendarios WHERE cliente_id = $1 AND LOWER(mes) = LOWER($2)";
+    }
+
+    // Primeiro, buscar o calendário para confirmar que existe e validar status
+    const result = await db.query(query, [clientId, month]);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
@@ -1373,8 +934,8 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     try {
       const normalizedMonths = Array.isArray(monthsToExport)
         ? monthsToExport
-            .map((mm) => parseInt(String(mm), 10))
-            .filter((mm) => !isNaN(mm) && mm >= 1 && mm <= 12)
+          .map((mm) => parseInt(String(mm), 10))
+          .filter((mm) => !isNaN(mm) && mm >= 1 && mm <= 12)
         : [];
 
       console.log(` [DEBUG] Merge check: normalizedMonths=${JSON.stringify(normalizedMonths)}, cliente_id=${calendar.cliente_id || 'NULL'}`);
@@ -1466,9 +1027,9 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     const safeMonth = (() => {
       const normalized = Array.isArray(monthsToExport)
         ? monthsToExport
-            .map((m) => parseInt(String(m), 10))
-            .filter((m) => !isNaN(m) && m >= 1 && m <= 12)
-            .sort((a, b) => a - b)
+          .map((m) => parseInt(String(m), 10))
+          .filter((m) => !isNaN(m) && m >= 1 && m <= 12)
+          .sort((a, b) => a - b)
         : [];
 
       if (normalized.length >= 2) {
@@ -1504,7 +1065,8 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     console.log(`  Template: ${templatePath}`);
     console.log(`  Output: ${outputPath}`);
 
-    const pythonProcess = spawn("python3", [
+    const pythonBin = process.env.PYTHON_BIN || "python3";
+    const pythonProcess = spawn(pythonBin, [
       pythonScript,
       JSON.stringify(posts),
       templatePath,
@@ -1531,11 +1093,52 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
       console.error(`[PYTHON ERROR] ${error.trim()}`);
     });
 
-    pythonProcess.on("close", (code: any) => {
+    pythonProcess.on("close", async (code: any) => {
       if (code === 0) {
         console.log(` [SUCCESS] Python script executado com sucesso`);
         if (fs.existsSync(outputPath)) {
           console.log(` Arquivo Excel criado: ${outputPath}`);
+
+          // --- NOVO: Gravar no histórico de entregas ---
+          try {
+            const clienteId = result.rows[0].cliente_id;
+            if (clienteId) {
+              const deliveryTimestamp = Date.now();
+              // Pasta permanente: storage/deliveries/excel/CLIENT_ID/TIMESTAMP/filename
+              const deliveriesDir = path.resolve(backendDir, "..", "storage", "deliveries", "excel", String(clienteId), String(deliveryTimestamp));
+
+              if (!fs.existsSync(deliveriesDir)) {
+                fs.mkdirSync(deliveriesDir, { recursive: true });
+              }
+
+              const permanentPath = path.join(deliveriesDir, outputFileName);
+              fs.copyFileSync(outputPath, permanentPath);
+
+              const savedUrl = `/storage/deliveries/excel/${clienteId}/${deliveryTimestamp}/${outputFileName}`;
+
+              await db.query(
+                `INSERT INTO presentations (cliente_id, titulo, arquivos, dados_json, tipo, metadata)
+                 VALUES ($1, $2, $3, $4, $5, $6)`,
+                [
+                  clienteId,
+                  `Excel: ${outputFileName}`,
+                  JSON.stringify([savedUrl]),
+                  JSON.stringify(posts),
+                  'excel',
+                  JSON.stringify({
+                    months: monthsToExport,
+                    year,
+                    generatedAt: new Date().toISOString()
+                  })
+                ]
+              );
+              console.log(` [SUCCESS] Entrega Excel registrada no banco para cliente ${clienteId}`);
+            }
+          } catch (historyErr) {
+            console.error(` [ERROR] Falha ao registrar entrega no histórico:`, historyErr);
+          }
+          // --------------------------------------------
+
           res.download(outputPath, outputFileName, (err: any) => {
             if (err) {
               console.error(` [ERROR] Erro ao enviar arquivo: ${err}`);

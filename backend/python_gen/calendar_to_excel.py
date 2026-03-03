@@ -325,17 +325,16 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
     # O template pode vir com textos/posicionamentos diferentes por aba/mês; se tentarmos inferir do texto,
     # qualquer divergência desloca os posts (ex.: dia 2 cai na segunda).
     day_labels = {
-        0: 'DOMINGO',
-        1: 'SEGUNDA',
-        2: 'TERÇA',
-        3: 'QUARTA',
-        4: 'QUINTA',
-        5: 'SEXTA',
-        6: 'SÁBADO'
+        0: 'SEGUNDA',
+        1: 'TERÇA',
+        2: 'QUARTA',
+        3: 'QUINTA',
+        4: 'SEXTA',
+        5: 'SÁBADO',
+        6: 'DOMINGO'
     }
 
     first_weekday_mon0 = datetime(year_num, month_num, 1).weekday()  # 0=Seg ... 6=Dom
-    first_weekday_sun0 = (first_weekday_mon0 + 1) % 7  # 0=Dom ... 6=Sáb
 
     day_to_slot = {}
     current_day = 1
@@ -350,19 +349,19 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
         if current_day > days_in_month:
             continue
 
-        # Semana 0: encaixada (sem o domingo) quando o dia 1 não é domingo.
-        if week_index == 0 and first_weekday_sun0 != 0:
-            usable_cols = 7 - first_weekday_sun0  # ex.: segunda(1) -> 6 cols
+        # Semana 0: encaixada quando o dia 1 não começa na segunda.
+        if week_index == 0 and first_weekday_mon0 != 0:
+            usable_cols = 7 - first_weekday_mon0
             for offset in range(usable_cols):
-                col = col_letters[first_weekday_sun0 + offset]
-                dow = first_weekday_sun0 + offset
+                col = col_letters[first_weekday_mon0 + offset]
+                dow = first_weekday_mon0 + offset
                 if current_day <= days_in_month:
                     ws[f"{col}{header_row}"].value = f"{day_labels[dow]} ({current_day})"
                     day_to_slot[current_day] = (header_row, col)
                     current_day += 1
             continue
 
-        # Demais semanas (e também semana 0 quando começa no domingo): domingo..sábado em A..G
+        # Demais semanas: segunda..domingo em A..G (ou B..H)
         for dow in range(7):
             col = col_letters[dow]
             if current_day <= days_in_month:
@@ -538,78 +537,92 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
     start_month_num = parse_month_name(month_name)
     year_num = parse_year_from_label(month_name, year)
 
-    # Normalizar posts e agrupar por mês
-    posts_by_month = {}
+    # Normalizar posts e agrupar por (mês, ano)
+    posts_by_month_year = {}
     print(f"\n[INFO] Processando {len(calendar_json)} posts do JSON...")
+    
     for idx, post in enumerate(calendar_json):
         try:
             date_str = post.get('data', '01/01')
             print(f"[DEBUG] Post {idx+1}: data='{date_str}', formato='{post.get('formato')}'")
-            m_num = month_num_from_date_str(date_str, start_month_num)
-            d = day_from_date_str(date_str)
+            
+            # Tentar extrair dia, mês e ano da string de data
+            d, m_num_found, y_found = _extract_day_month_year(date_str)
+            
+            # Month fallback
+            m_num = m_num_found if (m_num_found is not None) else start_month_num
+            
+            # Year fallback logic
+            if y_found is not None:
+                y_num = y_found
+            else:
+                # Se o post não tem ano, usamos o rollover baseado no mês inicial
+                y_num = year_num
+                # SÓ adiciona 1 ano se houver uma transição clara de final de ano (Nov/Dez -> Jan/Fev/Mar)
+                # Ex: Planejamento começa em Dez/2025 e post é de Jan.
+                # Se m_num=2 (Fev) e start=3 (Mar), deve permanecer no mesmo ano (2026).
+                if m_num < start_month_num:
+                    # Heurística: se o mês base é final de ano (>=9) e o post é início de ano (<=4)
+                    if start_month_num >= 9 and m_num <= 4:
+                        y_num = year_num + 1
+
             title = build_post_title(post)
 
-            if m_num not in posts_by_month:
-                posts_by_month[m_num] = []
+            key = (m_num, y_num)
+            if key not in posts_by_month_year:
+                posts_by_month_year[key] = []
 
-            posts_by_month[m_num].append({
+            posts_by_month_year[key].append({
                 'day': d,
                 'formato': post.get('formato', 'Static'),
                 'title': title,
-                # Preservar campos úteis para preencher o resumo, quando existirem
                 'descricao': post.get('descricao'),
                 'description': post.get('description'),
                 'copy_sugestao': post.get('copy_sugestao'),
             })
-            print(f"[DEBUG] Post {idx+1} agrupado no mês {m_num} (dia {d})")
+            print(f"[DEBUG] Post {idx+1} agrupado em {m_num}/{y_num} (dia {d})")
         except Exception as e:
             print(f"[WARN] Erro ao processar post {idx+1}: {e}")
     
-    print(f"\n[INFO] Posts agrupados por mês: {dict((k, len(v)) for k, v in posts_by_month.items())}")
+    # Lista de chaves detectadas
+    detected_keys = sorted(posts_by_month_year.keys(), key=lambda x: (x[1], x[0]))
+    print(f"\n[INFO] Meses/Anos detectados: {detected_keys}")
 
-    sorted_months = sorted(posts_by_month.keys())
-    print(f"[INFO] Meses detectados nos posts: {sorted_months}")
-    
+    # Se o usuário selecionou meses, garantimos que eles existam para o ano base
+    final_keys = []
     if isinstance(selected_months, list) and len(selected_months) > 0:
         print(f"[INFO] Meses selecionados pelo usuário: {selected_months}")
-        filtered = []
         for m in selected_months:
             try:
                 mm = int(m)
+                # Determinar o ano para esse mês selecionado (mesma heurística)
+                yy = year_num
+                if mm < start_month_num and start_month_num >= 9 and mm <= 4:
+                    yy = year_num + 1
+                
+                key = (mm, yy)
+                if key not in final_keys:
+                    final_keys.append(key)
+                if key not in posts_by_month_year:
+                    posts_by_month_year[key] = []
             except Exception:
                 continue
-            if mm < 1 or mm > 12:
-                continue
-            filtered.append(mm)
+    else:
+        final_keys = detected_keys
 
-        if filtered:
-            base = int(start_month_num)
-            unique = list(set(filtered))
-            sorted_months = sorted(unique, key=lambda m: (int(m) - base) % 12)
-            print(f"[INFO] Meses finais (ordenados): {sorted_months}")
-            # Garantir que meses selecionados existam no dicionário mesmo que não tenham posts
-            for mm in sorted_months:
-                if mm not in posts_by_month:
-                    print(f"[INFO] Criando aba vazia para mês {mm} ({month_name_pt(mm)})")
-                    posts_by_month[mm] = []
+    if not final_keys:
+        final_keys = [(start_month_num, year_num)]
+        posts_by_month_year[final_keys[0]] = []
 
-    if not sorted_months:
-        sorted_months = [start_month_num]
-        posts_by_month[start_month_num] = []
+    # Ordenar chaves finais cronologicamente a partir do mês inicial
+    base_val = year_num * 12 + start_month_num
+    final_keys.sort(key=lambda x: (x[1] * 12 + x[0] - base_val) if (x[1] * 12 + x[0] >= base_val) else (9999 + x[1] * 12 + x[0]))
 
-    # Não reutilizar abas já existentes do template por mês.
-    # Renomear não altera a posição; e reuso pode carregar layouts/artefatos inconsistentes.
-    # Estratégia determinística: copiar a aba base para cada mês selecionado e, ao final,
-    # remover todas as abas originais do template.
     original_sheets = list(wb.worksheets)
     used_sheets = []
 
     total_posts_filled = 0
-    for idx, m_num in enumerate(sorted_months):
-        y_num = year_num
-        if m_num < start_month_num:
-            y_num = year_num + 1
-
+    for idx, (m_num, y_num) in enumerate(final_keys):
         month_label = f"{month_name_pt(m_num)} {y_num}"
         sheet_title = f"{client_name}_{month_name_pt(m_num)}"
 
@@ -619,7 +632,7 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
 
         filled = fill_single_month(
             ws,
-            posts_by_month.get(m_num, []),
+            posts_by_month_year.get((m_num, y_num), []),
             m_num,
             y_num,
             client_name,

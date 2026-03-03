@@ -39,7 +39,7 @@ const upload = multer({
 });
 
 router.post(
-  "/client-logos/upload",
+  "/upload",
   upload.single("file"),
   (req: Request, res: Response) => {
     if (!req.file) {

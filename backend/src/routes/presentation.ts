@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import db from '../config/database';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { updateTokenUsage } from '../utils/tokenTracker';
 
 const router = Router();
 
@@ -45,7 +46,7 @@ router.get('/available-months/:clienteId', async (req: Request, res: Response) =
         const result = await db.query(
             `SELECT mes
              FROM calendarios
-             WHERE cliente_id = $1
+             WHERE cliente_id = $1 AND status = 'published'
              GROUP BY mes
              ORDER BY MAX(criado_em) DESC`,
             [clienteId]
@@ -116,7 +117,7 @@ router.post('/generate-content', async (req: Request, res: Response) => {
             "SELECT * FROM branding WHERE cliente_id = $1 ORDER BY updated_at DESC LIMIT 1",
             [clienteId]
         );
-        
+
         let logoPath = null;
         let brandingData = {};
 
@@ -128,11 +129,11 @@ router.post('/generate-content', async (req: Request, res: Response) => {
                 audience: b.audience,
                 keywords: b.keywords
             };
-            
+
             const logoUrl = (b.logo_url ?? b.logoUrl ?? b.logo ?? b.logo_path ?? b.logoPath) as unknown;
             logoPath = resolveClientLogoPathFromUrl(logoUrl);
         }
-        
+
         const branding = brandingData;
 
         // 2.1 Buscar nome do cliente (para o planner)
@@ -183,47 +184,57 @@ Retorne APENAS este JSON preenchido:
             throw new Error('GOOGLE_API_KEY não configurada');
         }
         const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-        
+
         let result;
         let responseText = "";
 
         const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
 
+        let successModelName = "";
         for (const modelName of modelsToTry) {
             try {
                 console.log(`🤖 [DEBUG] Tentando modelo: ${modelName}...`);
                 const model = genAI.getGenerativeModel({ model: modelName });
                 result = await model.generateContent(prompt);
                 responseText = result.response.text();
+                successModelName = modelName;
                 console.log(`✅ [DEBUG] Sucesso com ${modelName}`);
                 break;
             } catch (modelError: any) {
                 console.warn(`⚠️ [DEBUG] ${modelName} falhou:`, modelError.message);
-                
+
                 if (modelName === modelsToTry[modelsToTry.length - 1]) {
                     throw new Error(`Todos os modelos falharam. Erro final: ${modelError.message}`);
                 }
-                
+
                 console.log("⏳ [DEBUG] Aguardando 2s antes do próximo modelo...");
                 await new Promise(resolve => setTimeout(resolve, 2000));
             }
         }
-        
+
+        // Rastrear tokens gastos na geração de lâminas
+        if (result) {
+            const usageMetadata = result.response.usageMetadata;
+            if (usageMetadata) {
+                await updateTokenUsage(clienteId, usageMetadata, "laminas_generation", successModelName);
+            }
+        }
+
         console.log("🤖 [AI] Resposta recebida (primeiros 500 chars):", responseText.substring(0, 500));
 
         // Extrair JSON da resposta (pode vir com texto extra)
         let jsonStr = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-        
+
         // Tentar encontrar o JSON entre { e }
         const startIdx = jsonStr.indexOf('{');
         const endIdx = jsonStr.lastIndexOf('}');
-        
+
         if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
             jsonStr = jsonStr.substring(startIdx, endIdx + 1);
         }
-        
+
         console.log("📦 [AI] JSON extraído (primeiros 300 chars):", jsonStr.substring(0, 300));
-        
+
         const content = JSON.parse(jsonStr);
 
         // Injetar logoPath no planner se existir (prioriza logo vinda do frontend, se houver)
@@ -247,26 +258,26 @@ Retorne APENAS este JSON preenchido:
 
     } catch (error: any) {
         console.error("❌ Erro ao gerar conteúdo com IA:", error);
-        
+
         // Tratamento especial para erro de cota
         if (error.status === 429) {
-            return res.status(429).json({ 
-                success: false, 
+            return res.status(429).json({
+                success: false,
                 error: 'Cota da API Gemini excedida. Aguarde alguns minutos e tente novamente, ou preencha os campos manualmente.',
                 retryAfter: error.errorDetails?.find((d: any) => d['@type']?.includes('RetryInfo'))?.retryDelay || '1 minuto'
             });
         }
-        
+
         // Se for erro de parsing JSON, logar a resposta completa
         if (error instanceof SyntaxError && error.message.includes('JSON')) {
             console.error("📄 Resposta da IA que causou erro:");
             console.error(error.message);
-            return res.status(500).json({ 
-                success: false, 
+            return res.status(500).json({
+                success: false,
                 error: 'A IA retornou um formato inválido. Tente novamente ou preencha manualmente.'
             });
         }
-        
+
         return res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -332,7 +343,7 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
                 console.warn('⚠️ [PRESENTATION] Falha ao enriquecer planner com dados do cliente:', e);
             }
         }
-        
+
         // 1. Salvar JSON
         // Blindagem final: garantir que nada reintroduziu o mês nas Metas
         if (data?.grid && typeof data.grid === 'object') {
@@ -363,14 +374,14 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
             if (error) {
                 console.error(`❌ [PRESENTATION] Erro ao executar Python: ${error.message}`);
                 console.error(`❌ [PRESENTATION] Stderr: ${stderr}`);
-                res.status(500).json({ 
-                    success: false, 
-                    error: 'Falha na execução do script Python', 
-                    details: stderr || error.message 
+                res.status(500).json({
+                    success: false,
+                    error: 'Falha na execução do script Python',
+                    details: stderr || error.message
                 });
                 return;
             }
-            
+
             console.log(`✅ [PRESENTATION] Python output: ${stdout}`);
 
             // 3. Listar arquivos gerados
@@ -386,9 +397,9 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
             // Retornar URLs para o frontend
             // As URLs serão servidas estaticamente
             const urls = files.map(f => `/presentation-output/${f}?t=${Date.now()}`); // timestamp para evitar cache
-            
-            res.json({ 
-                success: true, 
+
+            res.json({
+                success: true,
                 message: 'Lâminas geradas com sucesso',
                 images: urls,
                 tempFiles: files // Nomes dos arquivos para salvar depois
@@ -404,8 +415,8 @@ router.post('/generate', async (req: Request, res: Response): Promise<void> => {
 // ROTA NOVA: Salvar versão definitiva
 router.post('/save', async (req: Request, res: Response) => {
     try {
-        const { clienteId, tempFiles, dataJson, titulo } = req.body;
-        
+        const { clienteId, tempFiles, dataJson, titulo, tipo, metadata } = req.body;
+
         if (!clienteId || !tempFiles || !Array.isArray(tempFiles)) {
             return res.status(400).json({ success: false, error: 'Dados incompletos' });
         }
@@ -413,7 +424,7 @@ router.post('/save', async (req: Request, res: Response) => {
         // Criar pasta de destino
         const timestamp = Date.now();
         const clientStorageDir = path.resolve(__dirname, `../../storage/presentations/${clienteId}/${timestamp}`);
-        
+
         if (!fs.existsSync(clientStorageDir)) {
             fs.mkdirSync(clientStorageDir, { recursive: true });
         }
@@ -424,7 +435,7 @@ router.post('/save', async (req: Request, res: Response) => {
         for (const filename of tempFiles) {
             const sourcePath = path.join(OUTPUT_DIR, filename);
             const destPath = path.join(clientStorageDir, filename);
-            
+
             if (fs.existsSync(sourcePath)) {
                 fs.copyFileSync(sourcePath, destPath);
                 savedUrls.push(`/storage/presentations/${clienteId}/${timestamp}/${filename}`);
@@ -433,14 +444,21 @@ router.post('/save', async (req: Request, res: Response) => {
 
         // Salvar no banco
         const result = await db.query(
-            `INSERT INTO presentations (cliente_id, titulo, arquivos, dados_json)
-             VALUES ($1, $2, $3, $4)
+            `INSERT INTO presentations (cliente_id, titulo, arquivos, dados_json, tipo, metadata)
+             VALUES ($1, $2, $3, $4, $5, $6)
              RETURNING id, criado_em`,
-            [clienteId, titulo || `Apresentação ${new Date().toLocaleDateString()}`, JSON.stringify(savedUrls), JSON.stringify(dataJson)]
+            [
+                clienteId,
+                titulo || `Apresentação ${new Date().toLocaleDateString()}`,
+                JSON.stringify(savedUrls),
+                JSON.stringify(dataJson),
+                tipo || 'laminas',
+                metadata ? JSON.stringify(metadata) : null
+            ]
         );
 
-        return res.json({ 
-            success: true, 
+        return res.json({
+            success: true,
             message: 'Apresentação salva com sucesso!',
             id: result.rows[0].id,
             savedUrls

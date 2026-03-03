@@ -19,6 +19,10 @@ export interface BrandingDataset {
   estilo_visual?: any;
   audience?: any;
   keywords?: string[];
+  archetype?: string;
+  usp?: string;
+  anti_keywords?: string;
+  nicho?: string;
 }
 
 export interface PostsHistory {
@@ -40,6 +44,10 @@ export function createBrandingDataset(
     estilo_visual: branding?.visual_style || {},
     audience: branding?.audience || {},
     keywords: branding?.keywords || [],
+    archetype: branding?.archetype || "",
+    usp: branding?.usp || "",
+    anti_keywords: branding?.anti_keywords || "",
+    nicho: branding?.nicho || "",
   };
 
   // Analisar histórico de posts
@@ -48,15 +56,15 @@ export function createBrandingDataset(
 
   postsProcessados.forEach((post) => {
     if (post.metadata) {
-      const metadata = typeof post.metadata === 'string' 
-        ? JSON.parse(post.metadata) 
+      const metadata = typeof post.metadata === 'string'
+        ? JSON.parse(post.metadata)
         : post.metadata;
-      
+
       // Extrair temas da análise
       if (metadata.analysis) {
         // Tentar identificar temas e categorias na análise
         const analysis = metadata.analysis.toLowerCase();
-        
+
         if (analysis.includes("educacional") || analysis.includes("educativo")) {
           categorias.push("Educacional");
         }
@@ -76,11 +84,11 @@ export function createBrandingDataset(
   const postsHistory: PostsHistory = {
     temas_recorrentes: Array.from(new Set(temas)),
     categorias: Array.from(new Set(categorias)),
-    forca_marca: postsProcessados.length > 5 
-      ? "Forte" 
-      : postsProcessados.length > 2 
-      ? "Moderada" 
-      : "Inicial",
+    forca_marca: postsProcessados.length > 5
+      ? "Forte"
+      : postsProcessados.length > 2
+        ? "Moderada"
+        : "Inicial",
   };
 
   return { brandingData, postsHistory };
@@ -97,7 +105,13 @@ export function buildCalendarPrompt(
   brandRules: string[] = []
 ): string {
   const prompt = `
-Você é um estrategista de social media expert. Com base nos dados abaixo, crie um calendário editorial estratégico de ${periodo} dias.
+Você é o Estrategista Principal e Guardião Verbal da marca.
+${brandingData.nicho ? `**Nicho de Atuação:** ${brandingData.nicho}` : ''}
+${brandingData.archetype ? `**Seu arquétipo é:** ${brandingData.archetype}` : ''}
+${brandingData.usp ? `**Sua Proposta Única de Valor é:** ${brandingData.usp}` : ''}
+${brandingData.anti_keywords ? `**Você NUNCA usa as palavras:** ${brandingData.anti_keywords}` : ''}
+
+Com base nos dados abaixo, crie um calendário editorial estratégico de ${periodo} dias.
 
 ## BRANDING DA MARCA
 
@@ -190,7 +204,7 @@ export async function generateCalendarWithGemini(
         .replace(/```json\n?/g, "")
         .replace(/```\n?/g, "")
         .trim();
-      
+
       calendarData = JSON.parse(cleanedText);
     } catch (parseError) {
       // Se falhar, tentar encontrar JSON no texto

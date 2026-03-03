@@ -20,7 +20,7 @@ function normalizeCategorias(input: unknown): string[] {
   return [];
 }
 
-router.get("/datas-comemorativas/categorias", async (_req: Request, res: Response) => {
+router.get("/categorias", async (_req: Request, res: Response) => {
   try {
     const fixed = ["Feriado", "Feriado Nacional", "Ponto Facultativo", "Geral"];
 
@@ -48,7 +48,7 @@ router.get("/datas-comemorativas/categorias", async (_req: Request, res: Respons
 });
 
 // GET /api/datas-comemorativas?mes=12&ano=2025&categorias[]=saude&categorias[]=geral
-router.get("/datas-comemorativas", async (req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
     const { mes, ano } = req.query;
     const { categorias, nicho } = req.query as { categorias?: string | string[]; nicho?: string | string[] };
@@ -64,7 +64,13 @@ router.get("/datas-comemorativas", async (req: Request, res: Response) => {
     }
 
     const categoriasNormalized = normalizeCategorias(categorias ?? nicho);
-    const categoriasArray = categoriasNormalized.length > 0 ? categoriasNormalized : undefined;
+
+    // Sempre incluir 'geral' e 'feriado' para que feriados nacionais e datas gerais
+    // apareçam independente do nicho do cliente
+    const baseCategories = ['geral', 'feriado', 'feriado nacional'];
+    const categoriasArray = categoriasNormalized.length > 0
+      ? Array.from(new Set([...categoriasNormalized.map(c => c.toLowerCase()), ...baseCategories]))
+      : undefined;
 
     const datas = await getDatasComemorativas(mesNum, anoNum, categoriasArray);
 
@@ -75,7 +81,7 @@ router.get("/datas-comemorativas", async (req: Request, res: Response) => {
   }
 });
 
-router.post("/datas-comemorativas", async (req: Request, res: Response) => {
+router.post("/", async (req: Request, res: Response) => {
   try {
     const { data, titulo, categorias, descricao, relevancia } = req.body || {};
 
@@ -107,7 +113,7 @@ router.post("/datas-comemorativas", async (req: Request, res: Response) => {
   }
 });
 
-router.put("/datas-comemorativas/:id", async (req: Request, res: Response) => {
+router.put("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { data, titulo, categorias, descricao, relevancia } = req.body || {};
@@ -149,7 +155,7 @@ router.put("/datas-comemorativas/:id", async (req: Request, res: Response) => {
   }
 });
 
-router.delete("/datas-comemorativas/:id", async (req: Request, res: Response) => {
+router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
 

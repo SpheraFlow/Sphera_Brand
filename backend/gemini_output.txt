@@ -1,0 +1,22 @@
+[
+  {
+    "dia": 5,
+    "tema": "Dica de Rotina para o Bem-Estar Diário",
+    "formato": "Static",
+    "instrucoes_visuais": "Imagem minimalista com um toque suave, talvez uma representação abstrata de equilíbrio ou um item do dia a dia (ex: xícara de café, planta em vaso). Cores neutras predominantes, tipografia limpa.",
+    "copy_inicial": "Começar o dia com pequenos hábitos pode fazer toda a diferença. Que tal um momento de reflexão antes de tudo?",
+    "objetivo": "Engajamento e Conscientização (Awareness) sobre bem-estar e produtividade.",
+    "cta": "Qual é o seu ritual matinal favorito? Compartilhe nos comentários!",
+    "palavras_chave": ["rotina", "bemestar", "produtividade", "dicas", "diaadia", "inspiração"]
+  },
+  {
+    "dia": 8,
+    "tema": "Celebração do Dia Internacional da Mulher",
+    "formato": "Static",
+    "instrucoes_visuais": "Arte gráfica elegante e discreta, utilizando elementos que simbolizam força, união e conquistas femininas de forma abstrata. Cores sóbrias ou tons pastéis que transmitam respeito e celebração, com foco na tipografia para a mensagem principal.",
+    "copy_inicial": "Hoje, celebramos a força, a resiliência e as inúmeras conquistas das mulheres em todo o mundo. Um dia para inspirar e reconhecer cada história.",
+    "objetivo": "Awareness, Reforço de Valores da Marca e Engajamento em torno de uma data importante.",
+    "cta": "Marque uma mulher que te inspira!",
+    "palavras_chave": ["DiaDaMulher", "MulheresInspiradoras", "ForçaFeminina", "Empoderamento", "Celebração"]
+  }
+]

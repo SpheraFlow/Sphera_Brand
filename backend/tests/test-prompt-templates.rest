@@ -1,0 +1,104 @@
+###
+# Testes para Prompt Templates — MVP "Prompts por Cliente"
+# Use com a extensão REST Client do VS Code ou httpie
+#
+# Pré-requisito: backend rodando em http://localhost:3001
+# Substitua {{CLIENT_ID}} pelo UUID de um cliente existente
+# Substitua {{TEMPLATE_ID}} pelo UUID de um template existente
+###
+
+@base = http://localhost:3001/api
+@clientId = {{$dotenv CLIENT_ID}}
+
+# ─────────────────────────────────────────────────────────────
+# PR1 — Verificar que a tabela foi criada e seed global existe
+# ─────────────────────────────────────────────────────────────
+
+### 1. Listar versões (deve retornar ao menos o template global)
+GET {{base}}/prompt-templates/{{clientId}}
+Content-Type: application/json
+
+### 2. Buscar template global ativo
+GET {{base}}/prompt-templates/base
+Content-Type: application/json
+
+### 3. Buscar versão ativa do cliente (com fallback para global)
+GET {{base}}/prompt-templates/{{clientId}}/active
+Content-Type: application/json
+
+# ─────────────────────────────────────────────────────────────
+# PR2a — POST /preview (custo zero de token)
+# Esperado: { success: true, renderedPrompt: string, missingVariables: [],
+#             guardrailErrors: [], usedTemplate: {...}, tokenEstimate: number }
+# ─────────────────────────────────────────────────────────────
+
+### 4. Preview com template ativo do cliente (sem bodyOverride)
+POST {{base}}/prompt-templates/preview
+Content-Type: application/json
+
+{
+  "clientId": "{{clientId}}"
+}
+
+### 5. Preview com bodyOverride (sobrescreve o template ativo)
+POST {{base}}/prompt-templates/preview
+Content-Type: application/json
+
+{
+  "clientId": "{{clientId}}",
+  "mes": "Maio 2026",
+  "bodyOverride": "Atue como estrategista.\n\nDNA DA MARCA:\n{{DNA_DA_MARCA}}\n\nBRIEFING: \"{{BRIEFING}}\"\n\nMIX: {{MIX_POSTS}}\n\nMÊS: {{MES}}\n\nRetorne JSON:\n[{ \"dia\": 1, \"tema\": \"...\", \"formato\": \"...\", \"instrucoes_visuais\": \"...\", \"copy_inicial\": \"...\", \"objetivo\": \"...\", \"cta\": \"...\", \"palavras_chave\": [] }]"
+}
+
+### 6. Preview com body INVÁLIDO (deve listar guardrailErrors e missingVariables)
+# Esperado: guardrailErrors com "DNA_DA_MARCA ausente" etc.
+POST {{base}}/prompt-templates/preview
+Content-Type: application/json
+
+{
+  "clientId": "{{clientId}}",
+  "bodyOverride": "Gere um calendário criativo. Retorne JSON livre."
+}
+
+# ─────────────────────────────────────────────────────────────
+# PR2b — Guardrails na ativação
+# Template sem placeholders obrigatórios NÃO pode ser ativado
+# ─────────────────────────────────────────────────────────────
+
+### 7. Criar versão com body INVÁLIDO (deve criar como draft)
+# Esperado: { success: true, data: { is_active: false, ... } }
+POST {{base}}/prompt-templates
+Content-Type: application/json
+
+{
+  "clienteId": "{{clientId}}",
+  "body": "Este prompt não tem os placeholders obrigatórios.",
+  "label": "v-invalido-teste"
+}
+
+### 8. Tentar ATIVAR o template inválido criado acima
+# Esperado: 400 { success: false, errors: ["Placeholder obrigatório ausente: {{DNA_DA_MARCA}}", ...] }
+# Substitua :id pelo ID retornado no passo 7
+POST {{base}}/prompt-templates/:id/activate
+Content-Type: application/json
+
+### 9. Criar versão VÁLIDA
+# body contém todos os campos obrigatórios
+POST {{base}}/prompt-templates
+Content-Type: application/json
+
+{
+  "clienteId": "{{clientId}}",
+  "label": "v-teste-valida",
+  "body": "Atue como Strategist Planner.\n\nDNA DA MARCA:\n{{DNA_DA_MARCA}}\n\nBRIEFING: \"{{BRIEFING}}\"\n\nMIX: {{MIX_POSTS}}\n\nMÊS: {{MES}}\n\nData: {{DATA_HOJE}}\n\nRetorne JSON ARRAY PURO:\n[{ \"dia\": 1, \"tema\": \"...\", \"formato\": \"Reels|Static|Carousel|Stories\", \"instrucoes_visuais\": \"...\", \"copy_inicial\": \"...\", \"objetivo\": \"...\", \"cta\": \"...\", \"palavras_chave\": [] }]"
+}
+
+### 10. Ativar versão válida (deve funcionar)
+# Substitua :id pelo ID retornado no passo 9
+# Esperado: 200 { success: true, data: { is_active: true } }
+POST {{base}}/prompt-templates/:id/activate
+Content-Type: application/json
+
+### 11. Histórico do cliente
+GET {{base}}/prompt-templates/{{clientId}}/history
+Content-Type: application/json

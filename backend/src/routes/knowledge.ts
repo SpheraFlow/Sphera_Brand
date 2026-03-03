@@ -90,7 +90,7 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // Limite de 10MB por arquivo
   fileFilter: (_req, file, cb) => {
@@ -245,18 +245,18 @@ router.post("/rules", async (req: Request, res: Response) => {
     }
 
     console.log("🛠️ Inserindo regra no banco...");
-    
+
     // Query robusta com fallback para valores opcionais
     const query = `
       INSERT INTO brand_rules (cliente_id, regra, categoria, origem, ativa)
       VALUES ($1, $2, $3, $4, true)
       RETURNING *
     `;
-    
+
     const values = [
-      clienteId, 
-      regra, 
-      categoria || 'Geral', 
+      clienteId,
+      regra,
+      categoria || 'Geral',
       origem || 'manual'
     ];
 
@@ -264,14 +264,14 @@ router.post("/rules", async (req: Request, res: Response) => {
 
     console.log("✅ Regra criada com sucesso! ID:", result.rows[0].id);
     return res.status(201).json({ success: true, rule: result.rows[0] });
-    
+
   } catch (error) {
     console.error("❌ ERRO CRÍTICO ao criar regra:", error);
-    
+
     const errorMessage = error instanceof Error ? error.message : "Erro desconhecido no banco de dados";
-    return res.status(500).json({ 
-      success: false, 
-      error: `Erro interno ao salvar regra: ${errorMessage}` 
+    return res.status(500).json({
+      success: false,
+      error: `Erro interno ao salvar regra: ${errorMessage}`
     });
   }
 });
@@ -323,74 +323,74 @@ router.post("/docs", async (req: Request, res: Response) => {
 
 // POST /api/knowledge/branding/extract
 router.post("/branding/extract", (req: Request, res: Response, next: NextFunction) => {
-    console.log("🎯 [BRANDING EXTRACT] Rota chamada - Iniciando processamento Multer");
-    console.log("📥 [API DNA] Dados recebidos - clienteId:", req.body?.clienteId || 'NÃO ENCONTRADO');
+  console.log("🎯 [BRANDING EXTRACT] Rota chamada - Iniciando processamento Multer");
+  console.log("📥 [API DNA] Dados recebidos - clienteId:", req.body?.clienteId || 'NÃO ENCONTRADO');
 
-    const uploadMiddleware = upload.any();
+  const uploadMiddleware = upload.any();
 
-    uploadMiddleware(req, res, (err: any) => {
-        if (err) {
-            console.error("❌ [ERRO MULTER]:", err);
-            res.status(500).json({ error: "Falha no upload físico", details: err.message });
-            return;
-        }
-        console.log("✅ [BRANDING EXTRACT] Multer processado com sucesso");
-        next();
-    });
+  uploadMiddleware(req, res, (err: any) => {
+    if (err) {
+      console.error("❌ [ERRO MULTER]:", err);
+      res.status(500).json({ error: "Falha no upload físico", details: err.message });
+      return;
+    }
+    console.log("✅ [BRANDING EXTRACT] Multer processado com sucesso");
+    next();
+  });
 }, async (req: Request, res: Response): Promise<void> => {
 
-    console.log("🎨 [BRANDING EXTRACT] Handler principal executado - Iniciando extração de DNA...");
+  console.log("🎨 [BRANDING EXTRACT] Handler principal executado - Iniciando extração de DNA...");
 
-    try {
-        const files = req.files as Express.Multer.File[] | undefined;
-        const { clienteId } = req.body;
+  try {
+    const files = req.files as Express.Multer.File[] | undefined;
+    const { clienteId } = req.body;
 
-        console.log("📥 [API DNA] clienteId extraído do req.body:", clienteId);
+    console.log("📥 [API DNA] clienteId extraído do req.body:", clienteId);
 
-        // Validações
-        if (!files || files.length === 0) {
-            console.error("❌ Nenhum arquivo encontrado em req.files");
-            res.status(400).json({ error: "Nenhum arquivo enviado." });
-            return;
-        }
+    // Validações
+    if (!files || files.length === 0) {
+      console.error("❌ Nenhum arquivo encontrado em req.files");
+      res.status(400).json({ error: "Nenhum arquivo enviado." });
+      return;
+    }
 
-        // VALIDAÇÃO CRÍTICA DO clienteId
-        if (!clienteId || clienteId === 'undefined' || clienteId === undefined) {
-            console.error("❌ clienteId obrigatório no FormData - Recebido:", clienteId);
-            res.status(400).json({ error: "Cliente ID obrigatório no FormData" });
-            return;
-        }
+    // VALIDAÇÃO CRÍTICA DO clienteId
+    if (!clienteId || clienteId === 'undefined' || clienteId === undefined) {
+      console.error("❌ clienteId obrigatório no FormData - Recebido:", clienteId);
+      res.status(400).json({ error: "Cliente ID obrigatório no FormData" });
+      return;
+    }
 
-        console.log("✅ [API DNA] clienteId válido:", clienteId);
+    console.log("✅ [API DNA] clienteId válido:", clienteId);
 
-        const file = files[0];
+    const file = files[0];
 
-        // Verificação adicional para garantir que file não é undefined
-        if (!file) {
-            console.error("❌ Arquivo na posição 0 é undefined");
-            res.status(400).json({ error: "Arquivo inválido." });
-            return;
-        }
+    // Verificação adicional para garantir que file não é undefined
+    if (!file) {
+      console.error("❌ Arquivo na posição 0 é undefined");
+      res.status(400).json({ error: "Arquivo inválido." });
+      return;
+    }
 
-        console.log(`📁 [DEBUG] Arquivo recebido: ${file.filename}`);
+    console.log(`📁 [DEBUG] Arquivo recebido: ${file.filename}`);
 
-        // Verificar se tem GOOGLE_API_KEY
-        if (!process.env.GOOGLE_API_KEY) {
-            console.error("❌ GOOGLE_API_KEY não configurada");
-            res.status(500).json({ error: "Configuração de IA não disponível." });
-            return;
-        }
+    // Verificar se tem GOOGLE_API_KEY
+    if (!process.env.GOOGLE_API_KEY) {
+      console.error("❌ GOOGLE_API_KEY não configurada");
+      res.status(500).json({ error: "Configuração de IA não disponível." });
+      return;
+    }
 
-        // Usar Gemini para extrair dados ricos de branding (Brand DNA 2.0)
-        console.log("🤖 [IA] Iniciando extração com Gemini (fallback robusto)...");
+    // Usar Gemini para extrair dados ricos de branding (Brand DNA 2.0)
+    console.log("🤖 [IA] Iniciando extração com Gemini (fallback robusto)...");
 
-        const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-        let result;
-        let responseText = "";
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+    let result;
+    let responseText = "";
 
-        const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+    const modelsToTry = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
 
-        const prompt = `Analise estas imagens visualmente. Aja como um especialista de branding e retorne APENAS um JSON válido (sem markdown) com esta estrutura exata:
+    const prompt = `Analise estas imagens visualmente. Aja como um especialista de branding e retorne APENAS um JSON válido (sem markdown) com esta estrutura exata:
 
 {
   "visual_style": "Descreva as cores, estilo de foto (minimalista/vibrante) e elementos visuais",
@@ -405,89 +405,89 @@ router.post("/branding/extract", (req: Request, res: Response, next: NextFunctio
   "niche": "Nicho de mercado específico onde a marca se posiciona"
 }`;
 
-        for (const modelName of modelsToTry) {
-            try {
-                console.log(`🤖 [DEBUG] Tentando modelo: ${modelName}...`);
-                const model = genAI.getGenerativeModel({ model: modelName });
+    for (const modelName of modelsToTry) {
+      try {
+        console.log(`🤖 [DEBUG] Tentando modelo: ${modelName}...`);
+        const model = genAI.getGenerativeModel({ model: modelName });
 
-                console.log("🎯 [IA] Enviando prompt para Gemini...");
-                result = await model.generateContent([
-                    prompt,
-                    {
-                        inlineData: {
-                            mimeType: file.mimetype,
-                            data: file.buffer.toString('base64')
-                        }
-                    }
-                ]);
-
-                responseText = result.response.text();
-                console.log(`✅ [DEBUG] Sucesso com ${modelName}`);
-                break;
-            } catch (modelError: any) {
-                console.warn(`⚠️ [DEBUG] ${modelName} falhou:`, modelError.message);
-                
-                if (modelName === modelsToTry[modelsToTry.length - 1]) {
-                    throw new Error(`Todos os modelos falharam. Erro final: ${modelError.message}`);
-                }
-                
-                console.log("⏳ [DEBUG] Aguardando 2s antes do próximo modelo...");
-                await new Promise(resolve => setTimeout(resolve, 2000));
+        console.log("🎯 [IA] Enviando prompt para Gemini...");
+        result = await model.generateContent([
+          prompt,
+          {
+            inlineData: {
+              mimeType: file.mimetype,
+              data: file.buffer.toString('base64')
             }
+          }
+        ]);
+
+        responseText = result.response.text();
+        console.log(`✅ [DEBUG] Sucesso com ${modelName}`);
+        break;
+      } catch (modelError: any) {
+        console.warn(`⚠️ [DEBUG] ${modelName} falhou:`, modelError.message);
+
+        if (modelName === modelsToTry[modelsToTry.length - 1]) {
+          throw new Error(`Todos os modelos falharam. Erro final: ${modelError.message}`);
         }
 
-        console.log("📝 [IA] Resposta bruta da IA:", responseText);
-
-        // Parse do JSON
-        const brandingData = cleanAndParseJSON(responseText);
-        console.log("✅ [IA] JSON parseado com sucesso:", brandingData);
-
-        // APENAS RETORNAR OS DADOS - NÃO SALVAR NO BANCO
-        console.log("🔄 [BRANDING EXTRACT] Retornando sugestões da IA (não salva no banco)");
-
-        res.json({
-            success: true,
-            message: "DNA de marca sugerido pela IA",
-            suggestion: brandingData
-        });
-            return;
-
-    } catch (error: any) {
-        console.error("❌ [ERRO GERAL]:", error);
-        res.status(500).json({ error: "Erro interno", details: error.message });
-        return;
+        console.log("⏳ [DEBUG] Aguardando 2s antes do próximo modelo...");
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
     }
+
+    console.log("📝 [IA] Resposta bruta da IA:", responseText);
+
+    // Parse do JSON
+    const brandingData = cleanAndParseJSON(responseText);
+    console.log("✅ [IA] JSON parseado com sucesso:", brandingData);
+
+    // APENAS RETORNAR OS DADOS - NÃO SALVAR NO BANCO
+    console.log("🔄 [BRANDING EXTRACT] Retornando sugestões da IA (não salva no banco)");
+
+    res.json({
+      success: true,
+      message: "DNA de marca sugerido pela IA",
+      suggestion: brandingData
+    });
+    return;
+
+  } catch (error: any) {
+    console.error("❌ [ERRO GERAL]:", error);
+    res.status(500).json({ error: "Erro interno", details: error.message });
+    return;
+  }
 });
 
 // GET /api/knowledge/test - Endpoint de teste
 router.get("/test", (_req: Request, res: Response) => {
-    console.log("🧪 [TEST] Endpoint de teste chamado");
-    res.json({
-        success: true,
-        message: "Rota knowledge funcionando!",
-        timestamp: new Date().toISOString(),
-        routes: {
-            branding_extract: "/api/knowledge/branding/extract",
-            rules: "/api/knowledge/rules/:clienteId",
-            prompts: "/api/knowledge/prompts/:clienteId"
-        }
-    });
+  console.log("🧪 [TEST] Endpoint de teste chamado");
+  res.json({
+    success: true,
+    message: "Rota knowledge funcionando!",
+    timestamp: new Date().toISOString(),
+    routes: {
+      branding_extract: "/api/knowledge/branding/extract",
+      rules: "/api/knowledge/rules/:clienteId",
+      prompts: "/api/knowledge/prompts/:clienteId"
+    }
+  });
 });
 
 // POST /api/knowledge/test-ai - Teste direto da IA (sem salvar)
 router.post("/test-ai", async (_req: Request, res: Response): Promise<void> => {
-    console.log("🤖 [TEST AI] Testando IA diretamente...");
+  console.log("🤖 [TEST AI] Testando IA diretamente...");
 
-    try {
-        if (!process.env.GOOGLE_API_KEY) {
-            res.status(500).json({ error: "GOOGLE_API_KEY não configurada" });
-            return;
-        }
+  try {
+    if (!process.env.GOOGLE_API_KEY) {
+      res.status(500).json({ error: "GOOGLE_API_KEY não configurada" });
+      return;
+    }
 
-        const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-        const prompt = `Analise estas imagens visualmente. Aja como um especialista de branding.
+    const prompt = `Analise estas imagens visualmente. Aja como um especialista de branding.
 
 Extraia e retorne APENAS um JSON válido (sem markdown) com esta estrutura exata:
 
@@ -500,50 +500,50 @@ Extraia e retorne APENAS um JSON válido (sem markdown) com esta estrutura exata
   "keywords": ["tag1", "tag2", "tag3"]
 }`;
 
-        console.log("🤖 [TEST AI] Enviando prompt para IA...");
-        const result = await model.generateContent([prompt, "Descreva uma marca de café premium"]);
-        const responseText = result.response.text();
+    console.log("🤖 [TEST AI] Enviando prompt para IA...");
+    const result = await model.generateContent([prompt, "Descreva uma marca de café premium"]);
+    const responseText = result.response.text();
 
-        console.log("📝 [TEST AI] Resposta bruta da IA:", responseText);
+    console.log("📝 [TEST AI] Resposta bruta da IA:", responseText);
 
-        // Parse do JSON
-        const brandingData = cleanAndParseJSON(responseText);
-        console.log("✅ [TEST AI] JSON parseado:", brandingData);
+    // Parse do JSON
+    const brandingData = cleanAndParseJSON(responseText);
+    console.log("✅ [TEST AI] JSON parseado:", brandingData);
 
-        res.json({
-            success: true,
-            raw_response: responseText,
-            parsed_data: brandingData
-        });
+    res.json({
+      success: true,
+      raw_response: responseText,
+      parsed_data: brandingData
+    });
 
-    } catch (error: any) {
-        console.error("❌ [TEST AI] Erro:", error.message);
-        res.status(500).json({ error: error.message });
-    }
+  } catch (error: any) {
+    console.error("❌ [TEST AI] Erro:", error.message);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // GET /api/knowledge/debug - Endpoint de debug para verificar estado
 router.get("/debug", async (_req: Request, res: Response) => {
-    console.log("🔍 [DEBUG] Endpoint de debug chamado");
+  console.log("🔍 [DEBUG] Endpoint de debug chamado");
 
-    try {
-        // Verificar branding existente
-        const brandingResult = await db.query("SELECT * FROM branding LIMIT 5");
-        const clientsResult = await db.query("SELECT id, nome FROM clientes LIMIT 5");
+  try {
+    // Verificar branding existente
+    const brandingResult = await db.query("SELECT * FROM branding LIMIT 5");
+    const clientsResult = await db.query("SELECT id, nome FROM clientes LIMIT 5");
 
-        res.json({
-            success: true,
-            timestamp: new Date().toISOString(),
-            branding_count: brandingResult.rows.length,
-            branding_records: brandingResult.rows,
-            clients: clientsResult.rows,
-            message: "Debug information retrieved"
-        });
+    res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      branding_count: brandingResult.rows.length,
+      branding_records: brandingResult.rows,
+      clients: clientsResult.rows,
+      message: "Debug information retrieved"
+    });
 
-    } catch (error: any) {
-        console.error("❌ [DEBUG] Erro:", error.message);
-        res.status(500).json({ error: error.message });
-    }
+  } catch (error: any) {
+    console.error("❌ [DEBUG] Erro:", error.message);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 

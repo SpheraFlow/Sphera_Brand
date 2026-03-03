@@ -4,11 +4,11 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const db = new Pool({
-  host: process.env.POSTGRES_HOST || "localhost",
-  port: Number(process.env.POSTGRES_PORT) || 5432,
-  user: process.env.POSTGRES_USER || "spheraflow",
-  password: process.env.POSTGRES_PASSWORD || "@Trafego123",
-  database: process.env.POSTGRES_DB || "app_db",
+  host: process.env.DB_HOST || process.env.POSTGRES_HOST || "localhost",
+  port: Number(process.env.DB_PORT || process.env.POSTGRES_PORT) || 5432,
+  user: process.env.DB_USER || process.env.POSTGRES_USER || "spheraflow",
+  password: process.env.DB_PASSWORD || process.env.POSTGRES_PASSWORD || "@Trafego123",
+  database: process.env.DB_NAME || process.env.POSTGRES_DB || "app_db",
 });
 
 async function migrate() {
