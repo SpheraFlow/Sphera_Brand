@@ -132,33 +132,33 @@ export default function PresentationGenerator() {
       setAiLoading(true);
       const months = (periodMode === 'unico' || periodMode === 'multiplos') ? selectedMonths : [];
       const res = await api.post('/presentation/generate-content', { clienteId: clientId, months });
-      
+
       if (res.data.success && res.data.content) {
         const c = res.data.content;
         if (c.defesa) setDefesa(c.defesa);
         if (c.grid) setGrid({ ...c.grid, mes: '' });
         if (c.slogan) setSlogan(c.slogan);
-        
+
         if (c.desafios) {
-            // Converter itens array para texto (textarea)
-            const itens = c.desafios.itens || [];
-            setDesafios({
-                ...c.desafios,
-                texto: itens.map((i: string) => `• ${i}`).join('\n')
-            });
+          // Converter itens array para texto (textarea)
+          const itens = c.desafios.itens || [];
+          setDesafios({
+            ...c.desafios,
+            texto: itens.map((i: string) => `• ${i}`).join('\n')
+          });
         }
-        
+
         if (c.planner) {
-            setPlanner({
-                ...c.planner
-            });
+          setPlanner({
+            ...c.planner
+          });
         }
-        
+
         alert("✅ Conteúdo gerado com sucesso! Revise e clique em Gerar Lâminas.");
       }
     } catch (error: any) {
       console.error(error);
-      
+
       // Tratamento específico para erro de cota
       if (error.response?.status === 429) {
         const retryAfter = error.response?.data?.retryAfter || 'alguns minutos';
@@ -197,7 +197,7 @@ export default function PresentationGenerator() {
       };
 
       const response = await api.post('/presentation/generate', payload);
-      
+
 
       if (response.data.success) {
         const urls = (response.data.images || []).map((u: string) => resolveAssetUrl(u));
@@ -217,7 +217,7 @@ export default function PresentationGenerator() {
 
   const handleSaveVersion = async () => {
     if (!clientId || generatedImages.length === 0) return;
-    
+
     try {
       setLoading(true);
       const payload = {
@@ -226,9 +226,9 @@ export default function PresentationGenerator() {
         dataJson: { defesa, grid: { ...grid, mes: '' }, slogan, desafios, planner },
         titulo: `Apresentação ${new Date().toLocaleString()}`
       };
-      
+
       const res = await api.post('/presentation/save', payload);
-      
+
       if (res.data.success) {
         alert('✅ Apresentação salva no histórico!');
         fetchHistory(); // Atualizar lista
@@ -300,43 +300,43 @@ export default function PresentationGenerator() {
     // Extrair nome do arquivo para identificar o tipo
     // Ex: /presentation-output/01_defesa.png -> defesa
     const filename = imgUrl.split('/').pop() || '';
-    
+
     let templateName = '';
     let slideName = '';
     let data = {};
     let realIndex = 0;
 
     if (filename.includes('defesa')) {
-        templateName = 'defesa_da_campanha';
-        slideName = 'Defesa';
-        data = defesa;
-        realIndex = 0;
+      templateName = 'defesa_da_campanha';
+      slideName = 'Defesa';
+      data = defesa;
+      realIndex = 0;
     } else if (filename.includes('metas')) {
-        templateName = 'metas';
-        slideName = 'Metas';
-        data = grid;
-        realIndex = 1;
+      templateName = 'metas';
+      slideName = 'Metas';
+      data = grid;
+      realIndex = 1;
     } else if (filename.includes('slogan')) {
-        templateName = 'slogan';
-        slideName = 'Slogan';
-        data = slogan;
-        realIndex = 2;
+      templateName = 'slogan';
+      slideName = 'Slogan';
+      data = slogan;
+      realIndex = 2;
     } else if (filename.includes('desafios')) {
-        templateName = 'novos_desafios';
-        slideName = 'Desafios';
-        data = desafios;
-        realIndex = 3;
+      templateName = 'novos_desafios';
+      slideName = 'Desafios';
+      data = desafios;
+      realIndex = 3;
     } else if (filename.includes('planner')) {
-        templateName = 'planner_trimestral';
-        slideName = 'Planner';
-        const logoUrl = getClientLogoOverrideUrl();
-        const plannerLogoUrl = (planner as any)?.logo_url as string | undefined;
-        const effectiveLogoUrl = plannerLogoUrl || logoUrl;
-        data = {
-          ...planner,
-          ...(effectiveLogoUrl ? { logo_url: resolveAssetUrl(effectiveLogoUrl) } : {})
-        };
-        realIndex = 4;
+      templateName = 'planner_trimestral';
+      slideName = 'Planner';
+      const logoUrl = getClientLogoOverrideUrl();
+      const plannerLogoUrl = (planner as any)?.logo_url as string | undefined;
+      const effectiveLogoUrl = plannerLogoUrl || logoUrl;
+      data = {
+        ...planner,
+        ...(effectiveLogoUrl ? { logo_url: resolveAssetUrl(effectiveLogoUrl) } : {})
+      };
+      realIndex = 4;
     }
 
     const templateImage = `/templates/template_${templateName}.png`;
@@ -351,16 +351,16 @@ export default function PresentationGenerator() {
 
   const handleSaveSlideEdit = async (_blocks: any[], updatedData: any) => {
     if (!editingSlide) return;
-    
+
     try {
       setLoading(true);
-      
+
       // Atualizar o estado local com os novos dados
       const slideDataMap = [setDefesa, setGrid, setSlogan, setDesafios, setPlanner];
       if (slideDataMap[editingSlide.index]) {
         slideDataMap[editingSlide.index](updatedData);
       }
-      
+
       // Regenerar apenas esta lâmina
       const logoUrl = getClientLogoOverrideUrl();
 
@@ -404,7 +404,7 @@ export default function PresentationGenerator() {
   };
 
   return (
-    <div className="bg-gray-800 rounded-xl p-6 border border-gray-700">
+    <div className="bg-gray-800 rounded-xl p-6 border border-gray-700 relative">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div>
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -415,48 +415,48 @@ export default function PresentationGenerator() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-            <PeriodSelector
-              availableMonths={availableMonths}
-              selectedMonths={selectedMonths}
-              periodMode={periodMode}
-              onPeriodChange={handlePeriodChange}
-              onFetchMonths={fetchAvailableMonths}
-            />
-            <button
+          <PeriodSelector
+            availableMonths={availableMonths}
+            selectedMonths={selectedMonths}
+            periodMode={periodMode}
+            onPeriodChange={handlePeriodChange}
+            onFetchMonths={fetchAvailableMonths}
+          />
+          <button
             onClick={fetchHistory}
             className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 text-sm"
-            >
+          >
             📜 Histórico
-            </button>
-            <button
+          </button>
+          <button
             onClick={() => setVisualMode(!visualMode)}
             className={`${visualMode ? 'bg-orange-600 hover:bg-orange-700' : 'bg-gray-600 hover:bg-gray-700'} text-white px-4 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 text-sm`}
-            >
+          >
             {visualMode ? '📝 Modo Formulário' : '🎨 Modo Visual'}
-            </button>
-            <button
+          </button>
+          <button
             onClick={handleAiFill}
             disabled={aiLoading || visualMode}
             className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold transition-colors disabled:opacity-50 flex items-center gap-2 text-sm"
-            >
+          >
             {aiLoading ? '🤖 Criando...' : '✨ Preencher com IA'}
-            </button>
-            <button
+          </button>
+          <button
             onClick={handleGenerate}
             disabled={loading || visualMode}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-bold transition-colors disabled:opacity-50 flex items-center gap-2 text-sm"
-            >
+          >
             {loading ? '⚙️ Processando...' : '🚀 Gerar Lâminas'}
-            </button>
-            {generatedImages.length > 0 && (
-              <button
+          </button>
+          {generatedImages.length > 0 && (
+            <button
               onClick={handleSaveVersion}
               disabled={loading}
               className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold transition-colors disabled:opacity-50 flex items-center gap-2 text-sm"
-              >
+            >
               💾 Salvar Versão
-              </button>
-            )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -468,7 +468,7 @@ export default function PresentationGenerator() {
             <h3 className="text-lg font-bold text-white">📜 Histórico de Apresentações</h3>
             <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-white">✕ Fechar</button>
           </div>
-          
+
           {history.length === 0 ? (
             <p className="text-gray-400 text-sm">Nenhuma apresentação salva encontrada.</p>
           ) : (
@@ -480,7 +480,7 @@ export default function PresentationGenerator() {
                       <h4 className="font-bold text-white">{item.titulo}</h4>
                       <p className="text-xs text-gray-400">Criado em: {new Date(item.criado_em).toLocaleString()}</p>
                     </div>
-                    <button 
+                    <button
                       onClick={() => {
                         const urls = (Array.isArray(item.arquivos) ? item.arquivos : []).map((u: string) => resolveAssetUrl(u));
                         setGeneratedImages(urls.map(withCacheBust));
@@ -495,11 +495,11 @@ export default function PresentationGenerator() {
                   </div>
                   <div className="flex gap-2 overflow-x-auto pb-2">
                     {(Array.isArray(item.arquivos) ? item.arquivos : []).map((img: string, idx: number) => (
-                      <img 
-                        key={idx} 
-                        src={resolveAssetUrl(img)} 
-                        className="h-20 w-auto rounded border border-gray-600" 
-                        alt="Thumbnail" 
+                      <img
+                        key={idx}
+                        src={resolveAssetUrl(img)}
+                        className="h-20 w-auto rounded border border-gray-600"
+                        alt="Thumbnail"
                         onError={(e) => {
                           console.error('Erro ao carregar thumbnail:', img);
                           (e.currentTarget as HTMLImageElement).style.display = 'none';
@@ -528,213 +528,213 @@ export default function PresentationGenerator() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Coluna de Configuração */}
           <div className="lg:col-span-1 space-y-6">
-          
-          {/* Tabs */}
-          <div className="flex gap-1 p-1 bg-gray-900 rounded-lg border border-gray-700 overflow-x-auto">
-            {['defesa', 'grid', 'slogan', 'desafios', 'planner'].map((tab) => (
-                <button
-                key={tab}
-                onClick={() => setActiveTab(tab as any)}
-                className={`px-3 py-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === tab ? 'bg-gray-700 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
-                >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                </button>
-            ))}
-          </div>
 
-          {/* Formulários Dinâmicos */}
-          <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700/50 min-h-[300px]">
-            
-            {activeTab === 'defesa' && (
+            {/* Tabs */}
+            <div className="flex gap-1 p-1 bg-gray-900 rounded-lg border border-gray-700 overflow-x-auto">
+              {['defesa', 'grid', 'slogan', 'desafios', 'planner'].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab as any)}
+                  className={`px-3 py-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === tab ? 'bg-gray-700 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                >
+                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            {/* Formulários Dinâmicos */}
+            <div className="bg-gray-900/50 p-4 rounded-lg border border-gray-700/50 min-h-[300px]">
+
+              {activeTab === 'defesa' && (
                 <div className="space-y-4 animate-fadeIn">
-                <h3 className="text-sm font-semibold text-blue-400">Defesa da Campanha</h3>
-                <input
+                  <h3 className="text-sm font-semibold text-blue-400">Defesa da Campanha</h3>
+                  <input
                     value={defesa.titulo}
-                    onChange={e => setDefesa({...defesa, titulo: e.target.value})}
+                    onChange={e => setDefesa({ ...defesa, titulo: e.target.value })}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white"
                     placeholder="Título"
-                />
-                <input
+                  />
+                  <input
                     value={defesa.subtitulo}
-                    onChange={e => setDefesa({...defesa, subtitulo: e.target.value})}
+                    onChange={e => setDefesa({ ...defesa, subtitulo: e.target.value })}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white"
                     placeholder="Subtítulo"
-                />
-                <textarea
+                  />
+                  <textarea
                     value={defesa.texto}
-                    onChange={e => setDefesa({...defesa, texto: clamp(e.target.value, 850)})}
+                    onChange={e => setDefesa({ ...defesa, texto: clamp(e.target.value, 850) })}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white h-32"
                     placeholder="Texto de defesa..."
-                />
+                  />
                 </div>
-            )}
+              )}
 
-            {activeTab === 'grid' && (
+              {activeTab === 'grid' && (
                 <div className="space-y-4 animate-fadeIn">
-                <h3 className="text-sm font-semibold text-blue-400">Metas do Mês</h3>
-                <input
+                  <h3 className="text-sm font-semibold text-blue-400">Metas do Mês</h3>
+                  <input
                     value={grid.titulo}
-                    onChange={e => setGrid({...grid, titulo: e.target.value})}
+                    onChange={e => setGrid({ ...grid, titulo: e.target.value })}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white"
                     placeholder="Título"
-                />
-                <input
+                  />
+                  <input
                     value={grid.mes}
-                    onChange={e => setGrid({...grid, mes: e.target.value})}
+                    onChange={e => setGrid({ ...grid, mes: e.target.value })}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white"
                     placeholder="Mês Vigente (ex: OUTUBRO)"
-                />
-                <textarea
+                  />
+                  <textarea
                     value={grid.texto_longo}
-                    onChange={e => setGrid({...grid, texto_longo: clamp(e.target.value, 850)})}
+                    onChange={e => setGrid({ ...grid, texto_longo: clamp(e.target.value, 850) })}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white h-32"
                     placeholder="Descrição das metas..."
-                />
+                  />
                 </div>
-            )}
+              )}
 
-            {activeTab === 'slogan' && (
+              {activeTab === 'slogan' && (
                 <div className="space-y-4 animate-fadeIn">
-                <h3 className="text-sm font-semibold text-blue-400">Slogan / Impacto</h3>
-                <textarea
+                  <h3 className="text-sm font-semibold text-blue-400">Slogan / Impacto</h3>
+                  <textarea
                     value={slogan.frase}
-                    onChange={e => setSlogan({...slogan, frase: e.target.value})}
+                    onChange={e => setSlogan({ ...slogan, frase: e.target.value })}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white h-24 text-center font-bold"
-                />
-                <input
+                  />
+                  <input
                     value={slogan.legenda}
-                    onChange={e => setSlogan({...slogan, legenda: e.target.value})}
+                    onChange={e => setSlogan({ ...slogan, legenda: e.target.value })}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white text-center"
-                />
+                  />
                 </div>
-            )}
+              )}
 
-            {activeTab === 'desafios' && (
+              {activeTab === 'desafios' && (
                 <div className="space-y-4 animate-fadeIn">
-                <h3 className="text-sm font-semibold text-blue-400">Novos Desafios</h3>
-                <input
+                  <h3 className="text-sm font-semibold text-blue-400">Novos Desafios</h3>
+                  <input
                     value={desafios.titulo}
-                    onChange={e => setDesafios({...desafios, titulo: e.target.value})}
+                    onChange={e => setDesafios({ ...desafios, titulo: e.target.value })}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white"
                     placeholder="Título"
-                />
-                <textarea
+                  />
+                  <textarea
                     value={desafios.texto}
                     onChange={e => {
-                        const raw = e.target.value;
-                        const cleaned = raw
-                          .split('\n')
-                          .map((l) => l.replace(/^•\s*/, ''))
-                          .map((l) => l.trim());
+                      const raw = e.target.value;
+                      const cleaned = raw
+                        .split('\n')
+                        .map((l) => l.replace(/^•\s*/, ''))
+                        .map((l) => l.trim());
 
-                        const items = cleaned
-                          .filter((l) => l.length > 0)
-                          .slice(0, 9)
-                          .map((l) => clamp(l, 55));
+                      const items = cleaned
+                        .filter((l) => l.length > 0)
+                        .slice(0, 9)
+                        .map((l) => clamp(l, 55));
 
-                        // Completar com vazios até 9
-                        while (items.length < 9) items.push('');
+                      // Completar com vazios até 9
+                      while (items.length < 9) items.push('');
 
-                        const texto = items
-                          .filter((t) => t.trim().length > 0)
-                          .map((t) => `• ${t}`)
-                          .join('\n');
+                      const texto = items
+                        .filter((t) => t.trim().length > 0)
+                        .map((t) => `• ${t}`)
+                        .join('\n');
 
-                        setDesafios({ ...desafios, texto, itens: items });
+                      setDesafios({ ...desafios, texto, itens: items });
                     }}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white h-40"
                     placeholder="Liste os desafios..."
-                />
+                  />
                 </div>
-            )}
+              )}
 
-            {activeTab === 'planner' && (
+              {activeTab === 'planner' && (
                 <div className="space-y-3">
-                <h3 className="text-sm font-semibold text-blue-400">Planner Trimestral</h3>
-                <input
+                  <h3 className="text-sm font-semibold text-blue-400">Planner Trimestral</h3>
+                  <input
                     value={planner.mes}
-                    onChange={e => setPlanner({...planner, mes: e.target.value})}
+                    onChange={e => setPlanner({ ...planner, mes: e.target.value })}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white"
                     placeholder="Mêses (ex: OUT | NOV | DEZ)"
-                />
-                <input
+                  />
+                  <input
                     value={planner.nome_cliente}
-                    onChange={e => setPlanner({...planner, nome_cliente: e.target.value})}
+                    onChange={e => setPlanner({ ...planner, nome_cliente: e.target.value })}
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white"
                     placeholder="Nome do Cliente"
-                />
+                  />
                 </div>
-            )}
+              )}
 
+            </div>
+          </div>
+
+          {/* Coluna de Preview (Resultados) */}
+          <div className="lg:col-span-2 bg-gray-900 rounded-xl p-6 border border-gray-800 min-h-[500px]">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-gray-400 flex items-center gap-2">
+                <span>🖼️</span> Resultados Gerados
+              </h3>
+              {generatedImages.length > 0 && (
+                <button
+                  onClick={handleBatchDownload}
+                  className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 text-xs"
+                >
+                  ⬇️⬇️ Baixar em Lote
+                </button>
+              )}
+            </div>
+
+            {generatedImages.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {generatedImages.map((imgUrl, idx) => (
+                  <div key={idx} className="group relative rounded-lg overflow-hidden border border-gray-700 shadow-xl bg-gray-800">
+                    <div className="aspect-video relative">
+                      <img
+                        src={resolveAssetUrl(imgUrl)}
+                        alt="Slide gerado"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          console.error('Erro ao carregar preview:', imgUrl);
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    </div>
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-3 backdrop-blur-sm">
+                      <button
+                        onClick={() => handleOpenEditor(imgUrl, idx)}
+                        className="bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-blue-700 transform hover:scale-105 transition-all shadow-lg flex items-center gap-2"
+                      >
+                        ✏️ Editar
+                      </button>
+                      <button
+                        onClick={() => handleDownload(imgUrl, getPngFilename(imgUrl, 'slide.png'))}
+                        className="bg-white text-black px-6 py-2.5 rounded-full font-bold text-sm hover:bg-gray-200 transform hover:scale-105 transition-all shadow-lg flex items-center gap-2"
+                      >
+                        ⬇️ Baixar
+                      </button>
+                    </div>
+                    <div className="p-3 bg-gray-800 border-t border-gray-700">
+                      <p className="text-xs text-gray-400 text-center truncate">
+                        {imgUrl.split('/').pop()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-gray-600 border-2 border-dashed border-gray-800 rounded-xl p-8">
+                <span className="text-5xl mb-4 grayscale opacity-50">🎨</span>
+                <p className="font-medium text-lg">Área de Visualização</p>
+                <p className="text-sm mt-2 text-gray-500 max-w-sm text-center">
+                  1. Clique em "✨ Preencher com IA" para gerar o conteúdo.<br />
+                  2. Revise os textos ao lado.<br />
+                  3. Clique em "🚀 Gerar Lâminas".
+                </p>
+              </div>
+            )}
           </div>
         </div>
-
-        {/* Coluna de Preview (Resultados) */}
-        <div className="lg:col-span-2 bg-gray-900 rounded-xl p-6 border border-gray-800 min-h-[500px]">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-gray-400 flex items-center gap-2">
-              <span>🖼️</span> Resultados Gerados
-            </h3>
-            {generatedImages.length > 0 && (
-              <button
-                onClick={handleBatchDownload}
-                className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 text-xs"
-              >
-                ⬇️⬇️ Baixar em Lote
-              </button>
-            )}
-          </div>
-          
-          {generatedImages.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {generatedImages.map((imgUrl, idx) => (
-                <div key={idx} className="group relative rounded-lg overflow-hidden border border-gray-700 shadow-xl bg-gray-800">
-                  <div className="aspect-video relative">
-                    <img 
-                      src={resolveAssetUrl(imgUrl)} 
-                      alt="Slide gerado" 
-                      className="w-full h-full object-cover" 
-                      onError={(e) => {
-                        console.error('Erro ao carregar preview:', imgUrl);
-                        (e.currentTarget as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
-                  </div>
-                  <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-3 backdrop-blur-sm">
-                    <button 
-                      onClick={() => handleOpenEditor(imgUrl, idx)}
-                      className="bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-blue-700 transform hover:scale-105 transition-all shadow-lg flex items-center gap-2"
-                    >
-                      ✏️ Editar
-                    </button>
-                    <button 
-                      onClick={() => handleDownload(imgUrl, getPngFilename(imgUrl, 'slide.png'))}
-                      className="bg-white text-black px-6 py-2.5 rounded-full font-bold text-sm hover:bg-gray-200 transform hover:scale-105 transition-all shadow-lg flex items-center gap-2"
-                    >
-                      ⬇️ Baixar
-                    </button>
-                  </div>
-                  <div className="p-3 bg-gray-800 border-t border-gray-700">
-                    <p className="text-xs text-gray-400 text-center truncate">
-                      {imgUrl.split('/').pop()}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-gray-600 border-2 border-dashed border-gray-800 rounded-xl p-8">
-              <span className="text-5xl mb-4 grayscale opacity-50">🎨</span>
-              <p className="font-medium text-lg">Área de Visualização</p>
-              <p className="text-sm mt-2 text-gray-500 max-w-sm text-center">
-                1. Clique em "✨ Preencher com IA" para gerar o conteúdo.<br/>
-                2. Revise os textos ao lado.<br/>
-                3. Clique em "🚀 Gerar Lâminas".
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
       )}
 
       {/* Modal de Edição Visual */}
@@ -747,6 +747,34 @@ export default function PresentationGenerator() {
           slideData={editingSlide.data}
           onSave={handleSaveSlideEdit}
         />
+      )}
+
+      {/* Overlay de Carregamento da IA */}
+      {aiLoading && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4 backdrop-blur-sm">
+          <div className="bg-gray-800 rounded-xl p-8 w-full max-w-lg border border-purple-500/30 shadow-[0_0_40px_rgba(168,85,247,0.15)] relative overflow-hidden">
+            <div className="text-center relative z-10">
+              <div className="mb-6 relative inline-block">
+                <div className="w-20 h-20 rounded-full border-4 border-gray-700 border-t-purple-500 animate-spin mx-auto shadow-[0_0_15px_rgba(168,85,247,0.5)]" />
+                <div className="absolute inset-0 flex items-center justify-center text-2xl">
+                  🤖
+                </div>
+              </div>
+
+              <h3 className="text-2xl font-bold text-white mb-2">
+                A IA está criando a defesa...
+              </h3>
+
+              <p className="text-purple-300 text-sm font-medium mb-4 animate-pulse">
+                Analisando o calendário e gerando textos estratégicos
+              </p>
+
+              <p className="text-gray-400 text-xs max-w-xs mx-auto">
+                Mágica acontecendo nos bastidores. Isso pode levar alguns segundos.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
