@@ -9,7 +9,30 @@ import { randomUUID } from "crypto";
 
 // ─── Tipos e Contratos ────────────────────────────────────────────────────────
 
-const ALLOWED_FORMATS = new Set(["Reels", "Static", "Arte", "Carousel", "Carrossel", "Stories", "Story", "Foto", "Fotos"]);
+// Mapa de sinônimos: cada chave (normalizada lowercase) mapeia para o valor canônico PT-BR.
+// O LLM às vezes retorna variantes em inglês — normalizamos aqui em vez de falhar a geração.
+const FORMAT_ALIASES: Record<string, string> = {
+    "reels": "Reels",
+    "reel": "Reels",
+    "arte": "Arte",
+    "static": "Arte",
+    "carrossel": "Carrossel",
+    "carousel": "Carrossel",
+    "story": "Story",
+    "stories": "Story",
+    "foto": "Foto",
+    "fotos": "Foto",
+    "photo": "Foto",
+    "photos": "Foto",
+};
+
+const ALLOWED_FORMATS = new Set(Object.values(FORMAT_ALIASES));
+
+/** Normaliza o valor de formato do LLM para o canônico PT-BR, retornando undefined se inválido. */
+function normalizeFormato(raw: any): string | undefined {
+    if (typeof raw !== "string") return undefined;
+    return FORMAT_ALIASES[raw.trim().toLowerCase()];
+}
 
 export interface ValidationResult {
     isValid: boolean;
@@ -76,9 +99,13 @@ export function validateCalendarSchema(data: any): ValidationResult {
             usedDays.add(post.dia);
         }
 
-        // -- Validando "formato"
-        if (typeof post.formato !== "string" || !ALLOWED_FORMATS.has(post.formato.trim())) {
-            errors.push(`${prefix} Campo 'formato' deve ser extamente: Reels, Arte, Carrossel, Foto ou Story. Veio: "${post.formato}"`);
+        // -- Validando "formato" e normalizando alias em inglês para PT-BR
+        const normalizedFormato = normalizeFormato(post.formato);
+        if (!normalizedFormato) {
+            errors.push(`${prefix} Campo 'formato' deve ser: Reels, Arte, Carrossel, Foto ou Story. Veio: "${post.formato}"`);
+        } else if (normalizedFormato !== post.formato) {
+            // Corrige silenciosamente o valor para o canônico (ex: Photo → Foto)
+            post.formato = normalizedFormato;
         }
 
         // -- Validando "palavras_chave"
