@@ -191,7 +191,10 @@ export default function DeliveriesPage() {
                 // Usar endpoint /list que retorna todos os calendários incluindo rascunhos
                 const calendars = await calendarService.listCalendars(clientId!, true);
                 if (calendars.length > 0) {
-                    const latest = calendars[0]; // já ordenado por criado_em DESC
+                    // Priorizar calendários publicados com posts reais (evitar drafts vazios/falhos)
+                    const published = calendars.filter((c: any) => c.status === 'published');
+                    const withPosts = published.filter((c: any) => (c.postsCount || 0) > 0);
+                    const latest = withPosts[0] || published[0] || calendars[0];
                     setLatestCalendarId(latest.id);
 
                     // Buscar o array de posts completo desse calendário específico passando o mês
