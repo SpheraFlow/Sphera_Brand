@@ -48,9 +48,15 @@ def format_to_excel(formato):
         # Para manter cores/validação funcionando, mapeamos para as opções do template.
         'Carrossel': 'Arte | Conteúdo',
         'Stories': 'Outros',
-        'Photos': 'Foto | Institucional'
+        'Photos': 'Foto | Institucional',
+        'Foto': 'Foto | Institucional',
+        'foto': 'Foto | Institucional',
     }
-    return mapping.get(formato, 'Arte | Conteúdo')
+    # Busca case-insensitive: normalizar formato para encontrar no mapeamento
+    result = mapping.get(formato)
+    if result is None and formato:
+        result = mapping.get(formato.capitalize())
+    return result or 'Arte | Conteúdo'
 
 def parse_month_name(month_name):
     """
@@ -206,7 +212,7 @@ def build_post_title(post):
     if ideia:
         return ideia
 
-    copy_text = (post.get('copy_sugestao') or '').strip()
+    copy_text = (post.get('copy_sugestao') or post.get('copy_inicial') or '').strip()
     if not copy_text:
         return ''
 
@@ -583,8 +589,18 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
     
     for idx, post in enumerate(calendar_json):
         try:
-            date_str = post.get('data', '01/01')
-            print(f"[DEBUG] Post {idx+1}: data='{date_str}', formato='{post.get('formato')}'")
+            # Suporte a ambas as chaves: 'data' (string de data) e 'dia' (número do dia)
+            date_str = post.get('data') or ''
+            dia_num = post.get('dia')
+            if not date_str and dia_num is not None:
+                # Se só tem 'dia' (número), converter para string de data usando o mês base
+                try:
+                    date_str = f"{int(dia_num)}/{start_month_num}"
+                except (ValueError, TypeError):
+                    date_str = '01/01'
+            elif not date_str:
+                date_str = '01/01'
+            print(f"[DEBUG] Post {idx+1}: data='{date_str}', dia='{dia_num}', formato='{post.get('formato')}'")
             
             # Tentar extrair dia, mês e ano da string de data
             d, m_num_found, y_found = _extract_day_month_year(date_str)
@@ -618,7 +634,10 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
                 'title': title,
                 'descricao': post.get('descricao'),
                 'description': post.get('description'),
-                'copy_sugestao': post.get('copy_sugestao'),
+                'copy_sugestao': post.get('copy_sugestao') or post.get('copy_inicial'),
+                'copy_inicial': post.get('copy_inicial'),
+                'objetivo': post.get('objetivo'),
+                'cta': post.get('cta'),
             })
             print(f"[DEBUG] Post {idx+1} agrupado em {m_num}/{y_num} (dia {d})")
         except Exception as e:
