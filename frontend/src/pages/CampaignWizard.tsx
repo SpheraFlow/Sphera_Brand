@@ -403,30 +403,7 @@ ${selectedDatesInfo || 'Nenhuma data específica selecionada.'}
                 </div>
             )}
 
-            {/* Configuração de Tamanho do Carrossel */}
-            {((!isPerMonth && data.mix.carousel > 0) || (isPerMonth && data.selectedMonths.some(m => (data.monthlyMix?.[m]?.carousel || 0) > 0))) && (
-                <div className="bg-purple-900/10 border border-purple-500/30 rounded-xl p-4 mt-6">
-                    <div className="flex items-center gap-2 mb-2">
-                        <Layers className="w-4 h-4 text-purple-400" />
-                        <label className="block text-sm font-semibold text-purple-300">
-                            Tamanho padrão dos Carrosséis
-                        </label>
-                    </div>
-                    <p className="text-xs text-gray-400 mb-3">
-                        Força a IA a gerar textos e ideias visuais separadas exatamente pelo número de slides escolhido.
-                    </p>
-                    <select
-                        value={data.carouselSlideCount || 'auto'}
-                        onChange={e => updateData({ carouselSlideCount: e.target.value })}
-                        className="w-full bg-gray-900 border border-purple-500/20 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-                    >
-                        <option value="auto">Automático (Recomendado) - A IA decide a quantidade</option>
-                        {[3, 4, 5, 6, 7, 8, 9, 10].map(num => (
-                            <option key={num} value={String(num)}>Fixo: exatamente {num} slides estruturados</option>
-                        ))}
-                    </select>
-                </div>
-            )}
+            {/* carousel selector moved to parent render */}
         </div>
     );
 
@@ -701,7 +678,35 @@ ${selectedDatesInfo || 'Nenhuma data específica selecionada.'}
                 {/* Content Area */}
                 <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6 md:p-8 min-h-[400px]">
                     {currentStep === 1 && Step1()}
-                    {currentStep === 2 && Step2()}
+                    {currentStep === 2 && (
+                        <>
+                            {Step2()}
+                            {/* Carousel slide count selector — rendered here so it always reads live 'data' state */}
+                            {((!data.monthlyMix && data.mix.carousel > 0) || (data.monthlyMix && data.selectedMonths.some(m => (data.monthlyMix![m]?.carousel || 0) > 0))) && (
+                                <div className="bg-purple-900/10 border border-purple-500/30 rounded-xl p-4 mt-6">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <Layers className="w-4 h-4 text-purple-400" />
+                                        <label className="block text-sm font-semibold text-purple-300">
+                                            Tamanho padrão dos Carrosséis
+                                        </label>
+                                    </div>
+                                    <p className="text-xs text-gray-400 mb-3">
+                                        Força a IA a gerar textos e ideias visuais separadas exatamente pelo número de slides escolhido.
+                                    </p>
+                                    <select
+                                        value={data.carouselSlideCount || 'auto'}
+                                        onChange={e => updateData({ carouselSlideCount: e.target.value })}
+                                        className="w-full bg-gray-900 border border-purple-500/20 rounded-lg p-2.5 text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                                    >
+                                        <option value="auto">Automático (Recomendado) - A IA decide a quantidade</option>
+                                        {[3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                                            <option key={num} value={String(num)}>Fixo: exatamente {num} slides estruturados</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                        </>
+                    )}
                     {currentStep === 3 && Step3()}
                     {currentStep === 4 && Step4()}
                 </div>
