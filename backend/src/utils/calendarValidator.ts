@@ -26,7 +26,6 @@ const FORMAT_ALIASES: Record<string, string> = {
     "photos": "Foto",
 };
 
-const ALLOWED_FORMATS = new Set(Object.values(FORMAT_ALIASES));
 
 /** Normaliza o valor de formato do LLM para o canônico PT-BR, retornando undefined se inválido. */
 function normalizeFormato(raw: any): string | undefined {
