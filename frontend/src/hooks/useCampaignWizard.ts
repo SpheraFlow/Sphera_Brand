@@ -64,6 +64,9 @@ export function useCampaignWizard() {
                     if (parsed.monthlyMix === undefined) {
                         parsed.monthlyMix = null;
                     }
+                    if (parsed.carouselSlideCount === undefined) {
+                        parsed.carouselSlideCount = INITIAL_STATE.carouselSlideCount;
+                    }
                     setData(parsed);
                 } catch (e) {
                     console.error('Erro ao carregar draft', e);

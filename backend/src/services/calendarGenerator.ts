@@ -38,6 +38,9 @@ INSTRUÇÕES AVANÇADAS:
 INSTRUÇÕES POR FORMATO:
 {{INSTRUCOES_POR_FORMATO}}
 
+MUITO IMPORTANTE SOBRE CARROSSÉIS:
+Se o formato escolhido para o dia FOR "Carrossel", você DEVE, obrigatoriamente, descrever o "copy_inicial" e "instrucoes_visuais" divididos por slides (ex: [Slide 1] Título..., [Slide 2] Conteúdo...). Nunca retorne um carrossel sem a divisão explícita de slides.
+
 Retorne APENAS um JSON ARRAY PURO (sem markdown, sem texto extra antes ou depois):
 [
   {

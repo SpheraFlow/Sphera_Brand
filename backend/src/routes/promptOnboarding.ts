@@ -67,13 +67,14 @@ QUANDO EXTRAIR (após 3 a 5 respostas onde você já tem visão clara da estrat�
 [PROMPT_TEMPLATE_EXTRACTED]
 {
   "label": "Prompt Agêntico gerado por ARIA",
-  "body": "Atue como Especialista de Redes Sociais. Sua mentalidade é definida pelo Arquétipo {{ARQUETIPO}} no nicho de {{NICHO}}. Você projeta nossa Proposta Única de Valor: {{DIFERENCIAL_USP}}. Seu tom de voz é {{TOM_DE_VOZ}}. Termos proibidos: {{ANTI_PALAVRAS}}.\\n\\nConsidere nosso manifesto visual/público: {{DNA_DA_MARCA}}.\\nNeste mês ({{MES}}), vamos criar:\\n{{MIX_POSTS}}\\n\\nLembre-se das nossas regras de ouro: {{REGRAS_OBRIGATORIAS}}.\\nTemos este briefing adicional: {{BRIEFING}}\\n\\nCrie posts focados em conversão e engajamento.\\n\\nRetorne APENAS um JSON ARRAY PURO (sem markdown). Cada item deve ter os campos: \\\"dia\\\" (número 1-31), \\\"tema\\\", \\\"formato\\\" (Reels, Static, Carousel ou Stories), \\\"instrucoes_visuais\\\", \\\"copy_inicial\\\", \\\"objetivo\\\", \\\"cta\\\", \\\"palavras_chave\\\" (array de strings). Não repita o mesmo número de dia."
+  "body": "Atue como Especialista de Redes Sociais. Sua mentalidade é definida pelo Arquétipo {{ARQUETIPO}} no nicho de {{NICHO}}. Você projeta nossa Proposta Única de Valor: {{DIFERENCIAL_USP}}. Seu tom de voz é {{TOM_DE_VOZ}}. Termos proibidos: {{ANTI_PALAVRAS}}.\\n\\nConsidere nosso manifesto visual/público: {{DNA_DA_MARCA}}.\\nNeste mês ({{MES}}), vamos criar:\\n{{MIX_POSTS}}\\n\\nLembre-se das nossas regras de ouro: {{REGRAS_OBRIGATORIAS}}.\\nTemos este briefing adicional: {{BRIEFING}}\\n\\nINSTRUÇÕES POR FORMATO DE CONTEÚDO (MUITO IMPORTANTE):\\n{{INSTRUCOES_POR_FORMATO}}\\n\\nCrie posts focados em conversão e engajamento.\\n\\nRetorne APENAS um JSON ARRAY PURO (sem markdown). Cada item deve ter os campos: \\\"dia\\\" (número 1-31), \\\"tema\\\", \\\"formato\\\" (Reels, Static, Carousel ou Stories), \\\"instrucoes_visuais\\\", \\\"copy_inicial\\\", \\\"objetivo\\\", \\\"cta\\\", \\\"palavras_chave\\\" (array de strings). Não repita o mesmo número de dia.\\n\\nREGRA DE CARROSSEL: Se o formato for Carousel, você DEVE dividir \\\"instrucoes_visuais\\\" e \\\"copy_inicial\\\" em slides, usando a notação [Slide 1] ..., [Slide 2] ... etc."
 }
 
 REGRA CRÍTICA DO JSON:
 - O JSON deve conter o campo "body" (o texto completo do prompt, utilizando as tags {{}} corretas listadas no catálogo acima).
 - O campo "body" deve ser redigido como uma INSTRUÇÃO DE SISTEMA para um LLM (ex: "Aja como estrategista. Crie o calendário respeitando as regras: {{REGRAS_OBRIGATORIAS}}...").
 - O campo "body" DEVE incluir a instrução de retorno do JSON canônico com os campos: "dia", "tema", "formato", "instrucoes_visuais", "copy_inicial", "objetivo", "cta", "palavras_chave".
+- O campo "body" DEVE obrigatoriamente incluir a tag {{INSTRUCOES_POR_FORMATO}} e a REGRA DE CARROSSEL.
 - O JSON deve ser estritamente válido (use \\n para quebras de linha dentro da string do body).
 - O marcador [PROMPT_TEMPLATE_EXTRACTED] deve estar em sua própria linha antes do JSON.`;
 
