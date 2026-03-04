@@ -185,9 +185,12 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
 // PUT /api/calendars/regenerate-post - Regenera um post específico do calendário
 router.put("/calendars/regenerate-post", async (req: Request, res: Response) => {
   try {
-    const { calendarId, postIndex } = req.body as {
+    const { calendarId, postIndex, slideCount, newFormato, customPrompt } = req.body as {
       calendarId: string;
       postIndex: number;
+      slideCount?: string;
+      newFormato?: string;
+      customPrompt?: string;
     };
 
     if (!calendarId || typeof postIndex !== "number") {
@@ -222,6 +225,7 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
     }
 
     const originalPost = posts[index];
+    const targetFormato = newFormato || originalPost.formato;
 
     // Buscar branding
     const brandingResult = await db.query(
@@ -245,11 +249,17 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
     );
     const rules = rulesResult.rows.map((r: any) => `- ${r.regra}`).join("\n");
 
+    const carouselRule = targetFormato.toLowerCase() === 'carrossel'
+      ? (slideCount && slideCount !== 'auto'
+        ? `\n\nObrigatório para Carrosséis: divida sua resposta em exatamente ${slideCount} slides estruturados do tipo [Slide 1] ..., [Slide 2] ...`
+        : `\n\nObrigatório para Carrosséis: divida sua resposta em slides estruturados do tipo [Slide 1] ..., [Slide 2] ...`)
+      : '';
+
     // Montar prompt para regenerar um único post
     const regenPrompt = `
       Você é um estrategista de social media especialista em adaptação de conteúdo.
 
-      Regere UM ÚNICO post para um calendário editorial, adaptando o conteúdo abaixo para o FORMATO: "${originalPost.formato}".
+      Regere UM ÚNICO post para um calendário editorial, adaptando o conteúdo abaixo para o FORMATO: "${targetFormato}".
 
       CONTEXTO DA MARCA:
       - Tom de Voz: ${branding.tone_of_voice}
@@ -270,15 +280,16 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
         "image_generation_prompt": "${originalPost.image_generation_prompt || ""}"
       }
 
-      INSTRUÇÕES DO ESTRATEGISTA(opcional):
+      INSTRUÇÕES DO ESTRATEGISTA(opcional/adicional):
       Adapte o conteúdo para o novo formato mantendo a essência estratégica, mas otimizando copy, ideia visual e objetivo para aumentar desempenho.
+      INSTRUÇÕES ESPECÍFICAS DO USUÁRIO: ${customPrompt || "Nenhuma instrução extra."}${carouselRule}
 
       SAÍDA ESPERADA:
       - Crie UMA ÚNICA SUGESTÃO DE POST no formato JSON, sem markdown, com exatamente estes campos:
       {
         "data": "DD/MM", // mantenha a mesma data do post original
         "tema": "...",
-        "formato": "${originalPost.formato}",
+        "formato": "${targetFormato}",
         "ideia_visual": "...",
         "copy_sugestao": "...",
         "objetivo": "...",
@@ -294,7 +305,7 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
     let responseText = "";
 
     // Lista de modelos para tentar em ordem (Fallback Robusto)
-    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-pro-latest", "gemini-1.5-flash-latest"];
 
     for (const modelName of modelsToTry) {
       try {

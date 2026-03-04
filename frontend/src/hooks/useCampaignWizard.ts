@@ -28,6 +28,7 @@ export interface CampaignWizardState {
     importantDates: string;
     selectedDateIds: string[];
     produtosFocoIds: string[];
+    carouselSlideCount: string; // "auto" or numeric string (e.g. "5")
 }
 
 const INITIAL_STATE: CampaignWizardState = {
@@ -39,7 +40,8 @@ const INITIAL_STATE: CampaignWizardState = {
     restrictions: '',
     importantDates: '',
     selectedDateIds: [],
-    produtosFocoIds: []
+    produtosFocoIds: [],
+    carouselSlideCount: 'auto'
 };
 
 export function useCampaignWizard() {

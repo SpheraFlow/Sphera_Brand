@@ -55,6 +55,7 @@ Retorne APENAS um JSON ARRAY PURO (sem markdown, sem texto extra antes ou depois
 REGRAS DO JSON:
 - "dia" deve ser um número inteiro (1 a 31), representando o dia sugerido do mês.
 - "formato" deve ser EXATAMENTE um de: Reels, Arte, Carrossel, Foto ou Story.
+- Se o formato for "Carrossel", você DEVE dividir "instrucoes_visuais" e "copy_inicial" em slides estruturados, usando EXATAMENTE a notação [Slide 1] ..., [Slide 2] ...
 - "palavras_chave" deve ser um array com 3 a 5 strings não vazias.
 - Todos os outros campos são strings obrigatórias e não podem ser vazias.
 - Não repita o mesmo número de "dia" em dois posts diferentes.`;
@@ -411,7 +412,7 @@ export const generateCalendarForMonth = async (opts: GenerateMonthOptions) => {
     const prompt = promptBody.replace(/\{\{([A-Z_]+)\}\}/g, (_, k) => tokenMap[k] ?? `{{${k}}}`);
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
-    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-pro-latest", "gemini-1.5-flash-latest"];
 
     let responseText = "";
     let usedModelName: string | null = null;

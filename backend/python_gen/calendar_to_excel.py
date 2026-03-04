@@ -352,21 +352,22 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
     # O template pode vir com textos/posicionamentos diferentes por aba/mês; se tentarmos inferir do texto,
     # qualquer divergência desloca os posts (ex.: dia 2 cai na segunda).
     day_labels = {
-        0: 'SEGUNDA',
-        1: 'TERÇA',
-        2: 'QUARTA',
-        3: 'QUINTA',
-        4: 'SEXTA',
-        5: 'SÁBADO',
-        6: 'DOMINGO'
+        0: 'DOMINGO',
+        1: 'SEGUNDA',
+        2: 'TERÇA',
+        3: 'QUARTA',
+        4: 'QUINTA',
+        5: 'SEXTA',
+        6: 'SÁBADO'
     }
 
-    first_weekday_mon0 = datetime(year_num, month_num, 1).weekday()  # 0=Seg ... 6=Dom
+    # Converter de Monday-based para Sunday-based (0=Dom ... 6=Sáb)
+    first_weekday_sun0 = (datetime(year_num, month_num, 1).weekday() + 1) % 7
 
     # Calcular quantas linhas de semana são necessárias para cobrir todos os dias do mês.
-    # Um mês que começa no sábado (dow=5) ou domingo (dow=6) pode precisar de até 6 linhas.
-    days_in_first_row = (7 - first_weekday_mon0) if first_weekday_mon0 != 0 else 7
-    if first_weekday_mon0 == 0:
+    # Um mês que começa no fim de semana pode precisar de até 6 linhas.
+    days_in_first_row = (7 - first_weekday_sun0) if first_weekday_sun0 != 0 else 7
+    if first_weekday_sun0 == 0:
         weeks_needed = (days_in_month + 6) // 7
     else:
         remaining_after_first = days_in_month - days_in_first_row
@@ -395,19 +396,19 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
         if current_day > days_in_month:
             continue
 
-        # Semana 0: encaixada quando o dia 1 não começa na segunda.
-        if week_index == 0 and first_weekday_mon0 != 0:
-            usable_cols = 7 - first_weekday_mon0
+        # Semana 0: encaixada quando o dia 1 não começa no domingo.
+        if week_index == 0 and first_weekday_sun0 != 0:
+            usable_cols = 7 - first_weekday_sun0
             for offset in range(usable_cols):
-                col = col_letters[first_weekday_mon0 + offset]
-                dow = first_weekday_mon0 + offset
+                col = col_letters[first_weekday_sun0 + offset]
+                dow = first_weekday_sun0 + offset
                 if current_day <= days_in_month:
                     ws[f"{col}{header_row}"].value = f"{day_labels[dow]} ({current_day})"
                     day_to_slot[current_day] = (header_row, col)
                     current_day += 1
             continue
 
-        # Demais semanas: segunda..domingo em A..G (ou B..H)
+        # Demais semanas: domingo..sábado em A..G (ou B..H)
         for dow in range(7):
             col = col_letters[dow]
             if current_day <= days_in_month:

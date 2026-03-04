@@ -184,7 +184,8 @@ export const calendarService = {
     mix?: { reels: number; static: number; carousel: number; stories: number; photos?: number },
     produtosFocoIds?: string[],
     monthsToGenerate?: string[],
-    monthlyMix?: Record<string, { reels: number; static: number; carousel: number; stories: number; photos?: number }>
+    monthlyMix?: Record<string, { reels: number; static: number; carousel: number; stories: number; photos?: number }>,
+    formatInstructions?: Record<string, string>
   ): Promise<GenerateCalendarResponse> {
     const response = await api.post('/generate-calendar', {
       clienteId,
@@ -194,7 +195,8 @@ export const calendarService = {
       mix,
       produtosFocoIds,
       monthsToGenerate,
-      monthlyMix
+      monthlyMix,
+      formatInstructions
     }, {
       timeout: 120000
     });

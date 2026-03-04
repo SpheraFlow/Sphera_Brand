@@ -146,6 +146,7 @@ export default function CalendarPage() {
   const [editReferencias, setEditReferencias] = useState('');
   const [editStatus, setEditStatus] = useState<'sugerido' | 'aprovado' | 'publicado'>('sugerido');
   const [regenPostPrompt, setRegenPostPrompt] = useState('');
+  const [regenSlideCount, setRegenSlideCount] = useState<string>('auto');
   const [isExportingClickUp, setIsExportingClickUp] = useState(false);
 
   const [carouselSlidesCount] = useState<number>(6);
@@ -602,6 +603,7 @@ export default function CalendarPage() {
         postIndex: selectedPost.index,
         newFormato: editFormato,
         customPrompt: regenPostPrompt,
+        slideCount: regenSlideCount
       });
 
       const newPost: Post = response.data.post;
@@ -1647,6 +1649,8 @@ export default function CalendarPage() {
             setEditStatus={setEditStatus}
             regenPostPrompt={regenPostPrompt}
             setRegenPostPrompt={setRegenPostPrompt}
+            regenSlideCount={regenSlideCount}
+            setRegenSlideCount={setRegenSlideCount}
             isRegeneratingPost={isRegeneratingPost}
             onRegeneratePost={regeneratePostWithAI}
             isDeletingPost={isDeletingPost}
@@ -1830,6 +1834,8 @@ interface EditModalProps {
   setEditStatus: (v: 'sugerido' | 'aprovado' | 'publicado') => void;
   regenPostPrompt: string;
   setRegenPostPrompt: (v: string) => void;
+  regenSlideCount: string;
+  setRegenSlideCount: (v: string) => void;
   isRegeneratingPost: boolean;
   onRegeneratePost: () => void;
   isDeletingPost: boolean;
@@ -1851,6 +1857,7 @@ function EditModal({
   editReferencias, setEditReferencias,
   editStatus, setEditStatus,
   regenPostPrompt, setRegenPostPrompt,
+  regenSlideCount, setRegenSlideCount,
   isRegeneratingPost,
   onRegeneratePost,
   isDeletingPost,
@@ -2020,6 +2027,19 @@ function EditModal({
 
                   <div className="space-y-2">
                     <label className="block text-xs text-gray-400">Prompt para regenerar este post com IA</label>
+                    {String(editFormato).toLowerCase() === 'carrossel' && (
+                      <div className="mb-2">
+                        <label className="block text-[10px] text-gray-400 mb-1">Qtd. de Slides (Carrossel)</label>
+                        <select
+                          value={regenSlideCount}
+                          onChange={(e) => setRegenSlideCount(e.target.value)}
+                          className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500 mb-2"
+                        >
+                          <option value="auto">Auto (a IA decide)</option>
+                          {[3, 4, 5, 6, 7, 8, 9, 10].map(n => <option key={n} value={String(n)}>Forçar {n} slides</option>)}
+                        </select>
+                      </div>
+                    )}
                     <textarea
                       value={regenPostPrompt}
                       onChange={(e) => setRegenPostPrompt(e.target.value)}

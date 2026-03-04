@@ -98,7 +98,7 @@ Retorne APENAS um JSON válido neste formato:
     let result;
     let responseText = "";
 
-    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-pro-latest", "gemini-1.5-flash-latest"];
 
     for (const modelName of modelsToTry) {
       try {
