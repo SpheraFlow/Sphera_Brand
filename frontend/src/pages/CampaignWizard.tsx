@@ -100,14 +100,18 @@ export default function CampaignWizard() {
                 .map(d => `- ${new Date(d.data + 'T00:00:00').toLocaleDateString('pt-BR')} | ${d.titulo}: ${d.descricao || ''}`)
                 .join('\n');
 
+            // Instrução explícita para a IA sobre datas selecionadas
+            const datasInstrucao = selectedDatesInfo
+                ? `\nDATAS COMEMORATIVAS SELECIONADAS PELO USUÁRIO (OBRIGATÓRIO CRIAR POST PARA CADA UMA):\n${selectedDatesInfo}\nIMPORTANTE: Para CADA data listada acima, você DEVE criar pelo menos 1 post no dia exato dessa data. O conteúdo do post deve ser 100% contextualizado com o tema da data comemorativa, adaptado ao nicho e tom de voz da marca. Esses posts são OBRIGATÓRIOS e não devem ser substituídos por outros conteúdos genéricos.`
+                : 'Nenhuma data específica selecionada pelo usuário.';
+
             // Combinar briefing com restrições
             const fullBriefing = `
 OBJECTIVE: ${data.goal}
 BRIEFING: ${data.briefing}
 RESTRICTIONS: ${data.restrictions}
 USER REMINDER DATES: ${data.importantDates}
-SELECTED COMMEMORATIVE DATES:
-${selectedDatesInfo || 'Nenhuma data específica selecionada.'}
+${datasInstrucao}
       `.trim();
 
             const formatInstructions = {
