@@ -16,6 +16,7 @@ import ReferencesPage from './pages/ReferencesPage';
 import AgencyHome from './pages/AgencyHome';
 import PromptTemplatePage from './pages/PromptTemplatePage';
 import PromptOnboardingPage from './pages/PromptOnboardingPage';
+import PromptTemplateEditorPage from './pages/PromptTemplateEditorPage';
 import BrandingOnboardingPage from './pages/BrandingOnboardingPage';
 import ClientHub from './pages/ClientHub';
 import CampaignsList from './pages/CampaignsList';
@@ -64,6 +65,7 @@ function App() {
                 <Route path="jobs" element={<JobsPage />} />
                 <Route path="deliveries" element={<DeliveriesPage />} />
                 <Route path="prompt-template" element={<PromptTemplatePage />} />
+                <Route path="prompt-template/editor" element={<PromptTemplateEditorPage />} />
                 <Route path="prompt-onboarding" element={<PromptOnboardingPage />} />
                 <Route path="onboarding" element={<BrandingOnboardingPage />} />
               </Route>

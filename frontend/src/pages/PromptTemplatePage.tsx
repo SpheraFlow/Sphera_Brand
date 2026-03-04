@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api, { promptTemplateService } from '../services/api';
+import { Pencil } from 'lucide-react';
 
 interface TemplateVersion {
   id: string;
@@ -202,7 +203,7 @@ export default function PromptTemplatePage() {
                     {agent.description}
                   </p>
 
-                  <div className="pt-6 mt-auto">
+                  <div className="pt-6 mt-auto space-y-2">
                     {active ? (
                       <div className="flex items-center justify-center gap-2 bg-indigo-900/30 border border-indigo-700/50 text-indigo-300 py-2.5 rounded-lg text-sm font-semibold w-full">
                         <span className="relative flex h-2.5 w-2.5">
@@ -219,6 +220,12 @@ export default function PromptTemplatePage() {
                         {activating ? 'Ativando...' : 'Selecionar'}
                       </button>
                     )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); navigate(`/client/${clientId}/prompt-template/editor`); }}
+                      className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700/60 border border-slate-700/50 py-2 rounded-lg transition-colors"
+                    >
+                      <Pencil className="w-3 h-3" /> Editar Prompt
+                    </button>
                   </div>
                 </div>
               </div>
@@ -246,7 +253,7 @@ export default function PromptTemplatePage() {
                 Converse com a nossa Assistente de Planejamento (ARIA) para desenhar uma persona de estratégia totalmente customizada do zero para a sua necessidade atual.
               </p>
 
-              <div className="pt-6 mt-auto">
+              <div className="pt-6 mt-auto space-y-2">
                 {isCustomActive() ? (
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center justify-center gap-2 bg-fuchsia-900/30 border border-fuchsia-700/50 text-fuchsia-300 py-2.5 rounded-lg text-sm font-semibold w-full">
@@ -265,6 +272,12 @@ export default function PromptTemplatePage() {
                     Criar com ARIA
                   </button>
                 )}
+                <button
+                  onClick={(e) => { e.stopPropagation(); navigate(`/client/${clientId}/prompt-template/editor`); }}
+                  className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700/60 border border-slate-700/50 py-2 rounded-lg transition-colors"
+                >
+                  <Pencil className="w-3 h-3" /> Editar Prompt
+                </button>
               </div>
             </div>
           </div>
