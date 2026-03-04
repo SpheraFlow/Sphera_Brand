@@ -78,6 +78,17 @@ export function validateCalendarSchema(data: any): ValidationResult {
 
     // 2. Iterar cada post e validar
     const usedDays = new Set<number>();
+    // Helper to get next unused day
+    const getNextDay = (startFrom: number): number => {
+        let d = startFrom;
+        while (usedDays.has(d) && d <= 31) d++;
+        if (d > 31) {
+            // Wrap: find any unused day from 1
+            d = 1;
+            while (usedDays.has(d) && d <= 31) d++;
+        }
+        return d;
+    };
 
     for (let i = 0; i < data.length; i++) {
         const post = data[i];
@@ -88,12 +99,14 @@ export function validateCalendarSchema(data: any): ValidationResult {
             continue;
         }
 
-        // -- Validando "dia"
+        // -- Validando "dia" — auto-fix duplicates instead of failing
         if (typeof post.dia !== "number" || post.dia < 1 || post.dia > 31) {
             errors.push(`${prefix} Campo 'dia' deve ser um número entre 1 e 31.`);
         } else {
             if (usedDays.has(post.dia)) {
-                errors.push(`${prefix} Campo 'dia' (${post.dia}) está repetido.`);
+                // Auto-fix: assign next available day
+                const fixedDay = getNextDay(post.dia + 1);
+                post.dia = fixedDay;
             }
             usedDays.add(post.dia);
         }
