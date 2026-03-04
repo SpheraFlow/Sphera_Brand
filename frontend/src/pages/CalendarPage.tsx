@@ -1001,14 +1001,35 @@ export default function CalendarPage() {
   const getPostsForDay = (dayStr: string): { post: Post; index: number }[] => {
     if (!calendar) return [];
 
+    // dayStr comes from date-fns format(day, 'dd/MM'), e.g. "05/03"
+    const [dayPart, monthPart] = dayStr.split('/').map(s => parseInt(s, 10));
+
     return calendar.posts
       .map((post, index) => ({ post, index }))
       .filter(({ post }) => {
-        // Tentar fazer match com diferentes formatos de data
+        // 1. Match by numeric 'dia' field (from calendarGenerator output)
+        if (typeof (post as any).dia === 'number') {
+          return (post as any).dia === dayPart;
+        }
+
         const postDate = post.data;
-        return postDate === dayStr ||
-          postDate === dayStr.replace(/^0/, '') || // Remove zero à esquerda
-          postDate.includes(dayStr);
+        if (!postDate) return false;
+
+        // 2. Exact match: "05/03" === "05/03"
+        if (postDate === dayStr) return true;
+
+        // 3. Match without leading zero: "5/3" vs "05/03"
+        if (postDate === dayStr.replace(/^0/, '')) return true;
+
+        // 4. Match with year suffix: "05/03/2026" contains "05/03"
+        if (postDate.startsWith(dayStr + '/')) return true;
+        if (postDate.includes(dayStr)) return true;
+
+        // 5. Parse DD/MM or DD/MM/YYYY and compare numerically
+        const parts = postDate.split('/').map(s => parseInt(s, 10));
+        if (parts.length >= 2 && parts[0] === dayPart && parts[1] === monthPart) return true;
+
+        return false;
       });
   };
 
@@ -1982,6 +2003,27 @@ function EditModal({
               </div>
             </div>
 
+            {/* Card 2.5 - Carousel Slide Count (always visible for Carrossel posts) */}
+            {String(editFormato).toLowerCase() === 'carrossel' && (
+              <div className="bg-purple-900/20 border border-purple-500/30 rounded-lg p-4 space-y-2">
+                <h3 className="text-sm font-semibold text-purple-300 flex items-center gap-2">
+                  🎠 Configuração do Carrossel
+                </h3>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Quantidade de Slides</label>
+                  <select
+                    value={regenSlideCount}
+                    onChange={(e) => setRegenSlideCount(e.target.value)}
+                    className="w-full bg-gray-700 border border-purple-500/30 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-purple-500"
+                  >
+                    <option value="auto">Automático (a IA decide a quantidade ideal)</option>
+                    {[3, 4, 5, 6, 7, 8, 9, 10].map(n => <option key={n} value={String(n)}>Exatamente {n} slides</option>)}
+                  </select>
+                  <p className="text-[10px] text-gray-500 mt-1">Este número será usado ao regenerar este post.</p>
+                </div>
+              </div>
+            )}
+
             {/* Card 3 - Criativo & IA (avançado) */}
             <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-4 space-y-3">
               <button
@@ -2027,19 +2069,7 @@ function EditModal({
 
                   <div className="space-y-2">
                     <label className="block text-xs text-gray-400">Prompt para regenerar este post com IA</label>
-                    {String(editFormato).toLowerCase() === 'carrossel' && (
-                      <div className="mb-2">
-                        <label className="block text-[10px] text-gray-400 mb-1">Qtd. de Slides (Carrossel)</label>
-                        <select
-                          value={regenSlideCount}
-                          onChange={(e) => setRegenSlideCount(e.target.value)}
-                          className="w-full bg-gray-700 border border-gray-600 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500 mb-2"
-                        >
-                          <option value="auto">Auto (a IA decide)</option>
-                          {[3, 4, 5, 6, 7, 8, 9, 10].map(n => <option key={n} value={String(n)}>Forçar {n} slides</option>)}
-                        </select>
-                      </div>
-                    )}
+
                     <textarea
                       value={regenPostPrompt}
                       onChange={(e) => setRegenPostPrompt(e.target.value)}
