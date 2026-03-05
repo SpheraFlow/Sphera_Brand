@@ -93,24 +93,23 @@ export default function PromptTemplatePage() {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
 
-  const [activeTemplates, setActiveTemplates] = useState<TemplateVersion[]>([]);
+  const [allTemplates, setAllTemplates] = useState<TemplateVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const loadActiveTemplates = useCallback(async () => {
+  const loadTemplates = useCallback(async () => {
     if (!clientId) return;
     try {
       setLoading(true);
       setError(null);
       const res = await api.get('/prompt-templates/' + clientId);
-      const actives = res.data.data.filter((t: any) => t.is_active && t.cliente_id === clientId);
-      setActiveTemplates(actives);
+      setAllTemplates(res.data.data);
     } catch (e: any) {
       if (e.response?.status !== 404) {
-        setError('Erro ao carregar templates ativos.');
+        setError('Erro ao carregar templates.');
       } else {
-        setActiveTemplates([]);
+        setAllTemplates([]);
       }
     } finally {
       setLoading(false);
@@ -118,37 +117,58 @@ export default function PromptTemplatePage() {
   }, [clientId]);
 
   useEffect(() => {
-    loadActiveTemplates();
-  }, [loadActiveTemplates]);
+    loadTemplates();
+  }, [loadTemplates]);
+
+  // Retorna o template global (cliente_id = null) para um agentId
+  const getGlobalTemplate = (agentId: string) =>
+    allTemplates.find(t => t.agent_id === agentId && t.cliente_id === null) ?? null;
+
+  // Um agente está ativo quando seu template GLOBAL está ativo
+  const isActive = (agentId: string) => {
+    const tpl = getGlobalTemplate(agentId);
+    return tpl?.is_active === true;
+  };
+
+  const isCustomActive = () => {
+    return allTemplates.some(t => t.agent_id === 'custom' && t.cliente_id === null && t.is_active);
+  };
 
   const handleActivateAgent = async (agent: typeof PREDEFINED_AGENTS[0]) => {
-    if (!clientId) return;
+    const tpl = getGlobalTemplate(agent.id);
+    if (!tpl) {
+      setError('Template global não encontrado para este agente. Verifique o seed do banco.');
+      return;
+    }
     setActivatingId(agent.id);
     setError(null);
     try {
-      await api.post('/prompt-templates/predefined', {
-        clienteId: clientId,
-        label: 'Agente: ' + agent.title,
-        body: agent.promptBody,
-        agentId: agent.id
-      });
-      await loadActiveTemplates();
+      await api.post(`/prompt-templates/${tpl.id}/activate`);
+      await loadTemplates();
     } catch (e: any) {
-      setError(e.response?.data?.message ?? 'Erro ao ativar o agente.');
+      const errs = e.response?.data?.errors?.join('\n');
+      setError(errs ?? e.response?.data?.message ?? 'Erro ao ativar o agente.');
     } finally {
       setActivatingId(null);
     }
   };
 
-  const isActive = (agentId: string) => {
-    return activeTemplates.some(t => t.agent_id === agentId);
+  const handleDeactivateAgent = async (agent: typeof PREDEFINED_AGENTS[0]) => {
+    const tpl = getGlobalTemplate(agent.id);
+    if (!tpl) return;
+    setActivatingId(agent.id);
+    setError(null);
+    try {
+      await api.post(`/prompt-templates/${tpl.id}/deactivate`);
+      await loadTemplates();
+    } catch (e: any) {
+      setError(e.response?.data?.message ?? 'Erro ao desativar o agente.');
+    } finally {
+      setActivatingId(null);
+    }
   };
 
-  const isCustomActive = () => {
-    return activeTemplates.some(t => t.agent_id === 'custom');
-  };
-
-  if (loading && activeTemplates.length === 0) {
+  if (loading && allTemplates.length === 0) {
     return (
       <div className="min-h-screen bg-[#06080e] flex items-center justify-center">
         <div className="flex items-center gap-3 text-slate-500">
@@ -191,8 +211,12 @@ export default function PromptTemplatePage() {
             return (
               <div
                 key={agent.id}
-                onClick={() => !active && !activating && handleActivateAgent(agent)}
-                className={`relative overflow-hidden rounded-2xl border transition-all duration-300 flex flex-col h-full ${active ? 'border-indigo-500 bg-indigo-950/20 shadow-[0_0_30px_rgba(99,102,241,0.15)] transform scale-[1.02]' : 'border-slate-800/60 bg-[#0b0e17] hover:border-slate-600 hover:bg-[#0d111c] cursor-pointer'} ${activating ? 'opacity-50 pointer-events-none' : ''}`}
+                onClick={() => {
+                  if (activating) return;
+                  if (active) handleDeactivateAgent(agent);
+                  else handleActivateAgent(agent);
+                }}
+                className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 flex flex-col h-full cursor-pointer ${active ? 'border-indigo-500 bg-indigo-950/20 shadow-[0_0_30px_rgba(99,102,241,0.15)] transform scale-[1.02]' : 'border-slate-800/60 bg-[#0b0e17] hover:border-slate-600 hover:bg-[#0d111c]'} ${activating ? 'opacity-50 pointer-events-none' : ''}`}
               >
                 {active && (
                   <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-indigo-500" />
@@ -212,12 +236,13 @@ export default function PromptTemplatePage() {
 
                   <div className="pt-6 mt-auto space-y-2">
                     {active ? (
-                      <div className="flex items-center justify-center gap-2 bg-indigo-900/30 border border-indigo-700/50 text-indigo-300 py-2.5 rounded-lg text-sm font-semibold w-full">
+                      <div className="flex items-center justify-center gap-2 bg-indigo-900/30 border border-indigo-700/50 text-indigo-300 py-2.5 rounded-lg text-sm font-semibold w-full group-hover:bg-red-900/20 group-hover:border-red-700/40 group-hover:text-red-300 transition-colors">
                         <span className="relative flex h-2.5 w-2.5">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
                         </span>
-                        Persona Ativa
+                        <span className="group-hover:hidden">Persona Ativa</span>
+                        <span className="hidden group-hover:inline">Clique para desativar</span>
                       </div>
                     ) : (
                       <button

@@ -336,6 +336,24 @@ router.post("/prompt-templates/:id/activate", async (req: Request, res: Response
   }
 });
 
+// POST /api/prompt-templates/:id/deactivate — Desativa um template (sem ativar outro)
+router.post("/prompt-templates/:id/deactivate", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const result = await db.query(
+      "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE id = $1 RETURNING *",
+      [id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Template não encontrado." });
+    }
+    return res.json({ success: true, data: result.rows[0] });
+  } catch (error: any) {
+    console.error("❌ Erro ao desativar template:", error);
+    return res.status(500).json({ success: false, message: "Erro ao desativar template.", error: error.message });
+  }
+});
+
 // DELETE /api/prompt-templates/:id — Deleta (recusa se ativo ou global)
 router.delete("/prompt-templates/:id", async (req: Request, res: Response) => {
   try {
