@@ -188,7 +188,7 @@ Retorne APENAS este JSON preenchido:
         let result;
         let responseText = "";
 
-        const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-pro-latest", "gemini-1.5-flash-latest"];
+        const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
 
         let successModelName = "";
         for (const modelName of modelsToTry) {

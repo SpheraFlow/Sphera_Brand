@@ -111,6 +111,50 @@ router.post("/:clientId/:jobId/cancel", async (req: Request, res: Response) => {
     }
 });
 
+// POST /api/jobs/:clientId/:jobId/retry
+router.post("/:clientId/:jobId/retry", async (req: Request, res: Response) => {
+    try {
+        const { clientId, jobId } = req.params;
+
+        if (!clientId || !jobId) {
+            return res.status(400).json({ success: false, error: "clientId e jobId são obrigatórios" });
+        }
+
+        const currentCheck = await db.query(
+            "SELECT status FROM calendar_generation_jobs WHERE id = $1 AND cliente_id = $2",
+            [jobId, clientId]
+        );
+
+        if (currentCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: "Job não encontrado" });
+        }
+
+        const currentStatus = currentCheck.rows[0].status;
+
+        if (currentStatus !== 'failed' && currentStatus !== 'canceled') {
+            return res.status(409).json({
+                success: false,
+                error: `Só é possível fazer retry de jobs com status 'failed' ou 'canceled'. Status atual: ${currentStatus}`
+            });
+        }
+
+        await db.query(
+            `UPDATE calendar_generation_jobs
+             SET status = 'pending', error = NULL, progress = 0, current_step = 'Aguardando retry...',
+                 started_at = NULL, finished_at = NULL, updated_at = NOW()
+             WHERE id = $1`,
+            [jobId]
+        );
+
+        console.log(`🔄 Job ${jobId} colocado em retry pelo usuário.`);
+
+        return res.json({ success: true, message: "Job colocado na fila para nova tentativa", jobId });
+    } catch (error: any) {
+        console.error("❌ Erro ao fazer retry do job:", error);
+        return res.status(500).json({ success: false, error: "Erro interno ao fazer retry do job" });
+    }
+});
+
 // GET /api/jobs/:clientId
 router.get("/:clientId", async (req: Request, res: Response) => {
     try {

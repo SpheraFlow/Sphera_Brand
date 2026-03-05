@@ -20,7 +20,6 @@ class GeminiClient {
     }
 
     this.genAI = new GoogleGenerativeAI(apiKey);
-    // Usando gemini-2.5-flash (versão atualizada) para multimodalidade (imagem + texto)
     this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
   }
 
@@ -51,7 +50,7 @@ class GeminiClient {
       let result;
       let text = "";
       
-      const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-pro-latest", "gemini-1.5-flash-latest"];
+      const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
 
       for (const modelName of modelsToTry) {
         try {
@@ -106,7 +105,7 @@ class GeminiClient {
       let result;
       let text = "";
       
-      const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-pro-latest", "gemini-1.5-flash-latest"];
+      const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
 
       for (const modelName of modelsToTry) {
         try {

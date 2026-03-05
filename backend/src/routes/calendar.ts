@@ -305,7 +305,7 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
     let responseText = "";
 
     // Lista de modelos para tentar em ordem (Fallback Robusto)
-    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-pro-latest", "gemini-1.5-flash-latest"];
+    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
 
     for (const modelName of modelsToTry) {
       try {
