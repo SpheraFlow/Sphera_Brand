@@ -35,6 +35,7 @@ interface PlannerData {
   nome_cliente: string;
   logo_path?: string;
   logo_url?: string;
+  logo_link_url?: string;
 }
 
 export default function PresentationGenerator() {
@@ -293,6 +294,59 @@ export default function PresentationGenerator() {
     } catch (e) {
       console.error(e);
       alert('Erro ao baixar em lote. Tente novamente.');
+    }
+  };
+
+  const handlePdfDownload = async () => {
+    if (!generatedImages.length) return;
+    try {
+      const { jsPDF } = await import('jspdf');
+
+      // Detectar dimensões do primeiro slide
+      const firstRes = await fetch(resolveAssetUrl(generatedImages[0]));
+      const firstBlob = await firstRes.blob();
+      const firstBitmap = await createImageBitmap(firstBlob);
+      const imgW = firstBitmap.width;
+      const imgH = firstBitmap.height;
+      firstBitmap.close();
+      const orientation = imgW >= imgH ? 'landscape' : 'portrait';
+
+      const pdf = new jsPDF({ orientation, unit: 'px', format: [imgW, imgH], hotfixes: ['px_scaling'] });
+
+      for (let i = 0; i < generatedImages.length; i++) {
+        if (i > 0) pdf.addPage([imgW, imgH], orientation);
+
+        const finalUrl = resolveAssetUrl(generatedImages[i]);
+        const res = await fetch(finalUrl);
+        const blob = await res.blob();
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+
+        pdf.addImage(dataUrl, 'PNG', 0, 0, imgW, imgH);
+
+        // Última lâmina (planner): adicionar link clicável sobre a área da logo
+        const isLastSlide = i === generatedImages.length - 1;
+        const logoLink = planner.logo_link_url?.trim();
+        if (isLastSlide && logoLink) {
+          // Coordenadas da logo no template planner (1920x1080): default x=1241, y=533, 300x300
+          // Escalado proporcionalmente se o template tiver dimensão diferente
+          const scaleX = imgW / 1920;
+          const scaleY = imgH / 1080;
+          const linkX = 1241 * scaleX;
+          const linkY = 533 * scaleY;
+          const linkW = 300 * scaleX;
+          const linkH = 300 * scaleY;
+          pdf.link(linkX, linkY, linkW, linkH, { url: logoLink });
+        }
+      }
+
+      pdf.save(`laminas_${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao gerar PDF. Tente novamente.');
     }
   };
 
@@ -663,6 +717,16 @@ export default function PresentationGenerator() {
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white"
                     placeholder="Nome do Cliente"
                   />
+                  <div className="space-y-1">
+                    <label className="text-xs text-gray-400">Link da Logo (clicável no PDF)</label>
+                    <input
+                      type="url"
+                      value={planner.logo_link_url || ''}
+                      onChange={e => setPlanner({ ...planner, logo_link_url: e.target.value })}
+                      className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white"
+                      placeholder="https://seusite.com.br"
+                    />
+                  </div>
                 </div>
               )}
 
@@ -676,12 +740,20 @@ export default function PresentationGenerator() {
                 <span>🖼️</span> Resultados Gerados
               </h3>
               {generatedImages.length > 0 && (
-                <button
-                  onClick={handleBatchDownload}
-                  className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 text-xs"
-                >
-                  ⬇️⬇️ Baixar em Lote
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handlePdfDownload}
+                    className="bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 text-xs"
+                  >
+                    📄 Baixar como PDF
+                  </button>
+                  <button
+                    onClick={handleBatchDownload}
+                    className="bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg font-bold transition-colors flex items-center gap-2 text-xs"
+                  >
+                    ⬇️ ZIP
+                  </button>
+                </div>
               )}
             </div>
 
