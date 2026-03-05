@@ -65,7 +65,7 @@ function App() {
                 <Route path="jobs" element={<JobsPage />} />
                 <Route path="deliveries" element={<DeliveriesPage />} />
                 <Route path="prompt-template" element={<PromptTemplatePage />} />
-                <Route path="prompt-template/editor" element={<PromptTemplateEditorPage />} />
+                <Route path="prompt-template/editor/:agentId" element={<PromptTemplateEditorPage />} />
                 <Route path="prompt-onboarding" element={<PromptOnboardingPage />} />
                 <Route path="onboarding" element={<BrandingOnboardingPage />} />
               </Route>

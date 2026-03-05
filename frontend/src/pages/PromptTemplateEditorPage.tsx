@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { promptTemplateService } from '../services/api';
+import api from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 // Variables that can be used in templates — shown as reference chips
 const KNOWN_VARIABLES = [
@@ -21,8 +22,9 @@ const KNOWN_VARIABLES = [
 ];
 
 export default function PromptTemplateEditorPage() {
-    const { clientId } = useParams<{ clientId: string; agentId: string }>();
+    const { clientId, agentId } = useParams<{ clientId: string; agentId: string }>();
     const navigate = useNavigate();
+    const { isAdmin } = useAuth();
 
     const [body, setBody] = useState('');
     const [label, setLabel] = useState('');
@@ -35,32 +37,39 @@ export default function PromptTemplateEditorPage() {
 
     // Load active template for this agent type
     const load = useCallback(async () => {
-        if (!clientId) return;
+        if (!clientId || !agentId) return;
         setLoading(true);
         setError(null);
         try {
-            // Try to load client's active template first, then fall back to base
-            const active = await promptTemplateService.getActive(clientId).catch(() => null);
+            // Try to load client's active template for this specific agent first
+            const active = await api.get(`/prompt-templates/${clientId}/active/${agentId}`).then(res => res.data.data).catch(() => null);
             if (active && active.body) {
                 setBody(active.body);
                 setOriginalBody(active.body);
                 setLabel(active.label || '');
             } else {
-                // load base global template
-                const base = await fetch('/api/prompt-templates/base').then(r => r.json());
-                const b = base?.data?.body || '';
+                // Se não há ativo customizado para esse agent, fallback para o base daquele agente.
+                // Na nossa estrutura, o base tem clienteId NULL mas agent_id setado.
+                const base = await api.get(`/prompt-templates/base/${agentId}`).then(res => res.data.data).catch(() => null);
+                const b = base?.body || '';
                 setBody(b);
                 setOriginalBody(b);
-                setLabel(base?.data?.label || 'Template Global');
+                setLabel(base?.label || `Template Global - Agente`);
             }
         } catch (e: any) {
-            setError('Erro ao carregar o template.');
+            setError('Erro ao carregar o template deste Agente.');
         } finally {
             setLoading(false);
         }
-    }, [clientId]);
+    }, [clientId, agentId]);
 
     useEffect(() => { load(); }, [load]);
+
+    useEffect(() => {
+        if (!isAdmin()) {
+            navigate(`/client/${clientId}`);
+        }
+    }, [isAdmin, navigate, clientId]);
 
     const isDirty = body !== originalBody;
 
@@ -69,18 +78,24 @@ export default function PromptTemplateEditorPage() {
     const missingRequired = KNOWN_VARIABLES.filter(v => v.required && !body.includes(`{{${v.key}}}`));
 
     const handleSaveAndActivate = async () => {
-        if (!clientId || !body.trim()) return;
+        if (!clientId || !body.trim() || !agentId) return;
         setSaving(true);
         setError(null);
         setSuccessMsg(null);
         try {
-            // Create a new version
-            const created = await promptTemplateService.createVersion(clientId, body, label || undefined);
-            // Activate it
+            // Create a new version passing agent_id via API
+            const created = await api.post('/prompt-templates', {
+                clienteId: clientId,
+                body: body,
+                label: label || undefined,
+                agentId: agentId
+            }).then(res => res.data.data);
+
+            // Activate it isolated on its agent_id
             setActivating(true);
-            await promptTemplateService.activate(created.id);
+            await api.post(`/prompt-templates/${created.id}/activate`);
             setOriginalBody(body);
-            setSuccessMsg('✅ Template salvo e ativado com sucesso!');
+            setSuccessMsg('✅ Template salvo e ativado no Agente com sucesso!');
             setTimeout(() => setSuccessMsg(null), 4000);
         } catch (e: any) {
             const msg = e.response?.data?.errors?.join('\n') || e.response?.data?.message || 'Erro ao salvar.';

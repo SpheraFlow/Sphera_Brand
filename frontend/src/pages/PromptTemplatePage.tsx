@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import api, { promptTemplateService } from '../services/api';
+import api from '../services/api';
 import { Pencil } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 interface TemplateVersion {
   id: string;
@@ -12,6 +13,7 @@ interface TemplateVersion {
   created_at: string;
   updated_at: string;
   body?: string;
+  agent_id?: string;
 }
 
 const PREDEFINED_AGENTS = [
@@ -89,24 +91,26 @@ Retorne APENAS um JSON ARRAY PURO (sem markdown). Cada item com: "dia" (num), "t
 export default function PromptTemplatePage() {
   const { clientId } = useParams<{ clientId: string }>();
   const navigate = useNavigate();
+  const { isAdmin } = useAuth();
 
-  const [activeTemplate, setActiveTemplate] = useState<TemplateVersion | null>(null);
+  const [activeTemplates, setActiveTemplates] = useState<TemplateVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const loadActiveTemplate = useCallback(async () => {
+  const loadActiveTemplates = useCallback(async () => {
     if (!clientId) return;
     try {
       setLoading(true);
       setError(null);
-      const res = await api.get('/prompt-templates/' + clientId + '/active');
-      setActiveTemplate(res.data.data);
+      const res = await api.get('/prompt-templates/' + clientId);
+      const actives = res.data.data.filter((t: any) => t.is_active);
+      setActiveTemplates(actives);
     } catch (e: any) {
       if (e.response?.status !== 404) {
-        setError('Erro ao carregar template ativo.');
+        setError('Erro ao carregar templates ativos.');
       } else {
-        setActiveTemplate(null);
+        setActiveTemplates([]);
       }
     } finally {
       setLoading(false);
@@ -114,16 +118,21 @@ export default function PromptTemplatePage() {
   }, [clientId]);
 
   useEffect(() => {
-    loadActiveTemplate();
-  }, [loadActiveTemplate]);
+    loadActiveTemplates();
+  }, [loadActiveTemplates]);
 
   const handleActivateAgent = async (agent: typeof PREDEFINED_AGENTS[0]) => {
     if (!clientId) return;
     setActivatingId(agent.id);
     setError(null);
     try {
-      await promptTemplateService.activatePredefined(clientId, 'Agente: ' + agent.title, agent.promptBody);
-      await loadActiveTemplate();
+      await api.post('/prompt-templates/predefined', {
+        clienteId: clientId,
+        label: 'Agente: ' + agent.title,
+        body: agent.promptBody,
+        agentId: agent.id
+      });
+      await loadActiveTemplates();
     } catch (e: any) {
       setError(e.response?.data?.message ?? 'Erro ao ativar o agente.');
     } finally {
@@ -131,17 +140,15 @@ export default function PromptTemplatePage() {
     }
   };
 
-  const isActive = (title: string) => {
-    if (!activeTemplate) return false;
-    return activeTemplate.label?.includes('Agente: ' + title);
+  const isActive = (agentId: string) => {
+    return activeTemplates.some(t => t.agent_id === agentId);
   };
 
   const isCustomActive = () => {
-    if (!activeTemplate) return false;
-    return !PREDEFINED_AGENTS.some(a => activeTemplate.label?.includes('Agente: ' + a.title));
+    return activeTemplates.some(t => t.agent_id === 'custom');
   };
 
-  if (loading && !activeTemplate) {
+  if (loading && activeTemplates.length === 0) {
     return (
       <div className="min-h-screen bg-[#06080e] flex items-center justify-center">
         <div className="flex items-center gap-3 text-slate-500">
@@ -178,7 +185,7 @@ export default function PromptTemplatePage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
           {PREDEFINED_AGENTS.map((agent) => {
-            const active = isActive(agent.title);
+            const active = isActive(agent.id);
             const activating = activatingId === agent.id;
 
             return (
@@ -220,12 +227,14 @@ export default function PromptTemplatePage() {
                         {activating ? 'Ativando...' : 'Selecionar'}
                       </button>
                     )}
-                    <button
-                      onClick={(e) => { e.stopPropagation(); navigate(`/client/${clientId}/prompt-template/editor`); }}
-                      className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700/60 border border-slate-700/50 py-2 rounded-lg transition-colors"
-                    >
-                      <Pencil className="w-3 h-3" /> Editar Prompt
-                    </button>
+                    {isAdmin() && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); navigate(`/client/${clientId}/prompt-template/editor/${agent.id}`); }}
+                        className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700/60 border border-slate-700/50 py-2 rounded-lg transition-colors"
+                      >
+                        <Pencil className="w-3 h-3" /> Editar Prompt
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -272,12 +281,14 @@ export default function PromptTemplatePage() {
                     Criar com ARIA
                   </button>
                 )}
-                <button
-                  onClick={(e) => { e.stopPropagation(); navigate(`/client/${clientId}/prompt-template/editor`); }}
-                  className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700/60 border border-slate-700/50 py-2 rounded-lg transition-colors"
-                >
-                  <Pencil className="w-3 h-3" /> Editar Prompt
-                </button>
+                {isAdmin() && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); navigate(`/client/${clientId}/prompt-template/editor/custom`); }}
+                    className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700/60 border border-slate-700/50 py-2 rounded-lg transition-colors"
+                  >
+                    <Pencil className="w-3 h-3" /> Editar Prompt
+                  </button>
+                )}
               </div>
             </div>
           </div>

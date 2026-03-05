@@ -113,7 +113,7 @@ function renderTemplate(
 router.get("/prompt-templates/base", async (_req: Request, res: Response) => {
   try {
     const result = await db.query(
-      `SELECT id, version, label, body, is_active, created_at
+      `SELECT id, version, label, body, is_active, created_at, agent_id
        FROM prompt_templates
        WHERE cliente_id IS NULL AND is_active = true
        LIMIT 1`
@@ -147,7 +147,7 @@ router.get("/prompt-templates/:clienteId", async (req: Request, res: Response) =
   try {
     const { clienteId } = req.params;
     const result = await db.query(
-      `SELECT id, cliente_id, version, label, is_active, created_at, updated_at
+      `SELECT id, cliente_id, version, label, is_active, created_at, updated_at, agent_id
        FROM prompt_templates
        WHERE cliente_id = $1 OR cliente_id IS NULL
        ORDER BY (cliente_id IS NOT NULL) DESC, version DESC`,
@@ -160,16 +160,16 @@ router.get("/prompt-templates/:clienteId", async (req: Request, res: Response) =
   }
 });
 
-// GET /api/prompt-templates/:clienteId/active — Versão ativa (com body); fallback global
-router.get("/prompt-templates/:clienteId/active", async (req: Request, res: Response) => {
+// GET /api/prompt-templates/:clienteId/active/:agentId — Versão ativa (com body); fallback global
+router.get("/prompt-templates/:clienteId/active/:agentId", async (req: Request, res: Response) => {
   try {
-    const { clienteId } = req.params;
+    const { clienteId, agentId } = req.params;
     const result = await db.query(
       `SELECT * FROM prompt_templates
-       WHERE (cliente_id = $1 OR cliente_id IS NULL) AND is_active = true
+       WHERE (cliente_id = $1 OR cliente_id IS NULL) AND agent_id = $2 AND is_active = true
        ORDER BY (cliente_id IS NOT NULL) DESC
        LIMIT 1`,
-      [clienteId]
+      [clienteId, agentId]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: "Nenhum template ativo encontrado." });
@@ -185,7 +185,7 @@ router.get("/prompt-templates/:clienteId/history", async (req: Request, res: Res
   try {
     const { clienteId } = req.params;
     const result = await db.query(
-      `SELECT id, cliente_id, version, label, is_active, created_at, updated_at
+      `SELECT id, cliente_id, version, label, is_active, created_at, updated_at, agent_id
        FROM prompt_templates
        WHERE cliente_id = $1 OR cliente_id IS NULL
        ORDER BY (cliente_id IS NOT NULL) DESC, version DESC`,
@@ -200,7 +200,7 @@ router.get("/prompt-templates/:clienteId/history", async (req: Request, res: Res
 // POST /api/prompt-templates — Criar nova versão (draft, inativa)
 router.post("/prompt-templates", async (req: Request, res: Response) => {
   try {
-    const { clienteId, body, label } = req.body;
+    const { clienteId, body, label, agentId = 'estrategista' } = req.body;
     if (!clienteId || !body) {
       return res.status(400).json({ success: false, message: "Campos obrigatórios: clienteId e body." });
     }
@@ -213,10 +213,10 @@ router.post("/prompt-templates", async (req: Request, res: Response) => {
     const autoLabel = label || `v${nextVersion} - Customizado`;
 
     const result = await db.query(
-      `INSERT INTO prompt_templates (cliente_id, version, label, body, is_active)
-       VALUES ($1, $2, $3, $4, false)
+      `INSERT INTO prompt_templates (cliente_id, version, label, body, is_active, agent_id)
+       VALUES ($1, $2, $3, $4, false, $5)
        RETURNING *`,
-      [clienteId, nextVersion, autoLabel, body]
+      [clienteId, nextVersion, autoLabel, body, agentId]
     );
     return res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error: any) {
@@ -228,17 +228,17 @@ router.post("/prompt-templates", async (req: Request, res: Response) => {
 // POST /api/prompt-templates/predefined — Criar e ativar imediatamente uma versão predefinida (Agentes)
 router.post("/prompt-templates/predefined", async (req: Request, res: Response) => {
   try {
-    const { clienteId, body, label } = req.body;
+    const { clienteId, body, label, agentId = 'estrategista' } = req.body;
     if (!clienteId || !body || !label) {
       return res.status(400).json({ success: false, message: "Campos obrigatórios: clienteId, label e body." });
     }
 
     await db.query("BEGIN");
     try {
-      // 1. Desativar templates antigas deste cliente
+      // 1. Desativar templates antigas deste agente neste cliente
       await db.query(
-        "UPDATE prompt_templates SET is_active = false WHERE cliente_id = $1",
-        [clienteId]
+        "UPDATE prompt_templates SET is_active = false WHERE cliente_id = $1 AND agent_id = $2",
+        [clienteId, agentId]
       );
 
       // 2. Determinar a próxima versão
@@ -250,10 +250,10 @@ router.post("/prompt-templates/predefined", async (req: Request, res: Response) 
 
       // 3. Inserir já como ativo
       const result = await db.query(
-        `INSERT INTO prompt_templates (cliente_id, version, label, body, is_active)
-         VALUES ($1, $2, $3, $4, true)
+        `INSERT INTO prompt_templates (cliente_id, version, label, body, is_active, agent_id)
+         VALUES ($1, $2, $3, $4, true, $5)
          RETURNING *`,
-        [clienteId, nextVersion, label, body]
+        [clienteId, nextVersion, label, body, agentId]
       );
 
       await db.query("COMMIT");
@@ -288,6 +288,8 @@ router.post("/prompt-templates/:id/activate", async (req: Request, res: Response
 
       const template = templateResult.rows[0];
 
+      const templateAgentId = template.agent_id || 'estrategista';
+
       // ── Guardrails canônicos de ativação ───────────────────────────────
       const validationErrors = validateTemplateBody(template.body);
       if (validationErrors.length > 0) {
@@ -300,18 +302,18 @@ router.post("/prompt-templates/:id/activate", async (req: Request, res: Response
       }
       // ───────────────────────────────────────────────────────────────────
 
-      // Desativa TODOS do mesmo escopo (cliente ou global)
+      // Desativa TODOS do mesmo escopo (cliente ou global) E MESMO AGENTE
       if (template.cliente_id) {
-        // Escopo: todos os templates deste cliente
+        // Escopo: todos os templates deste cliente para este agente
         await db.query(
-          "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id = $1 AND id <> $2",
-          [template.cliente_id, id]
+          "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id = $1 AND agent_id = $2 AND id <> $3",
+          [template.cliente_id, templateAgentId, id]
         );
       } else {
-        // Escopo: todos os templates globais (cliente_id IS NULL)
+        // Escopo: todos os templates globais deste agente
         await db.query(
-          "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id IS NULL AND id <> $1",
-          [id]
+          "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id IS NULL AND agent_id = $1 AND id <> $2",
+          [templateAgentId, id]
         );
       }
 
