@@ -44,7 +44,6 @@ export const LEGACY_CONTRACT_FIELDS = [
 /** Padrões proibidos no corpo do template. */
 const FORBIDDEN_PATTERNS: { re: RegExp; msg: string }[] = [
   { re: /responda em markdown/i, msg: 'Frase proibida: "responda em markdown"' },
-  { re: /```/g, msg: "Template não deve conter delimitadores de código (```)" },
 ];
 
 export function validateTemplateBody(body: string): string[] {

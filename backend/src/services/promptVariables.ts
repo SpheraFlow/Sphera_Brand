@@ -145,6 +145,13 @@ export const SUPPORTED_VARIABLES: PromptVariable[] = [
         example: "- Reels: 15 a 30 segundos, hook nos primeiros 3s.\n- Carousel: Máximo 5 slides.",
         required: false,
         scope: "global"
+    },
+    {
+        key: "PRODUTOS_FOCO",
+        description: "Lista de produtos ou serviços selecionados para destaque no mês.",
+        example: "- NOME: Lipo HD\n  CATEGORIA: Estética\n  PREÇO: R$ 5000\n  DETALHES: Foco em resultado de verão.",
+        required: false,
+        scope: "calendar"
     }
 ];
 
@@ -228,6 +235,7 @@ export async function buildPreviewContext(
     context.CONTINUIDADE = "[SIMULAÇÃO] Primeiro ciclo não possui continuidade.";
     context.INSTRUCOES_AVANCADAS = "[SIMULAÇÃO] Nenhuma instrução avançada definida.";
     context.INSTRUCOES_POR_FORMATO = SUPPORTED_VARIABLES.find(v => v.key === "INSTRUCOES_POR_FORMATO")?.example || "";
+    context.PRODUTOS_FOCO = "[SIMULAÇÃO] Lista detalhada de produtos/serviços selecionados.";
 
     return context;
 }
