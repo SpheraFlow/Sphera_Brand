@@ -104,7 +104,7 @@ export default function PromptTemplatePage() {
       setLoading(true);
       setError(null);
       const res = await api.get('/prompt-templates/' + clientId);
-      const actives = res.data.data.filter((t: any) => t.is_active);
+      const actives = res.data.data.filter((t: any) => t.is_active && t.cliente_id === clientId);
       setActiveTemplates(actives);
     } catch (e: any) {
       if (e.response?.status !== 404) {
