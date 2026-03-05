@@ -229,24 +229,34 @@ router.post("/prompt-templates", async (req: Request, res: Response) => {
 router.post("/prompt-templates/predefined", async (req: Request, res: Response) => {
   const client = await db.connect();
   try {
-    const { clienteId, body, label, agentId = 'estrategista' } = req.body;
-    if (!clienteId || !body || !label) {
+    // clienteId pode ser null para templates globais
+    const { clienteId = null, body, label, agentId = 'estrategista' } = req.body;
+    if (!body || !label) {
       client.release();
-      return res.status(400).json({ success: false, message: "Campos obrigatórios: clienteId, label e body." });
+      return res.status(400).json({ success: false, message: "Campos obrigatórios: label e body." });
     }
 
     await client.query("BEGIN");
 
-    // 1. Desativar templates antigas deste agente neste cliente
-    await client.query(
-      "UPDATE prompt_templates SET is_active = false WHERE cliente_id = $1 AND agent_id = $2",
-      [clienteId, agentId]
-    );
+    // 1. Desativar templates antigas deste agente no mesmo escopo (global ou cliente)
+    if (clienteId) {
+      await client.query(
+        "UPDATE prompt_templates SET is_active = false WHERE cliente_id = $1 AND agent_id = $2",
+        [clienteId, agentId]
+      );
+    } else {
+      await client.query(
+        "UPDATE prompt_templates SET is_active = false WHERE cliente_id IS NULL AND agent_id = $1",
+        [agentId]
+      );
+    }
 
-    // 2. Determinar a próxima versão
+    // 2. Determinar a próxima versão no mesmo escopo
     const versionResult = await client.query(
-      "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id = $1",
-      [clienteId]
+      clienteId
+        ? "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id = $1"
+        : "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id IS NULL",
+      clienteId ? [clienteId] : []
     );
     const nextVersion = versionResult.rows[0].next_version;
 

@@ -135,14 +135,26 @@ export default function PromptTemplatePage() {
   };
 
   const handleActivateAgent = async (agent: typeof PREDEFINED_AGENTS[0]) => {
-    const tpl = getGlobalTemplate(agent.id);
-    if (!tpl) {
-      setError('Template global não encontrado para este agente. Verifique o seed do banco.');
-      return;
-    }
     setActivatingId(agent.id);
     setError(null);
     try {
+      let tpl = getGlobalTemplate(agent.id);
+
+      // Se não existe template global para este agente, criar agora
+      if (!tpl) {
+        const created = await api.post('/prompt-templates/predefined', {
+          clienteId: null,
+          label: 'Global: ' + agent.title,
+          body: agent.promptBody,
+          agentId: agent.id,
+        }).then(r => r.data.data);
+        // predefined já cria como ativo, só recarregar
+        await loadTemplates();
+        // Se chegou aqui já está ativo, sair
+        setActivatingId(null);
+        return;
+      }
+
       await api.post(`/prompt-templates/${tpl.id}/activate`);
       await loadTemplates();
     } catch (e: any) {
