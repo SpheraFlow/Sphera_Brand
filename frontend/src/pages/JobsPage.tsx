@@ -18,7 +18,7 @@ import { jobsService } from '../services/api';
 
 interface Job {
     id: string;
-    status: 'pending' | 'processing' | 'completed' | 'failed' | 'canceled';
+    status: 'pending' | 'running' | 'processing' | 'succeeded' | 'completed' | 'failed' | 'canceled';
     progress: number;
     created_at: string;
     payload?: any;
