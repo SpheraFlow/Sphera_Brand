@@ -142,7 +142,7 @@ export default function PromptTemplatePage() {
 
       // Se não existe template global para este agente, criar agora
       if (!tpl) {
-        const created = await api.post('/prompt-templates/predefined', {
+        await api.post('/prompt-templates/predefined', {
           clienteId: null,
           label: 'Global: ' + agent.title,
           body: agent.promptBody,
