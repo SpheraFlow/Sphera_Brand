@@ -1,4 +1,4 @@
-import pool from './db';
+import pool from '../src/config/database';
 
 async function migrate() {
     console.log('Iniciando migração: Adicionando coluna agent_id na tabela prompt_templates');
