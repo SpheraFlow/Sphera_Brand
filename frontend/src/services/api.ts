@@ -341,6 +341,16 @@ export const jobsService = {
   async cancelJob(clientId: string, jobId: string): Promise<any> {
     const response = await api.post(`/jobs/${clientId}/${jobId}/cancel`);
     return response.data;
+  },
+
+  async retryJob(clientId: string, jobId: string): Promise<any> {
+    const response = await api.post(`/jobs/${clientId}/${jobId}/retry`);
+    return response.data;
+  },
+
+  async deleteJob(clientId: string, jobId: string): Promise<any> {
+    const response = await api.delete(`/jobs/${clientId}/${jobId}`);
+    return response.data;
   }
 };
 

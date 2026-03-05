@@ -359,6 +359,15 @@ export default function CalendarPage() {
     onCancel: handleJobCancelCallback,
   });
 
+  const handleJobRetryBtn = async () => {
+    if (!pendingJobId || !clientId) return;
+    try {
+      await jobsService.retryJob(clientId, pendingJobId);
+    } catch (e: any) {
+      alert('Erro ao retentar: ' + (e.response?.data?.error || e.message));
+    }
+  };
+
   const handleJobCancelBtn = async () => {
     if (!pendingJobId || !clientId) return;
     try {
@@ -1167,6 +1176,7 @@ export default function CalendarPage() {
             <JobProgressPanel
               job={job}
               onCancel={handleJobCancelBtn}
+              onRetry={handleJobRetryBtn}
               onDismissPanel={() => setPendingJobId(null)}
             />
           </div>

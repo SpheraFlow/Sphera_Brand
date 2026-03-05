@@ -155,6 +155,44 @@ router.post("/:clientId/:jobId/retry", async (req: Request, res: Response) => {
     }
 });
 
+// DELETE /api/jobs/:clientId/:jobId
+router.delete("/:clientId/:jobId", async (req: Request, res: Response) => {
+    try {
+        const { clientId, jobId } = req.params;
+
+        if (!clientId || !jobId) {
+            return res.status(400).json({ success: false, error: "clientId e jobId são obrigatórios" });
+        }
+
+        const currentCheck = await db.query(
+            "SELECT status FROM calendar_generation_jobs WHERE id = $1 AND cliente_id = $2",
+            [jobId, clientId]
+        );
+
+        if (currentCheck.rows.length === 0) {
+            return res.status(404).json({ success: false, error: "Job não encontrado" });
+        }
+
+        const currentStatus = currentCheck.rows[0].status;
+
+        if (currentStatus === 'pending' || currentStatus === 'running') {
+            return res.status(409).json({
+                success: false,
+                error: `Não é possível excluir um job em execução. Cancele primeiro. Status atual: ${currentStatus}`
+            });
+        }
+
+        await db.query("DELETE FROM calendar_generation_jobs WHERE id = $1", [jobId]);
+
+        console.log(`🗑️ Job ${jobId} excluído pelo usuário.`);
+
+        return res.json({ success: true, message: "Job excluído com sucesso" });
+    } catch (error: any) {
+        console.error("❌ Erro ao excluir job:", error);
+        return res.status(500).json({ success: false, error: "Erro interno ao excluir job" });
+    }
+});
+
 // GET /api/jobs/:clientId
 router.get("/:clientId", async (req: Request, res: Response) => {
     try {

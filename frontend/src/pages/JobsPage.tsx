@@ -8,10 +8,13 @@ import {
     AlertOctagon,
     Loader2,
     RefreshCw,
-    Search
+    Search,
+    RotateCcw,
+    Trash2
 } from 'lucide-react';
 import { useJobsList } from '../hooks/useJobsList';
 import JobProgressModal from '../components/Jobs/JobProgressModal';
+import { jobsService } from '../services/api';
 
 interface Job {
     id: string;
@@ -25,6 +28,32 @@ export default function JobsPage() {
     const { clientId } = useParams<{ clientId: string }>();
     const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
+    const [actionLoading, setActionLoading] = useState<Record<string, string>>({});
+
+    const handleRetry = async (jobId: string) => {
+        setActionLoading(prev => ({ ...prev, [jobId]: 'retry' }));
+        try {
+            await jobsService.retryJob(clientId!, jobId);
+            refresh();
+        } catch (e) {
+            console.error('Erro ao fazer retry:', e);
+        } finally {
+            setActionLoading(prev => { const n = { ...prev }; delete n[jobId]; return n; });
+        }
+    };
+
+    const handleDelete = async (jobId: string) => {
+        if (!confirm('Excluir este job permanentemente?')) return;
+        setActionLoading(prev => ({ ...prev, [jobId]: 'delete' }));
+        try {
+            await jobsService.deleteJob(clientId!, jobId);
+            refresh();
+        } catch (e) {
+            console.error('Erro ao excluir job:', e);
+        } finally {
+            setActionLoading(prev => { const n = { ...prev }; delete n[jobId]; return n; });
+        }
+    };
 
     // Usando o hook robusto para evitar loops e garantir refresh
     const { jobs: rawJobs, loading, refresh } = useJobsList({
@@ -139,12 +168,38 @@ export default function JobsPage() {
                                         <span className="text-xs text-gray-500 mt-1 block">{job.progress}%</span>
                                     </td>
                                     <td className="p-4 text-right">
-                                        <button
-                                            className="text-blue-400 hover:text-blue-300 font-medium text-xs hover:underline"
-                                            onClick={() => setSelectedJobId(job.id)}
-                                        >
-                                            Ver Detalhes
-                                        </button>
+                                        <div className="flex items-center justify-end gap-2">
+                                            <button
+                                                className="text-blue-400 hover:text-blue-300 font-medium text-xs hover:underline"
+                                                onClick={() => setSelectedJobId(job.id)}
+                                            >
+                                                Ver Detalhes
+                                            </button>
+                                            {(job.status === 'failed' || job.status === 'canceled') && (
+                                                <button
+                                                    title="Tentar novamente"
+                                                    disabled={!!actionLoading[job.id]}
+                                                    onClick={() => handleRetry(job.id)}
+                                                    className="p-1.5 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 transition-colors disabled:opacity-50"
+                                                >
+                                                    {actionLoading[job.id] === 'retry'
+                                                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                        : <RotateCcw className="w-3.5 h-3.5" />}
+                                                </button>
+                                            )}
+                                            {(job.status === 'failed' || job.status === 'canceled' || job.status === 'succeeded' || job.status === 'completed') && (
+                                                <button
+                                                    title="Excluir job"
+                                                    disabled={!!actionLoading[job.id]}
+                                                    onClick={() => handleDelete(job.id)}
+                                                    className="p-1.5 rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
+                                                >
+                                                    {actionLoading[job.id] === 'delete'
+                                                        ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                        : <Trash2 className="w-3.5 h-3.5" />}
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}

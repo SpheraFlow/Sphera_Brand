@@ -5,9 +5,10 @@ interface JobProgressPanelProps {
     job: JobStatusResponse | null;
     onCancel: () => void;
     onDismissPanel?: () => void;
+    onRetry?: () => void;
 }
 
-export default function JobProgressPanel({ job, onCancel, onDismissPanel }: JobProgressPanelProps) {
+export default function JobProgressPanel({ job, onCancel, onDismissPanel, onRetry }: JobProgressPanelProps) {
     const [showJson, setShowJson] = useState(false);
 
     if (!job) return null;
@@ -62,6 +63,14 @@ export default function JobProgressPanel({ job, onCancel, onDismissPanel }: JobP
                             className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 rounded text-xs transition-colors"
                         >
                             Cancelar Geração
+                        </button>
+                    )}
+                    {isFailed && onRetry && (
+                        <button
+                            onClick={onRetry}
+                            className="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 border border-blue-500/20 rounded text-xs transition-colors"
+                        >
+                            Tentar Novamente
                         </button>
                     )}
                 </div>
