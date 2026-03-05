@@ -18,7 +18,8 @@
     "seed:datas": "psql $POSTGRES_DB < db/seeds/datas_comemorativas.sql",
     "migrate:calendar-items": "ts-node db/migrate_calendar_items.ts",
     "migrate:prompt-agent": "ts-node db/migrate_prompt_agent.ts",
-    "migrate:all": "npm run migrate:branding && npm run migrate:calendarios && npm run migrate:contexto && npm run migrate:jobs && npm run migrate:prompt-templates && npm run migrate:prompt-templates-v2 && npm run migrate:calendar-items && npm run migrate:prompt-agent",
+    "migrate:prompt-indices": "ts-node db/migrate_prompt_indices.ts",
+    "migrate:all": "npm run migrate:branding && npm run migrate:calendarios && npm run migrate:contexto && npm run migrate:jobs && npm run migrate:prompt-templates && npm run migrate:prompt-templates-v2 && npm run migrate:calendar-items && npm run migrate:prompt-agent && npm run migrate:prompt-indices",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

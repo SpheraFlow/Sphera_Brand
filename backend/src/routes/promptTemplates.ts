@@ -227,42 +227,43 @@ router.post("/prompt-templates", async (req: Request, res: Response) => {
 
 // POST /api/prompt-templates/predefined — Criar e ativar imediatamente uma versão predefinida (Agentes)
 router.post("/prompt-templates/predefined", async (req: Request, res: Response) => {
+  const client = await db.connect();
   try {
     const { clienteId, body, label, agentId = 'estrategista' } = req.body;
     if (!clienteId || !body || !label) {
+      client.release();
       return res.status(400).json({ success: false, message: "Campos obrigatórios: clienteId, label e body." });
     }
 
-    await db.query("BEGIN");
-    try {
-      // 1. Desativar templates antigas deste agente neste cliente
-      await db.query(
-        "UPDATE prompt_templates SET is_active = false WHERE cliente_id = $1 AND agent_id = $2",
-        [clienteId, agentId]
-      );
+    await client.query("BEGIN");
 
-      // 2. Determinar a próxima versão
-      const versionResult = await db.query(
-        "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id = $1",
-        [clienteId]
-      );
-      const nextVersion = versionResult.rows[0].next_version;
+    // 1. Desativar templates antigas deste agente neste cliente
+    await client.query(
+      "UPDATE prompt_templates SET is_active = false WHERE cliente_id = $1 AND agent_id = $2",
+      [clienteId, agentId]
+    );
 
-      // 3. Inserir já como ativo
-      const result = await db.query(
-        `INSERT INTO prompt_templates (cliente_id, version, label, body, is_active, agent_id)
-         VALUES ($1, $2, $3, $4, true, $5)
-         RETURNING *`,
-        [clienteId, nextVersion, label, body, agentId]
-      );
+    // 2. Determinar a próxima versão
+    const versionResult = await client.query(
+      "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id = $1",
+      [clienteId]
+    );
+    const nextVersion = versionResult.rows[0].next_version;
 
-      await db.query("COMMIT");
-      return res.status(201).json({ success: true, data: result.rows[0], message: "Agente ativado com sucesso!" });
-    } catch (txError: any) {
-      await db.query("ROLLBACK");
-      throw txError;
-    }
+    // 3. Inserir já como ativo
+    const result = await client.query(
+      `INSERT INTO prompt_templates (cliente_id, version, label, body, is_active, agent_id)
+       VALUES ($1, $2, $3, $4, true, $5)
+       RETURNING *`,
+      [clienteId, nextVersion, label, body, agentId]
+    );
+
+    await client.query("COMMIT");
+    client.release();
+    return res.status(201).json({ success: true, data: result.rows[0], message: "Agente ativado com sucesso!" });
   } catch (error: any) {
+    try { await client.query("ROLLBACK"); } catch (_) { }
+    client.release();
     console.error("❌ Erro ao ativar agente predefinido:", error);
     return res.status(500).json({ success: false, message: "Erro ao ativar agente predefinido.", error: error.message });
   }
@@ -270,68 +271,66 @@ router.post("/prompt-templates/predefined", async (req: Request, res: Response) 
 
 // POST /api/prompt-templates/:id/activate — Ativa versão com guardrails + transação atômica
 router.post("/prompt-templates/:id/activate", async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const client = await db.connect();
   try {
-    const { id } = req.params;
+    await client.query("BEGIN");
 
-    await db.query("BEGIN");
-    try {
-      // SELECT FOR UPDATE: bloqueia a linha até o fim da transação,
-      // evitando race condition com ativação concorrente do mesmo template.
-      const templateResult = await db.query(
-        "SELECT * FROM prompt_templates WHERE id = $1 FOR UPDATE",
-        [id]
-      );
-      if (templateResult.rows.length === 0) {
-        await db.query("ROLLBACK");
-        return res.status(404).json({ success: false, message: "Template não encontrado." });
-      }
-
-      const template = templateResult.rows[0];
-
-      const templateAgentId = template.agent_id || 'estrategista';
-
-      // ── Guardrails canônicos de ativação ───────────────────────────────
-      const validationErrors = validateTemplateBody(template.body);
-      if (validationErrors.length > 0) {
-        await db.query("ROLLBACK");
-        return res.status(400).json({
-          success: false,
-          message: "Template não pode ser ativado: falhou nas validações.",
-          errors: validationErrors,
-        });
-      }
-      // ───────────────────────────────────────────────────────────────────
-
-      // Desativa TODOS do mesmo escopo (cliente ou global) E MESMO AGENTE
-      if (template.cliente_id) {
-        // Escopo: todos os templates deste cliente para este agente
-        await db.query(
-          "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id = $1 AND agent_id = $2 AND id <> $3",
-          [template.cliente_id, templateAgentId, id]
-        );
-      } else {
-        // Escopo: todos os templates globais deste agente
-        await db.query(
-          "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id IS NULL AND agent_id = $1 AND id <> $2",
-          [templateAgentId, id]
-        );
-      }
-
-      // Ativa o template alvo
-      await db.query(
-        "UPDATE prompt_templates SET is_active = true, updated_at = NOW() WHERE id = $1",
-        [id]
-      );
-
-      await db.query("COMMIT");
-    } catch (txError) {
-      await db.query("ROLLBACK");
-      throw txError;
+    // SELECT FOR UPDATE: bloqueia a linha até o fim da transação,
+    // evitando race condition com ativação concorrente do mesmo template.
+    const templateResult = await client.query(
+      "SELECT * FROM prompt_templates WHERE id = $1 FOR UPDATE",
+      [id]
+    );
+    if (templateResult.rows.length === 0) {
+      await client.query("ROLLBACK");
+      client.release();
+      return res.status(404).json({ success: false, message: "Template não encontrado." });
     }
+
+    const template = templateResult.rows[0];
+    const templateAgentId = template.agent_id || 'estrategista';
+
+    // ── Guardrails canônicos de ativação ───────────────────────────────
+    const validationErrors = validateTemplateBody(template.body);
+    if (validationErrors.length > 0) {
+      await client.query("ROLLBACK");
+      client.release();
+      return res.status(400).json({
+        success: false,
+        message: "Template não pode ser ativado: falhou nas validações.",
+        errors: validationErrors,
+      });
+    }
+    // ───────────────────────────────────────────────────────────────────
+
+    // Desativa TODOS do mesmo escopo (cliente ou global) E MESMO AGENTE
+    if (template.cliente_id) {
+      await client.query(
+        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id = $1 AND agent_id = $2 AND id <> $3",
+        [template.cliente_id, templateAgentId, id]
+      );
+    } else {
+      await client.query(
+        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id IS NULL AND agent_id = $1 AND id <> $2",
+        [templateAgentId, id]
+      );
+    }
+
+    // Ativa o template alvo
+    await client.query(
+      "UPDATE prompt_templates SET is_active = true, updated_at = NOW() WHERE id = $1",
+      [id]
+    );
+
+    await client.query("COMMIT");
+    client.release();
 
     const updated = await db.query("SELECT * FROM prompt_templates WHERE id = $1", [id]);
     return res.json({ success: true, data: updated.rows[0] });
   } catch (error: any) {
+    try { await client.query("ROLLBACK"); } catch (_) { }
+    client.release();
     console.error("❌ Erro ao ativar prompt template:", error);
     return res.status(500).json({ success: false, message: "Erro ao ativar prompt template.", error: error.message });
   }
