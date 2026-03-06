@@ -40,7 +40,7 @@ interface PlannerData {
 
 export default function PresentationGenerator() {
   const { clientId } = useParams<{ clientId: string }>();
-  const [activeTab, setActiveTab] = useState<'defesa' | 'grid' | 'slogan' | 'desafios' | 'planner'>('defesa');
+  const [activeTab, setActiveTab] = useState<'defesa' | 'grid' | 'slogan' | 'desafios' | 'planner' | 'link_cta' | 'encerramento'>('defesa');
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
@@ -95,6 +95,9 @@ export default function PresentationGenerator() {
     mes: 'MÊS 1 | MÊS 2 | MÊS 3',
     nome_cliente: 'Nome do Cliente'
   });
+
+  const [linkCta, setLinkCta] = useState({ url: '' });
+  const [encerramento] = useState({});
 
   const getClientLogoOverrideUrl = () => {
     if (!clientId) return undefined;
@@ -155,6 +158,8 @@ export default function PresentationGenerator() {
           });
         }
 
+        if (c.link_cta) setLinkCta(c.link_cta);
+
         alert("✅ Conteúdo gerado com sucesso! Revise e clique em Gerar Lâminas.");
       }
     } catch (error: any) {
@@ -194,7 +199,9 @@ export default function PresentationGenerator() {
         planner: {
           ...planner,
           ...(effectiveLogoUrl ? { logo_url: effectiveLogoUrl } : {})
-        }
+        },
+        link_cta: linkCta,
+        encerramento
       };
 
       const response = await api.post('/presentation/generate', payload);
@@ -224,7 +231,7 @@ export default function PresentationGenerator() {
       const payload = {
         clienteId: clientId,
         tempFiles,
-        dataJson: { defesa, grid: { ...grid, mes: '' }, slogan, desafios, planner },
+        dataJson: { defesa, grid: { ...grid, mes: '' }, slogan, desafios, planner, link_cta: linkCta, encerramento },
         titulo: `Apresentação ${new Date().toLocaleString()}`
       };
 
@@ -327,19 +334,11 @@ export default function PresentationGenerator() {
 
         pdf.addImage(dataUrl, 'PNG', 0, 0, imgW, imgH);
 
-        // Última lâmina (planner): adicionar link clicável sobre a área da logo
-        const isLastSlide = i === generatedImages.length - 1;
-        const logoLink = planner.logo_link_url?.trim();
-        if (isLastSlide && logoLink) {
-          // Coordenadas da logo no template planner (1920x1080): default x=1241, y=533, 300x300
-          // Escalado proporcionalmente se o template tiver dimensão diferente
-          const scaleX = imgW / 1920;
-          const scaleY = imgH / 1080;
-          const linkX = 1241 * scaleX;
-          const linkY = 533 * scaleY;
-          const linkW = 300 * scaleX;
-          const linkH = 300 * scaleY;
-          pdf.link(linkX, linkY, linkW, linkH, { url: logoLink });
+        // Slide 6 (link_cta): adicionar link clicável em toda a lâmina
+        const isLinkSlide = i === 5;
+        const slideUrl = linkCta.url?.trim();
+        if (isLinkSlide && slideUrl) {
+          pdf.link(0, 0, imgW, imgH, { url: slideUrl });
         }
       }
 
@@ -391,6 +390,16 @@ export default function PresentationGenerator() {
         ...(effectiveLogoUrl ? { logo_url: resolveAssetUrl(effectiveLogoUrl) } : {})
       };
       realIndex = 4;
+    } else if (filename.includes('link_cta')) {
+      templateName = 'link_cta';
+      slideName = 'Link Clicável';
+      data = linkCta;
+      realIndex = 5;
+    } else if (filename.includes('encerramento')) {
+      templateName = 'encerramento';
+      slideName = 'Encerramento';
+      data = encerramento;
+      realIndex = 6;
     }
 
     const templateImage = `/templates/template_${templateName}.png`;
@@ -410,7 +419,7 @@ export default function PresentationGenerator() {
       setLoading(true);
 
       // Atualizar o estado local com os novos dados
-      const slideDataMap = [setDefesa, setGrid, setSlogan, setDesafios, setPlanner];
+      const slideDataMap = [setDefesa, setGrid, setSlogan, setDesafios, setPlanner, setLinkCta];
       if (slideDataMap[editingSlide.index]) {
         slideDataMap[editingSlide.index](updatedData);
       }
@@ -436,7 +445,9 @@ export default function PresentationGenerator() {
         planner: {
           ...(editingSlide.index === 4 ? updatedData : planner),
           ...(effectiveLogoUrl ? { logo_url: effectiveLogoUrl } : {})
-        }
+        },
+        link_cta: editingSlide.index === 5 ? updatedData : linkCta,
+        encerramento
       };
 
       console.log('🔍 [FRONTEND] Payload sendo enviado para regenerar:', JSON.stringify(payload, null, 2));
@@ -585,13 +596,21 @@ export default function PresentationGenerator() {
 
             {/* Tabs */}
             <div className="flex gap-1 p-1 bg-gray-900 rounded-lg border border-gray-700 overflow-x-auto">
-              {['defesa', 'grid', 'slogan', 'desafios', 'planner'].map((tab) => (
+              {[
+                { id: 'defesa', label: '1. Defesa' },
+                { id: 'grid', label: '2. Metas' },
+                { id: 'slogan', label: '3. Slogan' },
+                { id: 'desafios', label: '4. Desafios' },
+                { id: 'planner', label: '5. Planner' },
+                { id: 'link_cta', label: '6. Link' },
+                { id: 'encerramento', label: '7. Fim' }
+              ].map((tab) => (
                 <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab as any)}
-                  className={`px-3 py-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === tab ? 'bg-gray-700 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`px-3 py-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === tab.id ? 'bg-gray-700 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
                 >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                  {tab.label}
                 </button>
               ))}
             </div>
@@ -717,16 +736,29 @@ export default function PresentationGenerator() {
                     className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white"
                     placeholder="Nome do Cliente"
                   />
+                </div>
+              )}
+
+              {activeTab === 'link_cta' && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-blue-400">Slide de Link (6)</h3>
                   <div className="space-y-1">
-                    <label className="text-xs text-gray-400">Link da Logo (clicável no PDF)</label>
+                    <label className="text-xs text-gray-400">URL de Destino</label>
                     <input
                       type="url"
-                      value={planner.logo_link_url || ''}
-                      onChange={e => setPlanner({ ...planner, logo_link_url: e.target.value })}
+                      value={linkCta.url || ''}
+                      onChange={e => setLinkCta({ ...linkCta, url: e.target.value })}
                       className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white"
-                      placeholder="https://seusite.com.br"
+                      placeholder="https://..."
                     />
                   </div>
+                </div>
+              )}
+
+              {activeTab === 'encerramento' && (
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-blue-400">Slide de Encerramento (7)</h3>
+                  <p className="text-sm text-gray-400">Apenas imagem estática do template.</p>
                 </div>
               )}
 

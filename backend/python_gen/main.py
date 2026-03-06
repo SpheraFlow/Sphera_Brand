@@ -444,6 +444,29 @@ def render_planner(data, output_name):
     img.save(os.path.join(OUTPUT_DIR, output_name))
     print(f"[OK] Gerado: {output_name}")
 
+def render_link_cta(data, output_name):
+    """
+    TIPO: LINK CLICÁVEL (Slide 6)
+    Template: template_link_cta.jpg
+    Conteúdo: Apenas imagem estática do template.
+    O link clicável é gerenciado pelo frontend (clique na imagem redireciona para a URL).
+    """
+    template_file = 'template_link_cta.jpg'
+    img = get_template_image(template_file)
+    img.save(os.path.join(OUTPUT_DIR, output_name))
+    print(f"[OK] Gerado: {output_name}")
+
+def render_encerramento(data, output_name):
+    """
+    TIPO: ENCERRAMENTO (Slide 7)
+    Template: template_encerramento.jpg
+    Conteúdo: Apenas imagem estática do template.
+    """
+    template_file = 'template_encerramento.jpg'
+    img = get_template_image(template_file)
+    img.save(os.path.join(OUTPUT_DIR, output_name))
+    print(f"[OK] Gerado: {output_name}")
+
 def main():
     print("[INICIO] Iniciando geracao de laminas...")
     
@@ -486,7 +509,13 @@ def main():
     if 'planner' in content:
         render_planner(content['planner'], '05_planner.png')
 
-    print("\n[SUCESSO] 5 laminas geradas.")
+    if 'link_cta' in content:
+        render_link_cta(content['link_cta'], '06_link_cta.png')
+
+    if 'encerramento' in content:
+        render_encerramento(content['encerramento'], '07_encerramento.png')
+
+    print("\n[SUCESSO] Laminas geradas.")
 
 if __name__ == "__main__":
     main()
