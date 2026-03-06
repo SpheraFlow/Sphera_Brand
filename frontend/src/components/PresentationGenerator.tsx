@@ -37,9 +37,13 @@ interface PlannerData {
   logo_url?: string;
 }
 
+interface LinkCtaData {
+  link_url: string;
+}
+
 export default function PresentationGenerator() {
   const { clientId } = useParams<{ clientId: string }>();
-  const [activeTab, setActiveTab] = useState<'defesa' | 'grid' | 'slogan' | 'desafios' | 'planner'>('defesa');
+  const [activeTab, setActiveTab] = useState<'defesa' | 'grid' | 'slogan' | 'desafios' | 'planner' | 'link_cta' | 'encerramento'>('defesa');
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [generatedImages, setGeneratedImages] = useState<string[]>([]);
@@ -94,6 +98,12 @@ export default function PresentationGenerator() {
     mes: 'MÊS 1 | MÊS 2 | MÊS 3',
     nome_cliente: 'Nome do Cliente'
   });
+
+  const [linkCta, setLinkCta] = useState<LinkCtaData>({
+    link_url: ''
+  });
+
+  const [encerramento] = useState({});
 
   const getClientLogoOverrideUrl = () => {
     if (!clientId) return undefined;
@@ -192,7 +202,9 @@ export default function PresentationGenerator() {
         planner: {
           ...planner,
           ...(effectiveLogoUrl ? { logo_url: effectiveLogoUrl } : {})
-        }
+        },
+        link_cta: linkCta,
+        encerramento
       };
 
       const response = await api.post('/presentation/generate', payload);
@@ -222,7 +234,7 @@ export default function PresentationGenerator() {
       const payload = {
         clienteId: clientId,
         tempFiles,
-        dataJson: { defesa, grid, slogan, desafios, planner },
+        dataJson: { defesa, grid, slogan, desafios, planner, link_cta: linkCta, encerramento },
         titulo: `Apresentação ${new Date().toLocaleString()}`
       };
       
@@ -336,6 +348,16 @@ export default function PresentationGenerator() {
           ...(effectiveLogoUrl ? { logo_url: effectiveLogoUrl } : {})
         };
         realIndex = 4;
+    } else if (filename.includes('link_cta')) {
+        templateName = 'link_cta';
+        slideName = 'Link CTA';
+        data = linkCta;
+        realIndex = 5;
+    } else if (filename.includes('encerramento')) {
+        templateName = 'encerramento';
+        slideName = 'Encerramento';
+        data = encerramento;
+        realIndex = 6;
     }
 
     const templateImage = `/templates/template_${templateName}.png`;
@@ -355,11 +377,11 @@ export default function PresentationGenerator() {
       setLoading(true);
       
       // Atualizar o estado local com os novos dados
-      const slideDataMap = [setDefesa, setGrid, setSlogan, setDesafios, setPlanner];
+      const slideDataMap = [setDefesa, setGrid, setSlogan, setDesafios, setPlanner, setLinkCta];
       if (slideDataMap[editingSlide.index]) {
         slideDataMap[editingSlide.index](updatedData);
       }
-      
+
       // Regenerar apenas esta lâmina
       const logoUrl = getClientLogoOverrideUrl();
 
@@ -377,7 +399,9 @@ export default function PresentationGenerator() {
         planner: {
           ...(editingSlide.index === 4 ? updatedData : planner),
           ...(effectiveLogoUrl ? { logo_url: effectiveLogoUrl } : {})
-        }
+        },
+        link_cta: editingSlide.index === 5 ? updatedData : linkCta,
+        encerramento
       };
 
       const response = await api.post('/presentation/generate', payload);
@@ -509,7 +533,15 @@ export default function PresentationGenerator() {
 
       {visualMode ? (
         <VisualSlideEditor
-          templateImage={`/templates/template_${activeTab === 'defesa' ? 'defesa_da_campanha' : activeTab === 'grid' ? 'metas' : activeTab === 'desafios' ? 'novos_desafios' : activeTab === 'planner' ? 'planner_trimestral' : 'slogan'}.png`}
+          templateImage={`/templates/template_${
+            activeTab === 'defesa' ? 'defesa_da_campanha' :
+            activeTab === 'grid' ? 'metas' :
+            activeTab === 'desafios' ? 'novos_desafios' :
+            activeTab === 'planner' ? 'planner_trimestral' :
+            activeTab === 'link_cta' ? 'link_cta' :
+            activeTab === 'encerramento' ? 'encerramento' :
+            'slogan'
+          }.png`}
           initialBlocks={[]}
           onSave={(blocks) => {
             console.log('Layout salvo:', blocks);
@@ -524,13 +556,21 @@ export default function PresentationGenerator() {
           
           {/* Tabs */}
           <div className="flex gap-1 p-1 bg-gray-900 rounded-lg border border-gray-700 overflow-x-auto">
-            {['defesa', 'grid', 'slogan', 'desafios', 'planner'].map((tab) => (
+            {[
+              { id: 'defesa', label: '1. Defesa' },
+              { id: 'grid', label: '2. Metas' },
+              { id: 'slogan', label: '3. Slogan' },
+              { id: 'desafios', label: '4. Desafios' },
+              { id: 'planner', label: '5. Planner' },
+              { id: 'link_cta', label: '6. Link' },
+              { id: 'encerramento', label: '7. Fim' },
+            ].map((tab) => (
                 <button
-                key={tab}
-                onClick={() => setActiveTab(tab as any)}
-                className={`px-3 py-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === tab ? 'bg-gray-700 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-3 py-2 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${activeTab === tab.id ? 'bg-gray-700 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
                 >
-                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                {tab.label}
                 </button>
             ))}
           </div>
@@ -659,6 +699,43 @@ export default function PresentationGenerator() {
                 </div>
             )}
 
+            {activeTab === 'link_cta' && (
+                <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-blue-400">Slide 6 — Link Clicável</h3>
+                <p className="text-xs text-gray-400">
+                  Imagem estática. Ao clicar no slide gerado, o usuário será redirecionado para a URL abaixo.
+                </p>
+                <div>
+                  <label className="text-xs text-gray-400 mb-1 block">URL de destino</label>
+                  <input
+                    value={linkCta.link_url}
+                    onChange={e => setLinkCta({ link_url: e.target.value })}
+                    className="w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white"
+                    placeholder="https://mareagencia.com.br"
+                    type="url"
+                  />
+                </div>
+                {linkCta.link_url && (
+                  <p className="text-xs text-green-400">
+                    ✅ Link configurado: <span className="underline">{linkCta.link_url}</span>
+                  </p>
+                )}
+                </div>
+            )}
+
+            {activeTab === 'encerramento' && (
+                <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-blue-400">Slide 7 — Encerramento</h3>
+                <p className="text-xs text-gray-400">
+                  Slide de encerramento estático. Nenhum campo necessário — a imagem do template é usada diretamente.
+                </p>
+                <div className="flex items-center gap-2 bg-gray-800 rounded-lg p-3 border border-gray-700">
+                  <span className="text-lg">🏁</span>
+                  <span className="text-xs text-gray-300">Template: <code className="text-blue-300">template_encerramento.png</code></span>
+                </div>
+                </div>
+            )}
+
           </div>
         </div>
 
@@ -680,27 +757,45 @@ export default function PresentationGenerator() {
           
           {generatedImages.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {generatedImages.map((imgUrl, idx) => (
+              {generatedImages.map((imgUrl, idx) => {
+                const filename = imgUrl.split('/').pop() || '';
+                const isLinkCta = filename.includes('link_cta');
+                const hasLink = isLinkCta && !!linkCta.link_url;
+                return (
                 <div key={idx} className="group relative rounded-lg overflow-hidden border border-gray-700 shadow-xl bg-gray-800">
                   <div className="aspect-video relative">
-                    <img 
-                      src={resolveAssetUrl(imgUrl)} 
-                      alt="Slide gerado" 
-                      className="w-full h-full object-cover" 
-                      onError={(e) => {
-                        console.error('Erro ao carregar preview:', imgUrl);
-                        (e.currentTarget as HTMLImageElement).style.display = 'none';
-                      }}
-                    />
+                    {hasLink ? (
+                      <a href={linkCta.link_url} target="_blank" rel="noopener noreferrer" className="block w-full h-full" title={`Abrir: ${linkCta.link_url}`}>
+                        <img
+                          src={resolveAssetUrl(imgUrl)}
+                          alt="Slide gerado"
+                          className="w-full h-full object-cover cursor-pointer"
+                          onError={(e) => {
+                            console.error('Erro ao carregar preview:', imgUrl);
+                            (e.currentTarget as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                      </a>
+                    ) : (
+                      <img
+                        src={resolveAssetUrl(imgUrl)}
+                        alt="Slide gerado"
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          console.error('Erro ao carregar preview:', imgUrl);
+                          (e.currentTarget as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    )}
                   </div>
                   <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-3 backdrop-blur-sm">
-                    <button 
+                    <button
                       onClick={() => handleOpenEditor(imgUrl, idx)}
                       className="bg-blue-600 text-white px-6 py-2.5 rounded-full font-bold text-sm hover:bg-blue-700 transform hover:scale-105 transition-all shadow-lg flex items-center gap-2"
                     >
                       ✏️ Editar
                     </button>
-                    <button 
+                    <button
                       onClick={() => handleDownload(imgUrl, getPngFilename(imgUrl, 'slide.png'))}
                       className="bg-white text-black px-6 py-2.5 rounded-full font-bold text-sm hover:bg-gray-200 transform hover:scale-105 transition-all shadow-lg flex items-center gap-2"
                     >
@@ -709,11 +804,15 @@ export default function PresentationGenerator() {
                   </div>
                   <div className="p-3 bg-gray-800 border-t border-gray-700">
                     <p className="text-xs text-gray-400 text-center truncate">
-                      {imgUrl.split('/').pop()}
+                      {filename.replace(/\?.*$/, '')}
                     </p>
+                    {hasLink && (
+                      <p className="text-xs text-blue-400 text-center mt-1 truncate">🔗 {linkCta.link_url}</p>
+                    )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-gray-600 border-2 border-dashed border-gray-800 rounded-xl p-8">
