@@ -261,6 +261,9 @@ export default function SlideEditorModal({
         const defaultFont = l?.fontSize ?? 24;
         const size = estimateTextBoxSize(items[i] || '', defaultFont, l?.width ?? defaultW);
 
+        const isBlackBg = i === 2 || i === 3 || i === 7;
+        const defaultColor = isBlackBg ? '#000000' : '#FFFFFF';
+
         initialBlocks.push({
           id,
           content: items[i] || '',
@@ -269,7 +272,7 @@ export default function SlideEditorModal({
           width: l?.width ?? size.width,
           height: l?.height ?? size.height,
           fontSize: defaultFont,
-          color: l?.color ?? '#FFFFFF',
+          color: l?.color ?? defaultColor,
           fontWeight: l?.fontWeight ?? 'normal',
           align: l?.align ?? 'center',
           fontFamily: l?.fontFamily ?? 'Lato',
@@ -981,8 +984,8 @@ export default function SlideEditorModal({
                         <button
                           onClick={() => updateBlockProperty('fontWeight', 'normal')}
                           className={`flex-1 px-3 py-2 rounded text-xs ${selectedBlock.fontWeight === 'normal'
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-700 text-gray-300'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-700 text-gray-300'
                             }`}
                         >
                           Normal
@@ -990,8 +993,8 @@ export default function SlideEditorModal({
                         <button
                           onClick={() => updateBlockProperty('fontWeight', 'bold')}
                           className={`flex-1 px-3 py-2 rounded text-xs font-bold ${selectedBlock.fontWeight === 'bold'
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-gray-700 text-gray-300'
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-700 text-gray-300'
                             }`}
                         >
                           Bold
@@ -1007,8 +1010,8 @@ export default function SlideEditorModal({
                             key={align}
                             onClick={() => updateBlockProperty('align', align)}
                             className={`flex-1 px-3 py-2 rounded text-xs ${selectedBlock.align === align
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-gray-700 text-gray-300'
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-gray-700 text-gray-300'
                               }`}
                           >
                             {align === 'left' ? '⬅' : align === 'center' ? '↔' : '➡'}
@@ -1046,8 +1049,8 @@ export default function SlideEditorModal({
                       key={block.id}
                       onClick={() => setSelectedBlockId(block.id)}
                       className={`w-full text-left text-xs p-2 rounded truncate ${selectedBlockId === block.id
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                         }`}
                     >
                       {block.id}: {block.content.substring(0, 30)}...

@@ -243,7 +243,7 @@ def render_desafios(data, output_name):
     
     # Índices de fundo branco (texto preto) - Verificar visualmente o template depois se possível
     # Assumindo padrão xadrez ou similar
-    white_bg_indices = [2, 3, 5, 7]
+    white_bg_indices = [2, 3, 7]
     
     # Se existir layout vindo do editor, usar ele (ids item-0..item-8)
     if layout:
