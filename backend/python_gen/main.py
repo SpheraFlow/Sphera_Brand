@@ -123,7 +123,7 @@ def render_defesa(data, output_name):
     print(f"[DEBUG] Layout recebido para defesa: {layout}")
 
     font_subtitle = load_font('poppins-bold.ttf', 22)
-    font_body = load_font('lato-regular.ttf', 22)
+    font_body = load_font('lato-regular.ttf', 24)
     
     # Subtítulo (Frase do Slogan)
     subtitulo = data.get('subtitulo', '')
@@ -140,11 +140,11 @@ def render_defesa(data, output_name):
     texto_longo = data.get('texto_longo', data.get('texto', ''))
     b = layout.get('texto')
     if b:
-        font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 22)))
-        max_w = int(b.get('width', 900))
+        font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 24)))
+        max_w = int(b.get('width', 845))
         draw_text_wrapped(draw, texto_longo, font, b.get('color', '#FFFFFF'), float(b.get('x', 936)), float(b.get('y', 147)), max_w, line_spacing=10, align=b.get('align', 'left'))
     else:
-        draw_text_wrapped(draw, texto_longo, font_body, COLOR_WHITE, 936, 147, 900, line_spacing=10)
+        draw_text_wrapped(draw, texto_longo, font_body, COLOR_WHITE, 936, 147, 845, line_spacing=10)
     
     img.save(os.path.join(OUTPUT_DIR, output_name))
     print(f"[OK] Gerado: {output_name}")
@@ -165,7 +165,7 @@ def render_metas(data, output_name):
     layout = _layout_by_id(data.get('layout'))
 
     font_subtitle = load_font('lato-regular.ttf', 32)
-    font_body = load_font('lato-regular.ttf', 22)
+    font_body = load_font('lato-regular.ttf', 25)
     
     # Subtítulo (Mês)
     mes = data.get('mes', '')
@@ -182,11 +182,11 @@ def render_metas(data, output_name):
     texto_longo = data.get('texto_longo', '')
     b = layout.get('texto')
     if b:
-        font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 22)))
-        max_w = int(b.get('width', 900))
+        font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 25)))
+        max_w = int(b.get('width', 820))
         draw_text_wrapped(draw, texto_longo, font, b.get('color', '#FFFFFF'), float(b.get('x', 936)), float(b.get('y', 147)), max_w, line_spacing=10, align=b.get('align', 'left'))
     else:
-        draw_text_wrapped(draw, texto_longo, font_body, COLOR_WHITE, 936, 147, 900, line_spacing=10)
+        draw_text_wrapped(draw, texto_longo, font_body, COLOR_WHITE, 936, 147, 820, line_spacing=10)
     
     img.save(os.path.join(OUTPUT_DIR, output_name))
     print(f"[OK] Gerado: {output_name}")
@@ -205,7 +205,7 @@ def render_desafios(data, output_name):
     
     layout = _layout_by_id(data.get('layout'))
 
-    font_item = load_font('lato-regular.ttf', 20)
+    font_item = load_font('lato-regular.ttf', 24)
     
     # Grid 3x3 (APENAS lado direito)
     # IMPORTANTE: preservar índices 0..8 (mesmo que alguns itens estejam vazios)
@@ -230,15 +230,15 @@ def render_desafios(data, output_name):
 
     # Coordenadas dos boxes (top-left) conforme referência do template
     default_positions = [
-        (903, 264),
-        (1190, 243),
-        (1488, 249),
-        (915, 487),
-        (1197, 489),
-        (1479, 476),
-        (938, 684),
-        (1212, 680),
-        (1486, 680),
+        (939, 289),
+        (1215, 290),
+        (1490, 272),
+        (928, 476),
+        (1218, 495),
+        (1490, 478),
+        (938, 695),
+        (1212, 693),
+        (1488, 701),
     ]
     
     # Índices de fundo branco (texto preto) - Verificar visualmente o template depois se possível
@@ -262,7 +262,7 @@ def render_desafios(data, output_name):
             cy = box_y + box_h / 2
 
             text_color = b.get('color', '#FFFFFF')
-            font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 20)))
+            font = load_font(_font_file_from_family(b.get('fontFamily'), b.get('fontWeight')), int(b.get('fontSize', 24)))
             max_w = int(max(10, box_w - 20))
 
             # Quebrar em até 4 linhas e centralizar verticalmente

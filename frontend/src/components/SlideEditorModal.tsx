@@ -118,14 +118,14 @@ export default function SlideEditorModal({
     // CORREÇÃO DEFINITIVA: Filtrar layout para remover blocos exclusivos do Planner
     // se não for uma lâmina Planner (previne contaminação entre lâminas)
     const layoutList = Array.isArray(slideData?.layout) ? slideData.layout : [];
-    const filteredLayout = isPlannerSlide 
-      ? layoutList 
+    const filteredLayout = isPlannerSlide
+      ? layoutList
       : layoutList.filter((l: any) => {
-          // Remover blocos exclusivos do Planner de lâminas não-planner
-          const id = l?.id;
-          return id !== 'mes' && id !== 'nome_cliente' && id !== 'logo';
-        });
-    
+        // Remover blocos exclusivos do Planner de lâminas não-planner
+        const id = l?.id;
+        return id !== 'mes' && id !== 'nome_cliente' && id !== 'logo';
+      });
+
     const layoutById = new Map<string, any>();
     filteredLayout.forEach((l: any) => {
       if (l && typeof l === 'object' && l.id) layoutById.set(l.id, l);
@@ -157,7 +157,7 @@ export default function SlideEditorModal({
         shadow: l?.shadow ?? true
       });
     }
-    
+
     if (slideData.subtitulo) {
       const l = getLayout('subtitulo');
       initialBlocks.push({
@@ -175,19 +175,24 @@ export default function SlideEditorModal({
         shadow: l?.shadow ?? true
       });
     }
-    
+
     const isDesafiosSlide = Array.isArray(slideData.itens);
 
     if (!isDesafiosSlide && (slideData.texto || slideData.texto_longo)) {
       const l = getLayout('texto');
+      const isMetas = isMetasSlide;
+      const defaultW = isMetas ? 820 : 845;
+      const defaultH = isMetas ? 825 : 842;
+      const defaultFS = isMetas ? 25 : 24;
+
       initialBlocks.push({
         id: 'texto',
         content: slideData.texto || slideData.texto_longo,
         x: l?.x ?? 936,
         y: l?.y ?? 147,
-        width: l?.width ?? 900,
-        height: l?.height ?? 850,
-        fontSize: l?.fontSize ?? 22,
+        width: l?.width ?? defaultW,
+        height: l?.height ?? defaultH,
+        fontSize: l?.fontSize ?? defaultFS,
         color: l?.color ?? '#FFFFFF',
         fontWeight: l?.fontWeight ?? 'normal',
         align: l?.align ?? 'left',
@@ -195,7 +200,7 @@ export default function SlideEditorModal({
         shadow: l?.shadow ?? true
       });
     }
-    
+
     if (slideData.frase) {
       const l = getLayout('frase');
       initialBlocks.push({
@@ -213,7 +218,7 @@ export default function SlideEditorModal({
         shadow: l?.shadow ?? true
       });
     }
-    
+
     if (slideData.legenda) {
       const l = getLayout('legenda');
       initialBlocks.push({
@@ -237,15 +242,15 @@ export default function SlideEditorModal({
       const items: string[] = slideData.itens;
 
       const defaultPositions = [
-        { x: 903, y: 264 },
-        { x: 1190, y: 243 },
-        { x: 1488, y: 249 },
-        { x: 915, y: 487 },
-        { x: 1197, y: 489 },
-        { x: 1479, y: 476 },
-        { x: 938, y: 684 },
-        { x: 1212, y: 680 },
-        { x: 1486, y: 680 }
+        { x: 939, y: 289 },
+        { x: 1215, y: 290 },
+        { x: 1490, y: 272 },
+        { x: 928, y: 476 },
+        { x: 1218, y: 495 },
+        { x: 1490, y: 478 },
+        { x: 938, y: 695 },
+        { x: 1212, y: 693 },
+        { x: 1488, y: 701 }
       ];
 
       for (let i = 0; i < 9; i++) {
@@ -253,7 +258,7 @@ export default function SlideEditorModal({
         const l = getLayout(id);
 
         const defaultW = 240;
-        const defaultFont = l?.fontSize ?? 20;
+        const defaultFont = l?.fontSize ?? 24;
         const size = estimateTextBoxSize(items[i] || '', defaultFont, l?.width ?? defaultW);
 
         initialBlocks.push({
@@ -326,7 +331,7 @@ export default function SlideEditorModal({
         kind: 'logo'
       });
     }
-    
+
     return initialBlocks;
   });
 
@@ -379,12 +384,12 @@ export default function SlideEditorModal({
       setBlocks((prev) =>
         prev.map((block) =>
           block.id === draggingId
-            ? { 
-                ...block, 
-                // Aplicar snap e garantir valores positivos, mantendo precisão
-                x: Math.max(0, snapValue(block.x + deltaX)), 
-                y: Math.max(0, snapValue(block.y + deltaY)) 
-              }
+            ? {
+              ...block,
+              // Aplicar snap e garantir valores positivos, mantendo precisão
+              x: Math.max(0, snapValue(block.x + deltaX)),
+              y: Math.max(0, snapValue(block.y + deltaY))
+            }
             : block
         )
       );
@@ -400,11 +405,11 @@ export default function SlideEditorModal({
         prev.map((block) =>
           block.id === resizingId
             ? {
-                ...block,
-                // Manter precisão no resize, mínimo 20px
-                width: Math.max(20, block.width + deltaX),
-                height: Math.max(20, block.height + deltaY)
-              }
+              ...block,
+              // Manter precisão no resize, mínimo 20px
+              width: Math.max(20, block.width + deltaX),
+              height: Math.max(20, block.height + deltaY)
+            }
             : block
         )
       );
@@ -423,6 +428,7 @@ export default function SlideEditorModal({
   const handleDoubleClick = (id: string, content: string) => {
     const b = blocks.find((x) => x.id === id);
     if (b?.kind === 'logo') return;
+    if (isEditing === id) return;
     setIsEditing(id);
     setEditContent(content);
   };
@@ -450,14 +456,14 @@ export default function SlideEditorModal({
         return updated;
       })
     );
-    
+
     setIsEditing(null);
     setEditContent('');
   };
 
   const updateBlockProperty = (property: keyof TextBlock, value: any) => {
     if (!selectedBlockId) return;
-    
+
     setBlocks((prev) =>
       prev.map((block) =>
         block.id === selectedBlockId ? { ...block, [property]: value } : block
@@ -512,16 +518,16 @@ export default function SlideEditorModal({
 
     // Persistir layout para o Python respeitar posição/tamanho/fonte
     // Filtrar campos exclusivos do planner se não for planner
-    const blocksToSave = isPlannerSlide 
-      ? blocks 
+    const blocksToSave = isPlannerSlide
+      ? blocks
       : blocks.filter(b => {
-          // Sempre filtrar nome_cliente de não-planner
-          if (b.id === 'nome_cliente') return false;
-          // Filtrar mes apenas se não existia no slideData original (evita criar blocos indesejados)
-          if (b.id === 'mes' && slideData.mes === undefined) return false;
-          return true;
-        });
-    
+        // Sempre filtrar nome_cliente de não-planner
+        if (b.id === 'nome_cliente') return false;
+        // Filtrar mes apenas se não existia no slideData original (evita criar blocos indesejados)
+        if (b.id === 'mes' && slideData.mes === undefined) return false;
+        return true;
+      });
+
     updatedSlideData.layout = blocksToSave.map((b) => ({
       id: b.id,
       x: b.x,
@@ -556,7 +562,7 @@ export default function SlideEditorModal({
     if (!blockIds.has('texto')) updatedSlideData.texto_longo = '';
     if (!blockIds.has('frase')) updatedSlideData.frase = '';
     if (!blockIds.has('legenda')) updatedSlideData.legenda = '';
-    
+
     // Limpeza robusta de campos por tipo de lâmina
     if (isPlannerSlide) {
       // Planner: limpar se blocos foram removidos
@@ -692,7 +698,7 @@ export default function SlideEditorModal({
                 <div className="absolute top-0 left-0 bottom-0 w-6 bg-gray-900/80 flex items-center justify-center text-[10px] text-gray-400 pointer-events-none" style={{ writingMode: 'vertical-rl' }}>
                   Régua Vertical (1080px)
                 </div>
-                
+
                 {/* Overlay de Textos */}
                 <div className="absolute inset-0">
                   {blocks.map((block) => (
@@ -713,7 +719,7 @@ export default function SlideEditorModal({
                         // Escalar fontSize: usar a altura do container (que tem aspect ratio 16:9)
                         // O container tem width:100% e aspect-ratio:16/9, então sua altura é width/16*9
                         // fontSize em pixels absolutos * (altura_real_canvas / 1080)
-                        fontSize: canvasRef.current 
+                        fontSize: canvasRef.current
                           ? `${(block.fontSize * canvasRef.current.clientHeight / 1080).toFixed(2)}px`
                           : `${block.fontSize}px`,
                         color: block.color,
@@ -818,7 +824,7 @@ export default function SlideEditorModal({
                   ))}
                 </div>
               </div>
-              
+
               <div className="mt-4 bg-gray-800 rounded-lg p-4 text-xs text-gray-400">
                 <div className="grid grid-cols-2 gap-4 mb-3">
                   <div>
@@ -862,7 +868,7 @@ export default function SlideEditorModal({
             <div className="lg:col-span-1 space-y-4">
               <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
                 <h4 className="text-sm font-bold text-white mb-3">⚙️ Propriedades</h4>
-                
+
                 {selectedBlock ? (
                   <div className="space-y-3">
                     {selectedBlock.kind === 'logo' && (
@@ -909,17 +915,15 @@ export default function SlideEditorModal({
                       <div className="flex gap-2">
                         <button
                           onClick={() => updateBlockProperty('shadow', true)}
-                          className={`flex-1 px-3 py-2 rounded text-xs ${
-                            selectedBlock.shadow !== false ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
-                          }`}
+                          className={`flex-1 px-3 py-2 rounded text-xs ${selectedBlock.shadow !== false ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
+                            }`}
                         >
                           ON
                         </button>
                         <button
                           onClick={() => updateBlockProperty('shadow', false)}
-                          className={`flex-1 px-3 py-2 rounded text-xs ${
-                            selectedBlock.shadow === false ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
-                          }`}
+                          className={`flex-1 px-3 py-2 rounded text-xs ${selectedBlock.shadow === false ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
+                            }`}
                         >
                           OFF
                         </button>
@@ -963,9 +967,8 @@ export default function SlideEditorModal({
                           <button
                             key={color}
                             onClick={() => updateBlockProperty('color', color)}
-                            className={`w-10 h-10 rounded border-2 ${
-                              selectedBlock.color === color ? 'border-blue-500 scale-110' : 'border-gray-600'
-                            }`}
+                            className={`w-10 h-10 rounded border-2 ${selectedBlock.color === color ? 'border-blue-500 scale-110' : 'border-gray-600'
+                              }`}
                             style={{ backgroundColor: color }}
                           />
                         ))}
@@ -977,21 +980,19 @@ export default function SlideEditorModal({
                       <div className="flex gap-2">
                         <button
                           onClick={() => updateBlockProperty('fontWeight', 'normal')}
-                          className={`flex-1 px-3 py-2 rounded text-xs ${
-                            selectedBlock.fontWeight === 'normal'
+                          className={`flex-1 px-3 py-2 rounded text-xs ${selectedBlock.fontWeight === 'normal'
                               ? 'bg-blue-600 text-white'
                               : 'bg-gray-700 text-gray-300'
-                          }`}
+                            }`}
                         >
                           Normal
                         </button>
                         <button
                           onClick={() => updateBlockProperty('fontWeight', 'bold')}
-                          className={`flex-1 px-3 py-2 rounded text-xs font-bold ${
-                            selectedBlock.fontWeight === 'bold'
+                          className={`flex-1 px-3 py-2 rounded text-xs font-bold ${selectedBlock.fontWeight === 'bold'
                               ? 'bg-blue-600 text-white'
                               : 'bg-gray-700 text-gray-300'
-                          }`}
+                            }`}
                         >
                           Bold
                         </button>
@@ -1005,11 +1006,10 @@ export default function SlideEditorModal({
                           <button
                             key={align}
                             onClick={() => updateBlockProperty('align', align)}
-                            className={`flex-1 px-3 py-2 rounded text-xs ${
-                              selectedBlock.align === align
+                            className={`flex-1 px-3 py-2 rounded text-xs ${selectedBlock.align === align
                                 ? 'bg-blue-600 text-white'
                                 : 'bg-gray-700 text-gray-300'
-                            }`}
+                              }`}
                           >
                             {align === 'left' ? '⬅' : align === 'center' ? '↔' : '➡'}
                           </button>
@@ -1045,11 +1045,10 @@ export default function SlideEditorModal({
                     <button
                       key={block.id}
                       onClick={() => setSelectedBlockId(block.id)}
-                      className={`w-full text-left text-xs p-2 rounded truncate ${
-                        selectedBlockId === block.id
+                      className={`w-full text-left text-xs p-2 rounded truncate ${selectedBlockId === block.id
                           ? 'bg-blue-600 text-white'
                           : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                      }`}
+                        }`}
                     >
                       {block.id}: {block.content.substring(0, 30)}...
                     </button>
