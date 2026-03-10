@@ -17,9 +17,9 @@ async function testGeminiKey() {
   console.log("📡 Testando conexão com a API do Gemini...");
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  
+
   // Lista de modelos para testar
-  const modelsToTest = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+  const modelsToTest = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
 
   for (const modelName of modelsToTest) {
     console.log(`\n🤖 Testando modelo: ${modelName}...`);
@@ -27,7 +27,7 @@ async function testGeminiKey() {
       const model = genAI.getGenerativeModel({ model: modelName });
       const result = await model.generateContent("Responda apenas com a palavra 'OK'.");
       const response = result.response.text();
-      
+
       console.log(`✅ SUCESSO! Modelo ${modelName} respondeu: "${response.trim()}"`);
     } catch (error: any) {
       console.error(`❌ FALHA no modelo ${modelName}:`);

@@ -388,7 +388,7 @@ router.post("/branding/extract", (req: Request, res: Response, next: NextFunctio
     let result;
     let responseText = "";
 
-    const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+    const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
 
     const prompt = `Analise estas imagens visualmente. Aja como um especialista de branding e retorne APENAS um JSON válido (sem markdown) com esta estrutura exata:
 

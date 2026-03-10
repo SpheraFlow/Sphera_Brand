@@ -10,7 +10,7 @@ class GeminiClient {
 
   constructor() {
     const apiKey = process.env.GOOGLE_API_KEY;
-    
+
     if (!apiKey || apiKey === "your_google_api_key_here") {
       console.warn("⚠️  GOOGLE_API_KEY não configurada. A rota /process-post não funcionará.");
       // Não quebrar o servidor, apenas avisar
@@ -49,14 +49,14 @@ class GeminiClient {
       // Criar conteúdo multimodal (texto + imagem)
       let result;
       let text = "";
-      
-      const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+
+      const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
 
       for (const modelName of modelsToTry) {
         try {
           console.log(`🤖 [DEBUG] Tentando modelo (imagem): ${modelName}...`);
           const model = this.genAI.getGenerativeModel({ model: modelName });
-          
+
           result = await model.generateContent([
             {
               inlineData: {
@@ -66,18 +66,18 @@ class GeminiClient {
             },
             prompt || defaultPrompt,
           ]);
-          
+
           const response = result.response;
           text = response.text();
           console.log(`✅ [DEBUG] Sucesso com ${modelName}`);
           break;
         } catch (modelError: any) {
           console.warn(`⚠️ [DEBUG] ${modelName} falhou:`, modelError.message);
-          
+
           if (modelName === modelsToTry[modelsToTry.length - 1]) {
-             throw new Error(`Todos os modelos falharam na análise de imagem. Erro final: ${modelError.message}`);
+            throw new Error(`Todos os modelos falharam na análise de imagem. Erro final: ${modelError.message}`);
           }
-          
+
           console.log("⏳ [DEBUG] Aguardando 2s antes do próximo modelo...");
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
@@ -104,31 +104,31 @@ class GeminiClient {
     try {
       let result;
       let text = "";
-      
-      const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
+
+      const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
 
       for (const modelName of modelsToTry) {
         try {
           console.log(`🤖 [DEBUG] Tentando modelo (texto): ${modelName}...`);
           const model = this.genAI.getGenerativeModel({ model: modelName });
           result = await model.generateContent(prompt);
-          
+
           const response = result.response;
           text = response.text();
           console.log(`✅ [DEBUG] Sucesso com ${modelName}`);
           break;
         } catch (modelError: any) {
           console.warn(`⚠️ [DEBUG] ${modelName} falhou:`, modelError.message);
-          
+
           if (modelName === modelsToTry[modelsToTry.length - 1]) {
-             throw new Error(`Todos os modelos falharam na geração de texto. Erro final: ${modelError.message}`);
+            throw new Error(`Todos os modelos falharam na geração de texto. Erro final: ${modelError.message}`);
           }
-          
+
           console.log("⏳ [DEBUG] Aguardando 2s antes do próximo modelo...");
           await new Promise(resolve => setTimeout(resolve, 2000));
         }
       }
-      
+
       return text;
     } catch (error) {
       console.error("Erro ao gerar conteúdo com Gemini:", error);
@@ -143,7 +143,7 @@ class GeminiClient {
    */
   private getMimeType(filePath: string): string {
     const extension = filePath.split(".").pop()?.toLowerCase();
-    
+
     const mimeTypes: Record<string, string> = {
       jpg: "image/jpeg",
       jpeg: "image/jpeg",
