@@ -267,6 +267,7 @@ export interface Client {
   status: string;
   avatarUrl: string | null;
   criado_em: string;
+  prompt_template_agent_id?: string | null;
 }
 
 export const clientService = {
@@ -438,8 +439,8 @@ export const promptTemplateService = {
     return response.data.data;
   },
 
-  async createVersion(clienteId: string, body: string, label?: string): Promise<PromptTemplate> {
-    const response = await api.post('/prompt-templates', { clienteId, body, label });
+  async createVersion(clienteId: string | null, body: string, label?: string, agentId?: string): Promise<PromptTemplate> {
+    const response = await api.post('/prompt-templates', { clienteId, body, label, agentId });
     return response.data.data;
   },
 
@@ -448,7 +449,7 @@ export const promptTemplateService = {
     return response.data.data;
   },
 
-  async activatePredefined(clienteId: string, label: string, body: string): Promise<PromptTemplate> {
+  async activatePredefined(clienteId: string | null, label: string, body: string): Promise<PromptTemplate> {
     const response = await api.post('/prompt-templates/predefined', { clienteId, label, body });
     return response.data.data;
   },

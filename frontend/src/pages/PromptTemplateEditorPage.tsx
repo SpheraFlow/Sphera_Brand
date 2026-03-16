@@ -72,6 +72,7 @@ export default function PromptTemplateEditorPage() {
     }, [isAdmin, navigate, clientId]);
 
     const isDirty = body !== originalBody;
+    const isCustomAgent = agentId === 'custom';
 
     // Highlight {{VARIABLE}} occurrences in the textarea by counting them
     const usedVars = KNOWN_VARIABLES.filter(v => body.includes(`{{${v.key}}}`));
@@ -85,7 +86,7 @@ export default function PromptTemplateEditorPage() {
         try {
             // Create a new version passing agent_id via API
             const created = await api.post('/prompt-templates', {
-                clienteId: clientId,
+                clienteId: isCustomAgent ? clientId : null,
                 body: body,
                 label: label || undefined,
                 agentId: agentId
@@ -95,7 +96,8 @@ export default function PromptTemplateEditorPage() {
             setActivating(true);
             await api.post(`/prompt-templates/${created.id}/activate`);
             setOriginalBody(body);
-            setSuccessMsg('✅ Template salvo e ativado no Agente com sucesso!');
+            const scopeLabel = isCustomAgent ? 'no cliente' : 'globalmente';
+            setSuccessMsg(`Template salvo e ativado ${scopeLabel} com sucesso!`);
             setTimeout(() => setSuccessMsg(null), 4000);
         } catch (e: any) {
             const msg = e.response?.data?.errors?.join('\n') || e.response?.data?.message || 'Erro ao salvar.';
@@ -156,6 +158,9 @@ export default function PromptTemplateEditorPage() {
                             Não salvo
                         </span>
                     )}
+                    <span className="text-xs text-gray-500 border border-gray-700/60 px-2.5 py-1 rounded-full">
+                        {isCustomAgent ? 'Escopo: Cliente' : 'Escopo: Global'}
+                    </span>
                     <button
                         onClick={handleSaveAndActivate}
                         disabled={saving || activating || !isDirty || missingRequired.length > 0}

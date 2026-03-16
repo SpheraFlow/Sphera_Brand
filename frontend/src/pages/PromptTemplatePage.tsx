@@ -4,18 +4,6 @@ import api from '../services/api';
 import { Pencil } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-interface TemplateVersion {
-  id: string;
-  cliente_id: string | null;
-  version: number;
-  label: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
-  body?: string;
-  agent_id?: string;
-}
-
 const ESTRATEGISTA_PROMPT = `Voce e O Estrategista de Conteudo da marca (Nicho: {{NICHO}}).
 Seu papel nao e apenas criar posts - e engenheirar cada peca de conteudo como uma alavanca de ROI: cada dia do calendario deve mover o publico um passo adiante no funil (Consciencia -> Interesse -> Desejo -> Acao).
 
@@ -316,42 +304,34 @@ export default function PromptTemplatePage() {
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
 
-  const [allTemplates, setAllTemplates] = useState<TemplateVersion[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activatingId, setActivatingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const loadTemplates = useCallback(async () => {
+  const loadClientSelection = useCallback(async () => {
     if (!clientId) return;
     try {
       setLoading(true);
       setError(null);
-      const res = await api.get('/prompt-templates/' + clientId);
-      setAllTemplates(res.data.data);
+      const res = await api.get('/clients/' + clientId);
+      setSelectedAgentId(res.data.cliente?.prompt_template_agent_id || null);
     } catch (e: any) {
-      if (e.response?.status !== 404) {
-        setError('Erro ao carregar templates.');
-      } else {
-        setAllTemplates([]);
-      }
+      setError('Erro ao carregar cliente.');
     } finally {
       setLoading(false);
     }
   }, [clientId]);
 
   useEffect(() => {
-    loadTemplates();
-  }, [loadTemplates]);
+    loadClientSelection();
+  }, [loadClientSelection]);
 
-  const getClientActiveTemplate = () =>
-    allTemplates
-      .filter(t => t.cliente_id === clientId && t.is_active)
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())[0] ?? null;
-
-  const isActive = (agentId: string) => getClientActiveTemplate()?.agent_id === agentId;
+  const effectiveAgentId = selectedAgentId || 'estrategista';
+  const isActive = (agentId: string) => effectiveAgentId === agentId;
 
   const isCustomActive = () => {
-    return getClientActiveTemplate()?.agent_id === 'custom';
+    return effectiveAgentId === 'custom';
   };
 
   const handleActivateAgent = async (agent: typeof PREDEFINED_AGENTS[0]) => {
@@ -359,37 +339,16 @@ export default function PromptTemplatePage() {
     setActivatingId(agent.id);
     setError(null);
     try {
-      await api.post('/prompt-templates/predefined', {
-        clienteId: clientId,
-        label: agent.title,
-        body: agent.promptBody,
-        agentId: agent.id,
-      }).then(r => r.data.data);
-      await loadTemplates();
+      await api.put('/clients/' + clientId, { prompt_template_agent_id: agent.id });
+      setSelectedAgentId(agent.id);
     } catch (e: any) {
-      const errs = e.response?.data?.errors?.join('\n');
-      setError(errs ?? e.response?.data?.message ?? 'Erro ao ativar o agente.');
+      setError(e.response?.data?.message ?? 'Erro ao definir o agente.');
     } finally {
       setActivatingId(null);
     }
   };
 
-  const handleDeactivateAgent = async (agent: typeof PREDEFINED_AGENTS[0]) => {
-    const tpl = getClientActiveTemplate();
-    if (!tpl || tpl.agent_id !== agent.id) return;
-    setActivatingId(agent.id);
-    setError(null);
-    try {
-      await api.post(`/prompt-templates/${tpl.id}/deactivate`);
-      await loadTemplates();
-    } catch (e: any) {
-      setError(e.response?.data?.message ?? 'Erro ao desativar o agente.');
-    } finally {
-      setActivatingId(null);
-    }
-  };
-
-  if (loading && allTemplates.length === 0) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#06080e] flex items-center justify-center">
         <div className="flex items-center gap-3 text-slate-500">
@@ -434,8 +393,8 @@ export default function PromptTemplatePage() {
                 key={agent.id}
                 onClick={() => {
                   if (activating) return;
-                  if (active) handleDeactivateAgent(agent);
-                  else handleActivateAgent(agent);
+                  if (active) return;
+                  handleActivateAgent(agent);
                 }}
                 className={`group relative overflow-hidden rounded-2xl border transition-all duration-300 flex flex-col h-full cursor-pointer ${active ? 'border-indigo-500 bg-indigo-950/20 shadow-[0_0_30px_rgba(99,102,241,0.15)] transform scale-[1.02]' : 'border-slate-800/60 bg-[#0b0e17] hover:border-slate-600 hover:bg-[#0d111c]'} ${activating ? 'opacity-50 pointer-events-none' : ''}`}
               >
@@ -462,8 +421,7 @@ export default function PromptTemplatePage() {
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500"></span>
                         </span>
-                        <span className="group-hover:hidden">Persona Ativa</span>
-                        <span className="hidden group-hover:inline">Clique para desativar</span>
+                        <span>Persona Ativa</span>
                       </div>
                     ) : (
                       <button

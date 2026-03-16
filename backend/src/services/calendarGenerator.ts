@@ -550,20 +550,39 @@ export const generateCalendarForMonth = async (opts: GenerateMonthOptions) => {
     let promptTemplateId: string | null = null;
     let promptTemplateVersion: number | null = null;
     let promptTemplateAgentId: string | null = null;
+    let selectedAgentId: string | null = null;
+    try {
+        const agentResult = await db.query(
+            "SELECT prompt_template_agent_id FROM clientes WHERE id = $1",
+            [clienteId]
+        );
+        selectedAgentId = agentResult.rows[0]?.prompt_template_agent_id || null;
+    } catch (_agentErr) {
+        selectedAgentId = null;
+    }
+
+    const allowedAgents = new Set(["estrategista", "storyteller", "visionario", "custom"]);
+    const agentIdToUse = allowedAgents.has(selectedAgentId || "") ? (selectedAgentId as string) : "estrategista";
+    promptTemplateAgentId = agentIdToUse;
     try {
         const templateResult = await db.query(
-            `SELECT id, version, body, cliente_id, agent_id FROM prompt_templates
-             WHERE (cliente_id = $1 OR cliente_id IS NULL) AND is_active = true
-             ORDER BY (cliente_id IS NOT NULL) DESC, updated_at DESC NULLS LAST, created_at DESC
-             LIMIT 1`,
-            [clienteId]
+            agentIdToUse === "custom"
+                ? `SELECT id, version, body, cliente_id, agent_id FROM prompt_templates
+                   WHERE cliente_id = $1 AND agent_id = 'custom' AND is_active = true
+                   ORDER BY updated_at DESC NULLS LAST, created_at DESC
+                   LIMIT 1`
+                : `SELECT id, version, body, cliente_id, agent_id FROM prompt_templates
+                   WHERE cliente_id IS NULL AND agent_id = $1 AND is_active = true
+                   ORDER BY updated_at DESC NULLS LAST, created_at DESC
+                   LIMIT 1`,
+            agentIdToUse === "custom" ? [clienteId] : [agentIdToUse]
         );
         if (templateResult.rows.length > 0) {
             const row = templateResult.rows[0];
             promptBody = row.body;
             promptTemplateId = row.id;
             promptTemplateVersion = row.version;
-            promptTemplateAgentId = row.agent_id || null;
+            promptTemplateAgentId = row.agent_id || agentIdToUse;
             templateSource = row.cliente_id ? "cliente" : "global";
         } else {
             promptBody = HARDCODED_TEMPLATE_FALLBACK;

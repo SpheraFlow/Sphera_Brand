@@ -17,14 +17,14 @@ router.use(requireAuth);
 // POST /api/clients - Criar novo cliente (PermissÃ£o: clients_manage)
 router.post("/", requirePermission("clients_manage"), async (req: AuthRequest, res: Response) => {
   try {
-    const { nome, persona_atualizada, categorias_nicho, clickup_list_id } = req.body;
+    const { nome, persona_atualizada, categorias_nicho, clickup_list_id, prompt_template_agent_id } = req.body;
     const logoUrl = req.file ? `/uploads/logos/${req.file.filename}` : null;
     if (!nome) return res.status(400).json({ success: false, error: "Campo 'nome' Ã© obrigatÃ³rio." });
 
     const result = await db.query(
-      `INSERT INTO clientes (nome, persona_atualizada, categorias_nicho, logo_url, clickup_list_id) 
-         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [nome, persona_atualizada, JSON.stringify(categorias_nicho || []), logoUrl, clickup_list_id || null]
+      `INSERT INTO clientes (nome, persona_atualizada, categorias_nicho, logo_url, clickup_list_id, prompt_template_agent_id) 
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [nome, persona_atualizada, JSON.stringify(categorias_nicho || []), logoUrl, clickup_list_id || null, prompt_template_agent_id || null]
     );
     return res.status(201).json({ success: true, cliente: result.rows[0] });
   } catch (error: any) {
@@ -53,10 +53,10 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     let result;
 
     if (userRole === 'admin' || canManageClients) {
-      result = await db.query("SELECT id, nome, persona_atualizada, categorias_nicho, logo_url, clickup_list_id, criado_em FROM clientes ORDER BY criado_em DESC");
+      result = await db.query("SELECT id, nome, persona_atualizada, categorias_nicho, logo_url, clickup_list_id, prompt_template_agent_id, criado_em FROM clientes ORDER BY criado_em DESC");
     } else {
       result = await db.query(`
-        SELECT c.id, c.nome, c.persona_atualizada, c.categorias_nicho, c.logo_url, c.clickup_list_id, c.criado_em 
+        SELECT c.id, c.nome, c.persona_atualizada, c.categorias_nicho, c.logo_url, c.clickup_list_id, c.prompt_template_agent_id, c.criado_em 
         FROM clientes c
         JOIN user_clientes uc ON c.id = uc.cliente_id
         WHERE uc.user_id = $1
@@ -84,7 +84,7 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
       if (vinculo.rows.length === 0) return res.status(403).json({ success: false, error: "Acesso negado a este cliente." });
     }
 
-    const result = await db.query("SELECT id, nome, persona_atualizada, categorias_nicho, logo_url, clickup_list_id, criado_em FROM clientes WHERE id = $1", [id]);
+    const result = await db.query("SELECT id, nome, persona_atualizada, categorias_nicho, logo_url, clickup_list_id, prompt_template_agent_id, criado_em FROM clientes WHERE id = $1", [id]);
     if (result.rows.length === 0) return res.status(404).json({ success: false, error: "Cliente nÃ£o encontrado." });
 
     return res.json({ success: true, cliente: result.rows[0] });
@@ -107,14 +107,15 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
       if (vinculo.rows.length === 0) return res.status(403).json({ success: false, error: "Acesso negado." });
     }
 
-    const { nome, categorias_nicho, clickup_list_id, logo_url } = req.body || {};
+    const { nome, categorias_nicho, clickup_list_id, logo_url, prompt_template_agent_id } = req.body || {};
     const categoriasArray = normalizeCategoriasNicho(categorias_nicho);
     const hasNome = typeof nome === "string" && nome.trim().length > 0;
     const hasCategorias = categorias_nicho !== undefined;
     const hasClickupListId = clickup_list_id !== undefined;
     const hasLogoUrl = logo_url !== undefined;
+    const hasPromptTemplateAgentId = prompt_template_agent_id !== undefined;
 
-    if (!hasNome && !hasCategorias && !hasClickupListId && !hasLogoUrl) return res.status(400).json({ success: false, error: "Envie nome ou categorias ou clickup_list_id ou logo_url" });
+    if (!hasNome && !hasCategorias && !hasClickupListId && !hasLogoUrl && !hasPromptTemplateAgentId) return res.status(400).json({ success: false, error: "Envie nome ou categorias ou clickup_list_id ou logo_url" });
 
     const sets: string[] = [];
     const params: any[] = [id];
@@ -123,9 +124,10 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
     if (hasCategorias) { sets.push(`categorias_nicho = $${i++}::jsonb`); params.push(JSON.stringify(categoriasArray)); }
     if (hasClickupListId) { sets.push(`clickup_list_id = $${i++}`); params.push(clickup_list_id ? String(clickup_list_id).trim() : null); }
     if (hasLogoUrl) { sets.push(`logo_url = $${i++}`); params.push(logo_url ? String(logo_url).trim() : null); }
+    if (hasPromptTemplateAgentId) { sets.push(`prompt_template_agent_id = $${i++}`); params.push(prompt_template_agent_id ? String(prompt_template_agent_id).trim() : null); }
 
     const result = await db.query(
-      `UPDATE clientes SET ${sets.join(", ")} WHERE id = $1 RETURNING id, nome, persona_atualizada, categorias_nicho, logo_url, clickup_list_id, criado_em`,
+      `UPDATE clientes SET ${sets.join(", ")} WHERE id = $1 RETURNING id, nome, persona_atualizada, categorias_nicho, logo_url, clickup_list_id, prompt_template_agent_id, criado_em`,
       params
     );
     if (result.rows.length === 0) return res.status(404).json({ success: false, error: "Cliente nÃ£o encontrado." });

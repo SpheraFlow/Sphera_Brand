@@ -187,12 +187,18 @@ router.get("/prompt-templates/:clienteId", async (req: Request, res: Response) =
 router.get("/prompt-templates/:clienteId/active/:agentId", async (req: Request, res: Response) => {
   try {
     const { clienteId, agentId } = req.params;
+    const useClientScope = agentId === "custom";
     const result = await db.query(
-      `SELECT * FROM prompt_templates
-       WHERE (cliente_id = $1 OR cliente_id IS NULL) AND agent_id = $2 AND is_active = true
-       ORDER BY (cliente_id IS NOT NULL) DESC
-       LIMIT 1`,
-      [clienteId, agentId]
+      useClientScope
+        ? `SELECT * FROM prompt_templates
+           WHERE cliente_id = $1 AND agent_id = $2 AND is_active = true
+           ORDER BY updated_at DESC NULLS LAST
+           LIMIT 1`
+        : `SELECT * FROM prompt_templates
+           WHERE cliente_id IS NULL AND agent_id = $1 AND is_active = true
+           ORDER BY updated_at DESC NULLS LAST
+           LIMIT 1`,
+      useClientScope ? [clienteId, agentId] : [agentId]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ success: false, message: "Nenhum template ativo encontrado." });
@@ -223,23 +229,27 @@ router.get("/prompt-templates/:clienteId/history", async (req: Request, res: Res
 // POST /api/prompt-templates — Criar nova versão (draft, inativa)
 router.post("/prompt-templates", async (req: Request, res: Response) => {
   try {
-    const { clienteId, body, label, agentId = 'estrategista' } = req.body;
-    if (!clienteId || !body) {
+    const hasClienteId = Object.prototype.hasOwnProperty.call(req.body, "clienteId");
+    const { clienteId = null, body, label, agentId = 'estrategista' } = req.body;
+    if (!hasClienteId || !body) {
       return res.status(400).json({ success: false, message: "Campos obrigatórios: clienteId e body." });
     }
 
+    const isGlobal = clienteId === null;
     const versionResult = await db.query(
-      "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id = $1",
-      [clienteId]
+      isGlobal
+        ? "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id IS NULL"
+        : "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id = $1",
+      isGlobal ? [] : [clienteId]
     );
     const nextVersion = versionResult.rows[0].next_version;
-    const autoLabel = label || `v${nextVersion} - Customizado`;
+    const autoLabel = label || `v${nextVersion} - ${isGlobal ? "Global" : "Customizado"}`;
 
     const result = await db.query(
       `INSERT INTO prompt_templates (cliente_id, version, label, body, is_active, agent_id)
        VALUES ($1, $2, $3, $4, false, $5)
        RETURNING *`,
-      [clienteId, nextVersion, autoLabel, body, agentId]
+      [isGlobal ? null : clienteId, nextVersion, autoLabel, body, agentId]
     );
     return res.status(201).json({ success: true, data: result.rows[0] });
   } catch (error: any) {

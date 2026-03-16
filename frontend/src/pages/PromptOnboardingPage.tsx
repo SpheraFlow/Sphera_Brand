@@ -111,12 +111,17 @@ export default function PromptOnboardingPage() {
     const savePromptTemplate = async (body: string, label?: string) => {
         try {
             // Cria a nova versÃ£o
-            const created = await promptTemplateService.createVersion(clientId!, body, label || 'Gerado via Onboarding (IA)');
+            const created = await promptTemplateService.createVersion(clientId!, body, label || 'Gerado via Onboarding (IA)', 'custom');
             // Tenta ativar automaticamente
+            let activated = false;
             try {
                 await promptTemplateService.activate(created.id);
+                activated = true;
             } catch {
                 // Se a ativaÃ§Ã£o falhar (guardrails), o usuÃ¡rio verÃ¡ o template na pÃ¡gina e pode ativar manualmente
+            }
+            if (activated) {
+                await api.put(`/clients/${clientId}`, { prompt_template_agent_id: 'custom' });
             }
             navigate(`/client/${clientId}/prompt-template`);
         } catch (err: any) {
