@@ -52,3 +52,5 @@ tmp/
 # Database data
 docker/postgres_data/
 DATABASE_MIGRATION.sql
+laminas/*.psd
+laminas/*.psd
