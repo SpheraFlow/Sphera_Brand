@@ -1,4 +1,4 @@
-import { Router, Response } from "express";
+﻿import { Router, Response } from "express";
 import db from "../config/database";
 import { requireAuth, requirePermission, AuthRequest } from "../middlewares/requireAuth";
 
@@ -11,15 +11,15 @@ function normalizeCategoriasNicho(input: unknown): string[] {
   return [];
 }
 
-// Requer autenticação para todas as rotas neste router
+// Requer autenticaÃ§Ã£o para todas as rotas neste router
 router.use(requireAuth);
 
-// POST /api/clients - Criar novo cliente (Permissão: clients_manage)
+// POST /api/clients - Criar novo cliente (PermissÃ£o: clients_manage)
 router.post("/", requirePermission("clients_manage"), async (req: AuthRequest, res: Response) => {
   try {
     const { nome, persona_atualizada, categorias_nicho, clickup_list_id } = req.body;
     const logoUrl = req.file ? `/uploads/logos/${req.file.filename}` : null;
-    if (!nome) return res.status(400).json({ success: false, error: "Campo 'nome' é obrigatório." });
+    if (!nome) return res.status(400).json({ success: false, error: "Campo 'nome' Ã© obrigatÃ³rio." });
 
     const result = await db.query(
       `INSERT INTO clientes (nome, persona_atualizada, categorias_nicho, logo_url, clickup_list_id) 
@@ -32,19 +32,19 @@ router.post("/", requirePermission("clients_manage"), async (req: AuthRequest, r
   }
 });
 
-// DELETE /api/clients/:id - Excluir cliente (Permissão: clients_manage)
+// DELETE /api/clients/:id - Excluir cliente (PermissÃ£o: clients_manage)
 router.delete("/:id", requirePermission("clients_manage"), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const result = await db.query("DELETE FROM clientes WHERE id = $1 RETURNING id", [id]);
-    if (result.rows.length === 0) return res.status(404).json({ success: false, error: "Cliente não encontrado." });
-    return res.json({ success: true, message: "Cliente excluído com sucesso." });
+    if (result.rows.length === 0) return res.status(404).json({ success: false, error: "Cliente nÃ£o encontrado." });
+    return res.json({ success: true, message: "Cliente excluÃ­do com sucesso." });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: "Erro ao excluir cliente." });
   }
 });
 
-// GET /api/clients - Listar clientes (Admin/Quem tem 'clients_manage' vê todos, outros veem vinculados)
+// GET /api/clients - Listar clientes (Admin/Quem tem 'clients_manage' vÃª todos, outros veem vinculados)
 router.get("/", async (req: AuthRequest, res: Response) => {
   try {
     const userRole = req.user?.role;
@@ -53,10 +53,10 @@ router.get("/", async (req: AuthRequest, res: Response) => {
     let result;
 
     if (userRole === 'admin' || canManageClients) {
-      result = await db.query("SELECT id, nome, persona_atualizada, categorias_nicho, clickup_list_id, criado_em FROM clientes ORDER BY criado_em DESC");
+      result = await db.query("SELECT id, nome, persona_atualizada, categorias_nicho, logo_url, clickup_list_id, criado_em FROM clientes ORDER BY criado_em DESC");
     } else {
       result = await db.query(`
-        SELECT c.id, c.nome, c.persona_atualizada, c.categorias_nicho, c.clickup_list_id, c.criado_em 
+        SELECT c.id, c.nome, c.persona_atualizada, c.categorias_nicho, c.logo_url, c.clickup_list_id, c.criado_em 
         FROM clientes c
         JOIN user_clientes uc ON c.id = uc.cliente_id
         WHERE uc.user_id = $1
@@ -71,7 +71,7 @@ router.get("/", async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET /api/clients/:id - Buscar cliente (Se não tem permissão de gerir, verificar vínculo)
+// GET /api/clients/:id - Buscar cliente (Se nÃ£o tem permissÃ£o de gerir, verificar vÃ­nculo)
 router.get("/:id", async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -84,8 +84,8 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
       if (vinculo.rows.length === 0) return res.status(403).json({ success: false, error: "Acesso negado a este cliente." });
     }
 
-    const result = await db.query("SELECT id, nome, persona_atualizada, categorias_nicho, clickup_list_id, criado_em FROM clientes WHERE id = $1", [id]);
-    if (result.rows.length === 0) return res.status(404).json({ success: false, error: "Cliente não encontrado." });
+    const result = await db.query("SELECT id, nome, persona_atualizada, categorias_nicho, logo_url, clickup_list_id, criado_em FROM clientes WHERE id = $1", [id]);
+    if (result.rows.length === 0) return res.status(404).json({ success: false, error: "Cliente nÃ£o encontrado." });
 
     return res.json({ success: true, cliente: result.rows[0] });
   } catch (error) {
@@ -94,7 +94,7 @@ router.get("/:id", async (req: AuthRequest, res: Response) => {
 });
 
 // PUT /api/clients/:id - Atualizar dados
-// Quem tem 'clients_manage' pode tudo. Outros apenas se tiverem vínculo (e geralmente o frontend limitará a edição de nicho)
+// Quem tem 'clients_manage' pode tudo. Outros apenas se tiverem vÃ­nculo (e geralmente o frontend limitarÃ¡ a ediÃ§Ã£o de nicho)
 router.put("/:id", async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -107,13 +107,14 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
       if (vinculo.rows.length === 0) return res.status(403).json({ success: false, error: "Acesso negado." });
     }
 
-    const { nome, categorias_nicho, clickup_list_id } = req.body || {};
+    const { nome, categorias_nicho, clickup_list_id, logo_url } = req.body || {};
     const categoriasArray = normalizeCategoriasNicho(categorias_nicho);
     const hasNome = typeof nome === "string" && nome.trim().length > 0;
     const hasCategorias = categorias_nicho !== undefined;
     const hasClickupListId = clickup_list_id !== undefined;
+    const hasLogoUrl = logo_url !== undefined;
 
-    if (!hasNome && !hasCategorias && !hasClickupListId) return res.status(400).json({ success: false, error: "Envie nome ou categorias ou clickup_list_id" });
+    if (!hasNome && !hasCategorias && !hasClickupListId && !hasLogoUrl) return res.status(400).json({ success: false, error: "Envie nome ou categorias ou clickup_list_id ou logo_url" });
 
     const sets: string[] = [];
     const params: any[] = [id];
@@ -121,26 +122,27 @@ router.put("/:id", async (req: AuthRequest, res: Response) => {
     if (hasNome) { sets.push(`nome = $${i++}`); params.push(String(nome).trim()); }
     if (hasCategorias) { sets.push(`categorias_nicho = $${i++}::jsonb`); params.push(JSON.stringify(categoriasArray)); }
     if (hasClickupListId) { sets.push(`clickup_list_id = $${i++}`); params.push(clickup_list_id ? String(clickup_list_id).trim() : null); }
+    if (hasLogoUrl) { sets.push(`logo_url = $${i++}`); params.push(logo_url ? String(logo_url).trim() : null); }
 
     const result = await db.query(
-      `UPDATE clientes SET ${sets.join(", ")} WHERE id = $1 RETURNING id, nome, persona_atualizada, categorias_nicho, clickup_list_id, criado_em`,
+      `UPDATE clientes SET ${sets.join(", ")} WHERE id = $1 RETURNING id, nome, persona_atualizada, categorias_nicho, logo_url, clickup_list_id, criado_em`,
       params
     );
-    if (result.rows.length === 0) return res.status(404).json({ success: false, error: "Cliente não encontrado." });
+    if (result.rows.length === 0) return res.status(404).json({ success: false, error: "Cliente nÃ£o encontrado." });
     return res.json({ success: true, cliente: result.rows[0] });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: "Erro ao atualizar cliente." });
   }
 });
 
-// PUT /api/clients/:id/assign - Atribuir cliente a usuário (Permissão: clients_manage)
+// PUT /api/clients/:id/assign - Atribuir cliente a usuÃ¡rio (PermissÃ£o: clients_manage)
 router.put("/:id/assign", requirePermission('clients_manage'), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const { user_id, action } = req.body; // action: 'add' ou 'remove'
 
     if (!user_id || !['add', 'remove'].includes(action)) {
-      return res.status(400).json({ success: false, error: "Forneça user_id e action ('add' ou 'remove')." });
+      return res.status(400).json({ success: false, error: "ForneÃ§a user_id e action ('add' ou 'remove')." });
     }
 
     if (action === 'add') {
@@ -155,13 +157,13 @@ router.put("/:id/assign", requirePermission('clients_manage'), async (req: AuthR
       );
     }
 
-    return res.json({ success: true, message: `Vínculo ${action === 'add' ? 'adicionado' : 'removido'} com sucesso.` });
+    return res.json({ success: true, message: `VÃ­nculo ${action === 'add' ? 'adicionado' : 'removido'} com sucesso.` });
   } catch (error: any) {
-    return res.status(500).json({ success: false, error: "Erro ao atualizar vínculos do cliente." });
+    return res.status(500).json({ success: false, error: "Erro ao atualizar vÃ­nculos do cliente." });
   }
 });
 
-// GET /api/clients/:id/users - Listar usuários vinculados a um cliente (Permissão: clients_manage)
+// GET /api/clients/:id/users - Listar usuÃ¡rios vinculados a um cliente (PermissÃ£o: clients_manage)
 router.get("/:id/users", requirePermission('clients_manage'), async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
@@ -174,11 +176,11 @@ router.get("/:id/users", requirePermission('clients_manage'), async (req: AuthRe
 
     return res.json({ success: true, users: result.rows });
   } catch (error: any) {
-    return res.status(500).json({ success: false, error: "Erro ao buscar usuários do cliente." });
+    return res.status(500).json({ success: false, error: "Erro ao buscar usuÃ¡rios do cliente." });
   }
 });
 
-// ─── Dashboard Metrics ────────────────────────────────────────────────────────
+// â”€â”€â”€ Dashboard Metrics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface ChurnInput {
   lastGeneratedAt: Date | string | null;
@@ -222,7 +224,7 @@ function computeChurnRisk(input: ChurnInput): { score: number; label: "Baixo" | 
 }
 
 // GET /api/clients/:clientId/dashboard-metrics?range=30d|90d|mtd
-// Deve vir ANTES de /:id/assign e /:id/users para não ser capturado por /:id
+// Deve vir ANTES de /:id/assign e /:id/users para nÃ£o ser capturado por /:id
 router.get("/:clientId/dashboard-metrics", async (req: AuthRequest, res: Response) => {
   try {
     const { clientId } = req.params;
@@ -251,22 +253,22 @@ router.get("/:clientId/dashboard-metrics", async (req: AuthRequest, res: Respons
       rangeStart = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     }
 
-    // 1. Contagem de calendários no período
+    // 1. Contagem de calendÃ¡rios no perÃ­odo
     const calsResult = await db.query(
       "SELECT id, calendario_json, criado_em FROM calendarios WHERE cliente_id=$1 AND criado_em >= $2",
       [clientId, rangeStart]
     );
     const calendarsCount = calsResult.rows.length;
 
-    // 1.5. AUTO-SEED HISTÓRICO: Garantir que calendários antigos tenham seus calendar_items populados
-    // Isso resolve a perda do histórico: calendários antes da migration ou que não passaram pelo ClientHub
+    // 1.5. AUTO-SEED HISTÃ“RICO: Garantir que calendÃ¡rios antigos tenham seus calendar_items populados
+    // Isso resolve a perda do histÃ³rico: calendÃ¡rios antes da migration ou que nÃ£o passaram pelo ClientHub
     try {
       const calsToCheck = calsResult.rows;
       for (const cal of calsToCheck) {
-        // Verifica se este calendário já tem itens em calendar_items
+        // Verifica se este calendÃ¡rio jÃ¡ tem itens em calendar_items
         const checkItems = await db.query("SELECT 1 FROM calendar_items WHERE calendario_id=$1 LIMIT 1", [cal.id]);
         if (checkItems.rows.length === 0) {
-          // Calendário não semeado ainda! Vamos semear com o status histórico correto.
+          // CalendÃ¡rio nÃ£o semeado ainda! Vamos semear com o status histÃ³rico correto.
           let posts: any[] = [];
           try {
             posts = typeof cal.calendario_json === "string" ? JSON.parse(cal.calendario_json) : (cal.calendario_json ?? []);
@@ -282,7 +284,7 @@ router.get("/:clientId/dashboard-metrics", async (req: AuthRequest, res: Respons
             if (!dia || !tema || !formato) continue;
 
             // Mapeia status legado (sugerido, aprovado, publicado) para o novo enum
-            // Se post.status não existir, o default é 'draft'
+            // Se post.status nÃ£o existir, o default Ã© 'draft'
             let status = 'draft';
             const legacyStatus = (post.status ?? '').toLowerCase();
             if (legacyStatus === 'aprovado' || legacyStatus === 'approved') status = 'approved';
@@ -290,8 +292,8 @@ router.get("/:clientId/dashboard-metrics", async (req: AuthRequest, res: Respons
             else if (legacyStatus === 'redo') status = 'redo';
             else if (legacyStatus === 'publicado' || legacyStatus === 'published') status = 'published';
 
-            // Se for aprovado ou publicado, assumimos a data de criação do calendário para o first_generated_at,
-            // e a mesma data para o approved_at / published_at (para não perder a contabilização de funil)
+            // Se for aprovado ou publicado, assumimos a data de criaÃ§Ã£o do calendÃ¡rio para o first_generated_at,
+            // e a mesma data para o approved_at / published_at (para nÃ£o perder a contabilizaÃ§Ã£o de funil)
             const calDate = cal.criado_em;
 
             await db.query(
@@ -314,14 +316,14 @@ router.get("/:clientId/dashboard-metrics", async (req: AuthRequest, res: Respons
               ]
             );
           }
-          console.log(`[dashboard-metrics] Semeado histórico para calendário ${cal.id} (${posts.length} posts).`);
+          console.log(`[dashboard-metrics] Semeado histÃ³rico para calendÃ¡rio ${cal.id} (${posts.length} posts).`);
         }
       }
     } catch (e: any) {
-      console.warn("[dashboard-metrics] Erro no auto-seed histórico:", e?.message);
+      console.warn("[dashboard-metrics] Erro no auto-seed histÃ³rico:", e?.message);
     }
 
-    // 2. Estatísticas dos calendar_items no período (resiliente: tabela pode não existir ainda)
+    // 2. EstatÃ­sticas dos calendar_items no perÃ­odo (resiliente: tabela pode nÃ£o existir ainda)
     let total = 0, approved = 0, published = 0, avgRevisions = 0, avgTimeMin = 0;
     try {
       const itemsResult = await db.query(
@@ -346,11 +348,11 @@ router.get("/:clientId/dashboard-metrics", async (req: AuthRequest, res: Respons
       avgRevisions = parseFloat(stats.avg_revisions ?? "0");
       avgTimeMin = parseFloat(stats.avg_time_to_approval_min ?? "0");
     } catch (e: any) {
-      // Tabela calendar_items pode não existir em instâncias sem migração
-      console.warn("[dashboard-metrics] calendar_items indisponível:", e?.message);
+      // Tabela calendar_items pode nÃ£o existir em instÃ¢ncias sem migraÃ§Ã£o
+      console.warn("[dashboard-metrics] calendar_items indisponÃ­vel:", e?.message);
     }
 
-    // 3. Falhas de jobs no período (resiliente)
+    // 3. Falhas de jobs no perÃ­odo (resiliente)
     const failuresByType: Record<string, number> = {};
     let invalidOutputCount = 0;
     let failedJobsCount = 0;
@@ -366,25 +368,26 @@ router.get("/:clientId/dashboard-metrics", async (req: AuthRequest, res: Respons
         if (errType === "INVALID_CALENDAR_OUTPUT") invalidOutputCount++;
       }
     } catch (e: any) {
-      console.warn("[dashboard-metrics] calendar_generation_jobs indisponível:", e?.message);
+      console.warn("[dashboard-metrics] calendar_generation_jobs indisponÃ­vel:", e?.message);
     }
 
-    // 4. Custo LLM estimado em BRL via histórico de tokens
+    // 4. Custo LLM estimado em BRL via histÃ³rico de tokens
     const clientData = await db.query("SELECT token_usage FROM clientes WHERE id=$1", [clientId]);
     const tokenUsage: any = clientData.rows[0]?.token_usage ?? {};
     const history: any[] = Array.isArray(tokenUsage.history) ? tokenUsage.history : [];
 
-    // Preços por modelo (USD por 1M tokens) — mesma lógica do frontend TokenUsageDisplay
+    // PreÃ§os por modelo (USD por 1M tokens) â€” mesma lÃ³gica do frontend TokenUsageDisplay
     const USD_TO_BRL = 5.80;
     type ModelPricing = { input: number; output: number };
     const MODEL_PRICING: Record<string, ModelPricing> = {
-      'gemini-2.5-flash': { input: 0.15, output: 1.25 },
-      'gemini-2.5-pro': { input: 1.25, output: 5.00 },
+      'gemini-3-flash-preview': { input: 0.5, output: 3.0 },
+      'gemini-2.5-flash': { input: 0.30, output: 2.50 },
+      'gemini-2.5-pro': { input: 1.25, output: 10.00 },
       'gemini-2.0-flash': { input: 0.075, output: 0.30 },
       'gemini-1.5-flash': { input: 0.075, output: 0.30 },
       'gemini-1.5-pro': { input: 1.25, output: 5.00 },
     };
-    const DEFAULT_PRICING: ModelPricing = { input: 0.15, output: 1.25 };
+    const DEFAULT_PRICING: ModelPricing = { input: 0.30, output: 2.50 };
     const getPricing = (model: string): ModelPricing => {
       const key = Object.keys(MODEL_PRICING).find(k => (model || '').startsWith(k));
       return key ? (MODEL_PRICING as any)[key] as ModelPricing : DEFAULT_PRICING;
@@ -403,7 +406,7 @@ router.get("/:clientId/dashboard-metrics", async (req: AuthRequest, res: Respons
     const llmCostAvgPerCalendar = calendarsCount > 0 ? llmCostBrl / calendarsCount : 0;
     const costPerApprovedPost = approved > 0 ? llmCostBrl / approved : 0;
 
-    // 5. Última atividade
+    // 5. Ãšltima atividade
     const lastCalResult = await db.query(
       "SELECT criado_em FROM calendarios WHERE cliente_id=$1 ORDER BY criado_em DESC LIMIT 1",
       [clientId]
@@ -419,13 +422,13 @@ router.get("/:clientId/dashboard-metrics", async (req: AuthRequest, res: Respons
     });
 
     // 7. Tempo ganho com IA
-    // Benchmark: SM manager gasta ~5 min/post com apoio de IA (prompt, revisão, ajuste)
-    // Custo/hora baseado em salário CLT: R$2.750 avg (entre R$2.500–R$3.000)
-    // Dias úteis: média 21,5/mês (entre 21 e 22) × 8h/dia = 172 h/mês
-    const MIN_PER_POST_BENCHMARK = 5; // minutos por post (com IA já no fluxo)
+    // Benchmark: SM manager gasta ~5 min/post com apoio de IA (prompt, revisÃ£o, ajuste)
+    // Custo/hora baseado em salÃ¡rio CLT: R$2.750 avg (entre R$2.500â€“R$3.000)
+    // Dias Ãºteis: mÃ©dia 21,5/mÃªs (entre 21 e 22) Ã— 8h/dia = 172 h/mÃªs
+    const MIN_PER_POST_BENCHMARK = 5; // minutos por post (com IA jÃ¡ no fluxo)
     const AVG_SALARY_BRL = 2750;
     const WORK_HOURS_MONTH = 21.5 * 8; // 172 horas
-    const BRL_PER_HOUR_SM = AVG_SALARY_BRL / WORK_HOURS_MONTH; // ≈ R$15,99/h
+    const BRL_PER_HOUR_SM = AVG_SALARY_BRL / WORK_HOURS_MONTH; // â‰ˆ R$15,99/h
     const timeSavedHours = Math.round((total * MIN_PER_POST_BENCHMARK / 60) * 10) / 10;
     const timeSavedBrl = Math.round(timeSavedHours * BRL_PER_HOUR_SM * 100) / 100;
     const roiRatio = llmCostBrl > 0 ? Math.round((timeSavedBrl / llmCostBrl) * 10) / 10 : 0;
@@ -468,3 +471,5 @@ router.get("/:clientId/dashboard-metrics", async (req: AuthRequest, res: Respons
 });
 
 export default router;
+
+

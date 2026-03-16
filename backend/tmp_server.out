@@ -1,0 +1,580 @@
+[dotenv@17.2.3] injecting env (11) from .env -- tip: 🛠️  run anywhere with `dotenvx run -- yourcommand`
+
+
+🔴 ============================================
+🔴 [STARTUP] INICIANDO SERVIDOR - ID: 1773322842373
+🔴 ============================================
+📂 [STARTUP] Diretório de execução: C:\repos\Sphera_Brand\backend
+📂 [STARTUP] Arquivo atual: C:\repos\Sphera_Brand\backend\dist\index.js
+📂 [STARTUP] Node version: v24.11.1
+📂 [STARTUP] Timestamp: 2026-03-12T13:40:42.381Z
+🔴 ============================================
+
+[dotenv@17.2.3] injecting env (0) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+📂 [MULTER] Pasta de uploads já existe: C:\repos\Sphera_Brand\backend\storage\branding
+🔒 [CORS] Origem(ns) permitida(s): http://localhost:3006
+
+🚀 ============================================
+🚀 Backend ONLINE na porta 3001
+🚀 Startup ID: 1773322842373
+📍 http://localhost:3001
+🚀 ============================================
+
+
+📋 ============================================
+📋 ROTAS REGISTRADAS:
+📋 ============================================
+  ⚠️ Não foi possível listar rotas (app._router não disponível)
+📋 ============================================
+
+👷 [WORKER] Iniciando Calendar Generation Worker...
+✅ Conectado ao banco de dados PostgreSQL
+✅ Conectado ao banco de dados PostgreSQL
+✅ DB conectado: Thu Mar 12 2026 10:40:43 GMT-0300 (Horário Padrão de Brasília)
+✅ GOOGLE_API_KEY carregada: AIza...c7T8
+📞 [GRAMPO] GET /api/clients - Timestamp: 1773322891665
+🔔 [BACKEND RECEBEU] GET /api/clients
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/prompt-templates/base/estrategista - Timestamp: 1773322891682
+🔔 [BACKEND RECEBEU] GET /api/prompt-templates/base/estrategista
+📍 Origin: N/A
+📍 Content-Type: N/A
+✅ Conectado ao banco de dados PostgreSQL
+📞 [GRAMPO] GET /api/prompt-templates/base/estrategista - Timestamp: 1773322918656
+🔔 [BACKEND RECEBEU] GET /api/prompt-templates/base/estrategista
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] POST /api/prompt-templates/predefined - Timestamp: 1773322918749
+🔔 [BACKEND RECEBEU] POST /api/prompt-templates/predefined
+📍 Origin: N/A
+📍 Content-Type: application/json
+📦 Body: {
+  label: 'O Estrategista',
+  clienteId: 'c7cf195d-7ed5-48b1-bee3-d673aff0428e',
+  body: 'Voce e O Estrategista de Conteudo da marca (Nicho: {{NICHO}}).\n' +
+    'Seu papel nao e apenas criar posts - e engenheirar cada peca de conteudo como uma alavanca de ROI: cada dia do calendario deve mover o publico um passo adiante no funil (Consciencia -> Interesse -> Desejo -> Acao).\n' +
+    '\n' +
+    'Seu arquetipo e {{ARQUETIPO}}. Voce NUNCA usa as palavras: {{ANTI_PALAVRAS}}.\n' +
+    'Sua Proposta Unica de Valor e {{DIFERENCIAL_USP}}.\n' +
+    '\n' +
+    '-------------------------\n' +
+    'DNA DA MARCA (seu briefing imutavel):\n' +
+    '{{DNA_DA_MARCA}}\n' +
+    '-------------------------\n' +
+    '\n' +
+    'MISSAO DO MES:\n' +
+    'Construa um Planejamento de Conteudo para {{MES}} com foco em conversao, geracao de leads e consolidacao de autoridade.\n' +
+    'Quantidade e mix exato de posts:\n' +
+    '{{MIX_POSTS}}\n' +
+    '\n' +
+    'CONTEXTO OPERACIONAL DO MES:\n' +
+    '- Data de referencia: {{DATA_HOJE}}\n' +
+    '- Datas comemorativas e gatilhos de nicho: {{DATAS_COMEMORATIVAS}}\n' +
+    '- Produtos/Servicos em foco (com precos e diferenciais): {{PRODUTOS_FOCO}}\n' +
+    '- Briefing estrategico do cliente: "{{BRIEFING}}"\n' +
+    '- Regras e restricoes obrigatorias da marca: {{REGRAS_OBRIGATORIAS}}\n' +
+    '- Referencias de tom/mood do mes: {{REFERENCIAS_MES}}\n' +
+    '- Continuidade estrategica (mes anterior): {{CONTINUIDADE}}\n' +
+    '- Documentos extras enviados: {{DOCS_EXTRAS}}\n' +
+    '\n' +
+    '-------------------------\n' +
+    'DIRETIVAS DO ESTRATEGISTA (aplicar em TODOS os posts):\n' +
+    '-------------------------\n' +
+    '\n' +
+    '[1. FRAMEWORK DE COPY OBRIGATORIO]\n' +
+    'Para cada post, escolha e aplique o framework mais adequado ao objetivo do dia:\n' +
+    '- PAS (Problem -> Agitate -> Solution): use quando o publico precisa reconhecer uma dor antes de aceitar a solucao. Ideal para topo e meio de funil.\n' +
+    '- AIDA (Attention -> Interest -> Desire -> Action): use quando o objetivo e conduzir diretamente a conversao ou ao clique. Ideal para fundo de funil e lancamentos.\n' +
+    'O campo "objetivo" DEVE declarar explicitamente qual framework foi usado e em que etapa do funil o post atua.\n' +
+    '\n' +
+    '[2. ARQUITETURA DE FUNIL DO MES]\n' +
+    'Distribua os posts respeitando uma progressao logica de funil ao longo do mes:\n' +
+    '- Semana 1 (dias 1-7): prioridade em CONSCIENCIA e AUTORIDADE.\n' +
+    '- Semana 2 (dias 8-15): prioridade em INTERESSE e PROVA SOCIAL.\n' +
+    '- Semana 3 (dias 16-22): prioridade em DESEJO e CONSIDERACAO.\n' +
+    '- Semana 4 (dias 23-31): prioridade em ACAO e CONVERSAO.\n' +
+    'Datas comemorativas de alto impacto podem quebrar essa ordem quando estrategicamente justificado.\n' +
+    '\n' +
+    '[3. DIRETRIZES DE COPY PERSUASIVO]\n' +
+    '- copy_inicial: deve comecar com um gancho irresistivel.\n' +
+    '- Cada copy deve ter um unico objetivo por post.\n' +
+    '- Use linguagem direta, sem rodeios e sem jargao vazio.\n' +
+    '- O "cta" deve ser especifico e orientado a acao imediata.\n' +
+    '\n' +
+    '[4. INSTRUCOES DE FORMATO E VISUAL]\n' +
+    '{{INSTRUCOES_POR_FORMATO}}\n' +
+    '{{INSTRUCOES_AVANCADAS}}\n' +
+    '\n' +
+    '[5. PROTOCOLO DO CARROSSEL - OBRIGATORIO]\n' +
+    'Se o formato do dia for "Carrossel", voce DEVE estruturar obrigatoriamente os campos "copy_inicial" e "instrucoes_visuais" com a notacao de slides:\n' +
+    '[Slide 1] Capa: gancho ou titulo impactante.\n' +
+    '[Slide 2] Desenvolvimento do problema ou premissa.\n' +
+    '[Slide 3-N] Aprofundamento, provas, argumentos ou passos.\n' +
+    '[Ultimo Slide] CTA visual + reforco da oferta ou autoridade.\n' +
+    'NUNCA retorne um Carrossel sem a divisao explicita de slides.\n' +
+    '\n' +
+    '-------------------------\n' +
+    'CONTRATO DE SAIDA - LEIA COM ATENCAO MAXIMA:\n' +
+    '-------------------------\n' +
+    'Retorne SOMENTE um JSON ARRAY puro. Nenhum texto antes, nenhum texto depois, nenhum bloco markdown.\n' +
+    'O array deve ter exatamente a quantidade de posts definida em {{MIX_POSTS}}.\n' +
+    'Cada objeto DEVE seguir esta estrutura com todos os campos preenchidos:\n' +
+    '\n' +
+    '[\n' +
+    '  {\n' +
+    '    "dia": 1,\n' +
+    '    "tema": "Titulo direto do post - o que ele entrega em uma linha",\n' +
+    '    "formato": "Reels|Arte|Carrossel|Foto|Story",\n' +
+    '    "instrucoes_visuais": "Descricao visual detalhada. Se Carrossel: usar [Slide 1]...[Slide N]",\n' +
+    '    "copy_inicial": "Texto completo do post com framework PAS ou AIDA aplicado. Se Carrossel: usar [Slide 1]...[Slide N]",\n' +
+    '    "objetivo": "Framework usado + etapa do funil + metrica de sucesso esperada",\n' +
+    '    "cta": "Call-to-action especifico, direto e orientado a acao imediata",\n' +
+    '    "palavras_chave": ["keyword1", "keyword2", "keyword3"]\n' +
+    '  }\n' +
+    ']\n' +
+    '\n' +
+    'REGRA FINAL: palavras_chave deve conter entre 3 e 5 strings nao-vazias. Qualquer desvio nas regras acima invalida o calendario inteiro.',
+  agentId: 'estrategista'
+}
+📞 [GRAMPO] POST /api/clients - Timestamp: 1773322918787
+🔔 [BACKEND RECEBEU] POST /api/clients
+📍 Origin: N/A
+📍 Content-Type: application/json
+📦 Body: { nome: 'Studio Lume Teste' }
+📞 [GRAMPO] GET /api/prompt-templates/c7cf195d-7ed5-48b1-bee3-d673aff0428e - Timestamp: 1773322918799
+🔔 [BACKEND RECEBEU] GET /api/prompt-templates/c7cf195d-7ed5-48b1-bee3-d673aff0428e
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/prompt-templates/cb57f1bb-0ca8-45bf-9911-5d35ed624626 - Timestamp: 1773322918808
+🔔 [BACKEND RECEBEU] GET /api/prompt-templates/cb57f1bb-0ca8-45bf-9911-5d35ed624626
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] POST /api/generate-calendar - Timestamp: 1773322950465
+🔔 [BACKEND RECEBEU] POST /api/generate-calendar
+📍 Origin: N/A
+📍 Content-Type: application/json
+
+🛑 [DEBUG] ROTA /generate-calendar ACIONADA (Async Job)
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773322955516
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773322960590
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773322965598
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773322970615
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773322975635
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773322980642
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773322985649
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773322990661
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773322995673
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323000684
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323005705
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323010716
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323015721
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323020731
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323025749
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323030770
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323035781
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323040794
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323045808
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323050824
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323055834
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323060840
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323065851
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323070858
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323075867
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323080879
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323085888
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323090893
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323095899
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323100908
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323105916
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323110923
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323115943
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323120958
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323125968
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323130985
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323136006
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323141018
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323146039
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323151057
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323156072
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323161088
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323166102
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323171110
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323176123
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323181129
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323186135
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323191155
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323196165
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323201182
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323206189
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323211209
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323216229
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323221253
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323226278
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323231296
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323236308
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323241327
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323246353
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] POST /api/generate-calendar - Timestamp: 1773323247936
+🔔 [BACKEND RECEBEU] POST /api/generate-calendar
+📍 Origin: N/A
+📍 Content-Type: application/json
+📦 Body: {
+  clienteId: 'c7cf195d-7ed5-48b1-bee3-d673aff0428e',
+  briefing: 'Teste',
+  mix: { reels: 1, photos: 0, stories: 1, static: 1, carousel: 1 },
+  mes: 'Abril 2026',
+  periodo: 30
+}
+
+🛑 [DEBUG] ROTA /generate-calendar ACIONADA (Async Job)
+✅ [DEBUG] Meses para geração: [ 'Abril 2026' ]
+🚀 [JOB] Criando job b7608ee7-40f1-406f-a54e-21b41b0aa8a0 para cliente c7cf195d-7ed5-48b1-bee3-d673aff0428e
+👷 [WORKER] Processando Job b7608ee7-40f1-406f-a54e-21b41b0aa8a0...
+✅ Conectado ao banco de dados PostgreSQL
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323251364
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323256407
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323261421
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+✅ [TOKEN TRACKER] Cliente c7cf195d-7ed5-48b1-bee3-d673aff0428e: +3319 tokens (sys:0 input:993 out:1322) Total: 3319
+ðŸ¤– [Worker] Tentando modelo gemini-3-flash-preview para Abril 2026...
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/b7608ee7-40f1-406f-a54e-21b41b0aa8a0 - Timestamp: 1773323266278
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/b7608ee7-40f1-406f-a54e-21b41b0aa8a0
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323266442
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323271453
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323276475
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323281488
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+✅ [TOKEN TRACKER] Cliente c7cf195d-7ed5-48b1-bee3-d673aff0428e: +5630 tokens (sys:0 input:3049 out:1567) Total: 8949
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323286507
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323291522
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323296535
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+✅ [TOKEN TRACKER] Cliente c7cf195d-7ed5-48b1-bee3-d673aff0428e: +5529 tokens (sys:0 input:3090 out:1669) Total: 14478
+âœ… [Worker] 4 calendar_items criados para calendÃ¡rio 483a7466-3617-4a97-8ce2-27e971d43b5c
+✅ [WORKER] Job b7608ee7-40f1-406f-a54e-21b41b0aa8a0 concluído com sucesso.
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323301550
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323306563
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/b7608ee7-40f1-406f-a54e-21b41b0aa8a0 - Timestamp: 1773323311145
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/b7608ee7-40f1-406f-a54e-21b41b0aa8a0
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323311574
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323316592
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323321610
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323326626
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323331654
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/calendars/c7cf195d-7ed5-48b1-bee3-d673aff0428e?month=Abril%202026&includeDrafts=true - Timestamp: 1773323331763
+🔔 [BACKEND RECEBEU] GET /api/calendars/c7cf195d-7ed5-48b1-bee3-d673aff0428e?month=Abril%202026&includeDrafts=true
+📍 Origin: N/A
+📍 Content-Type: N/A
+🔍 [DEBUG] Buscando calendário para cliente: c7cf195d-7ed5-48b1-bee3-d673aff0428e, mês: Abril 2026
+🔍 [DEBUG] Tipo do month: string, valor: "Abril 2026"
+🔍 [DEBUG] Buscando calendário específico do mês: "Abril 2026" (includeDrafts=true)
+🔍 [DEBUG] Executando query: 
+        SELECT id, cliente_id, mes, calendario_json, periodo, criado_em, updated_at, metadata, status
+        FROM calendarios
+        WHERE cliente_id = $1
+          AND LOWER(REGEXP_REPLACE(mes, '\s+(de|do|da)\s+', ' ', 'gi')) =
+              LOWER(REGEXP_REPLACE($2, '\s+(de|do|da)\s+', ' ', 'gi'))
+          
+        ORDER BY criado_em DESC
+        LIMIT 1
+      
+🔍 [DEBUG] Parâmetros: [ 'c7cf195d-7ed5-48b1-bee3-d673aff0428e', 'Abril 2026' ]
+🔍 [DEBUG] Resultados encontrados: 1
+🔍 [DEBUG] Mês encontrado no banco: "Abril 2026"
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323336665
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323341681
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323346695
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323351705
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323356720
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323361751
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323366771
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323371793
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323376810
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323381819
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323386836
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323391854
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323396872
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/ - Timestamp: 1773323401885
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/
+📍 Origin: N/A
+📍 Content-Type: N/A
+👷 [WORKER] Processando Job c7945fbd-87f2-4b07-b3c6-d9fd1a7ca8ba...
+✅ Conectado ao banco de dados PostgreSQL
+✅ Conectado ao banco de dados PostgreSQL
+✅ [TOKEN TRACKER] Cliente c7cf195d-7ed5-48b1-bee3-d673aff0428e: +2673 tokens (sys:0 input:905 out:697) Total: 30133
+ðŸ¤– [Worker] Tentando modelo gemini-3-flash-preview para Junho 2026...
+✅ Conectado ao banco de dados PostgreSQL
+✅ [TOKEN TRACKER] Cliente c7cf195d-7ed5-48b1-bee3-d673aff0428e: +3837 tokens (sys:0 input:2370 out:505) Total: 33970
+✅ Conectado ao banco de dados PostgreSQL
+✅ [TOKEN TRACKER] Cliente c7cf195d-7ed5-48b1-bee3-d673aff0428e: +3072 tokens (sys:0 input:1405 out:539) Total: 37042
+âœ… [Worker] 1 calendar_items criados para calendÃ¡rio 1202bc6d-c2a2-4fc9-bc84-3fd59332f13f
+✅ [WORKER] Job c7945fbd-87f2-4b07-b3c6-d9fd1a7ca8ba concluído com sucesso.

@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import * as dotenv from "dotenv";
 import path from "path";
+import { getGeminiModelCandidates } from "../utils/googleModels";
 
 // Carregar variáveis de ambiente
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
@@ -19,7 +20,7 @@ async function testGeminiKey() {
   const genAI = new GoogleGenerativeAI(apiKey);
 
   // Lista de modelos para testar
-  const modelsToTest = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
+  const modelsToTest = getGeminiModelCandidates("quality");
 
   for (const modelName of modelsToTest) {
     console.log(`\n🤖 Testando modelo: ${modelName}...`);

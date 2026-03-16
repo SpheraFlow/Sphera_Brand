@@ -1,0 +1,17 @@
+âŒ [Worker ERROR] Falha na validaÃ§Ã£o do LLM Output (Correlation ID: 7a12e52f-c768-46aa-a246-854d62356699)
+  Job: 9f0caa85-1459-4c2b-9332-1e37cf9d9a88 | Cliente: c7cf195d-7ed5-48b1-bee3-d673aff0428e | Template: a05a7c1f-985a-461b-9692-835f2ee7b194 (v1)
+  Detalhes: [Post #1] Campo 'formato' deve ser: Reels, Arte, Carrossel, Foto ou Story. Veio: "Imagem Única (Editorial)"
+  Snippet: [   {     "dia": 15,     "tema": "A biologia do tempo: O que acontece na derme após a aplicação?",     "formato": "Reels",     "instrucoes_visuais": "Vídeo em estilo clean editorial com paleta de cores em bege e terracota. [0-3s] A médica em um consultório iluminado e sofisticado, olhando calmamente...
+
+❌ [WORKER] Falha no Job 9f0caa85-1459-4c2b-9332-1e37cf9d9a88: InvalidCalendarOutputError: O calendário gerado não cumpre o schema requerido.
+    at generateCalendarForMonth (C:\repos\Sphera_Brand\backend\dist\services\calendarGenerator.js:507:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async runJobLogic (C:\repos\Sphera_Brand\backend\dist\jobs\calendarGenerationWorker.js:152:24)
+    at async processNextJob (C:\repos\Sphera_Brand\backend\dist\jobs\calendarGenerationWorker.js:72:13)
+    at async Timeout.loop [as _onTimeout] (C:\repos\Sphera_Brand\backend\dist\jobs\calendarGenerationWorker.js:14:13) {
+  type: 'INVALID_CALENDAR_OUTPUT',
+  details: [
+    `[Post #1] Campo 'formato' deve ser: Reels, Arte, Carrossel, Foto ou Story. Veio: "Imagem Única (Editorial)"`
+  ],
+  correlationId: '7a12e52f-c768-46aa-a246-854d62356699'
+}

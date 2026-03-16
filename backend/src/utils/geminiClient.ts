@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { readFileSync } from "fs";
+import { getGeminiModelCandidates, getPrimaryGeminiModel } from "./googleModels";
 
 /**
  * Cliente para interagir com Google Gemini API
@@ -20,7 +21,7 @@ class GeminiClient {
     }
 
     this.genAI = new GoogleGenerativeAI(apiKey);
-    this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    this.model = this.genAI.getGenerativeModel({ model: getPrimaryGeminiModel("fast") });
   }
 
   /**
@@ -50,7 +51,7 @@ class GeminiClient {
       let result;
       let text = "";
 
-      const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
+      const modelsToTry = getGeminiModelCandidates("quality");
 
       for (const modelName of modelsToTry) {
         try {
@@ -105,7 +106,7 @@ class GeminiClient {
       let result;
       let text = "";
 
-      const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
+      const modelsToTry = getGeminiModelCandidates("quality");
 
       for (const modelName of modelsToTry) {
         try {

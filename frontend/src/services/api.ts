@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 
 const _rawBaseURL = (import.meta as any).env?.VITE_API_BASE_URL;
 
@@ -104,6 +104,8 @@ export interface JobStatusResponse {
   current_step?: string;
   result?: any;
   result_calendar_ids?: string[];
+  job_type?: string;
+  operation?: string;
   error?: string;
   created_at: string;
   started_at?: string;
@@ -327,8 +329,6 @@ export const brandingService = {
 export const jobsService = {
   async getJobStatus(clientId: string, jobId: string): Promise<JobStatusResponse> {
     const response = await api.get(`/jobs/${clientId}/${jobId}`);
-    // Backend returns { success, job: {...}, age_seconds, is_stale, hint }
-    // We merge the wrapper metadata onto the job object so callers get a flat JobStatusResponse
     const { job, age_seconds, is_stale, hint } = response.data;
     return { ...job, age_seconds, is_stale, hint };
   },
@@ -370,8 +370,18 @@ export const presentationService = {
     return response.data;
   },
 
+  async startContentJob(clienteId: string, months?: string[]): Promise<any> {
+    const response = await api.post('/presentation/generate-content-job', { clienteId, months });
+    return response.data;
+  },
+
   async generateImages(payload: any): Promise<any> {
     const response = await api.post('/presentation/generate', payload);
+    return response.data;
+  },
+
+  async startRenderJob(payload: any): Promise<any> {
+    const response = await api.post('/presentation/generate-job', payload);
     return response.data;
   },
 
@@ -608,31 +618,51 @@ export interface DataComemorativa {
 
 export const datasComemorvativasService = {
   getByMonths: async (months: string[], nicho?: string): Promise<DataComemorativa[]> => {
-    // months are like "Março 2026", need to convert to mes/ano
     const ptMap: Record<string, number> = {
-      janeiro: 1, fevereiro: 2, março: 3, marco: 3, abril: 4, maio: 5, junho: 6,
+      janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6,
       julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12
     };
+
+    const fetchMonthDates = async (mesNum: number, anoNum: number, nicheFilter?: string): Promise<DataComemorativa[]> => {
+      const params: any = { mes: mesNum, ano: anoNum };
+      if (nicheFilter) params.nicho = nicheFilter;
+      const resp = await api.get('/datas-comemorativas', { params });
+      return resp.data.success && Array.isArray(resp.data.datas) ? resp.data.datas : [];
+    };
+
     const allDates: DataComemorativa[] = [];
     for (const m of months) {
-      const parts = m.toLowerCase().split(' ');
+      const parts = m.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(' ');
       const mesNum = ptMap[parts[0]];
-      // Handle "Mês de Ano" or "Mês Ano"
       const yearStr = parts.length > 2 ? parts[2] : parts[1];
       const anoNum = parseInt(yearStr || '', 10);
       if (!mesNum || isNaN(anoNum)) continue;
+
       try {
-        const params: any = { mes: mesNum, ano: anoNum };
-        if (nicho) params.nicho = nicho;
-        const resp = await api.get('/datas-comemorativas', { params });
-        if (resp.data.success && Array.isArray(resp.data.datas)) {
-          allDates.push(...resp.data.datas);
+        let dates = await fetchMonthDates(mesNum, anoNum, nicho);
+        if (dates.length === 0 && nicho) {
+          dates = await fetchMonthDates(mesNum, anoNum);
         }
-      } catch (_) { }
+        allDates.push(...dates);
+      } catch (error) {
+        console.error('Erro ao buscar datas comemorativas do m?s:', m, error);
+      }
     }
-    return allDates;
+
+    const deduped = new Map<string, DataComemorativa>();
+    for (const item of allDates) {
+      deduped.set(item.id, item);
+    }
+
+    return Array.from(deduped.values()).sort((a, b) => {
+      const dateCompare = String(a.data).localeCompare(String(b.data));
+      if (dateCompare !== 0) return dateCompare;
+      return Number(b.relevancia || 0) - Number(a.relevancia || 0);
+    });
   }
 };
 
 export default api;
+
+
 

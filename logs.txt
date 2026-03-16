@@ -1,0 +1,97 @@
+
+42 updates can be applied immediately.
+9 of these updates are standard security updates.
+To see these additional updates run: apt list --upgradable
+
+
+*** System restart required ***
+Last login: Tue Mar 10 22:06:49 2026 from 189.34.199.52
+root@srv1206052:~# grep -i "Falha no Job" /root/.pm2/logs/mvp-backend-error.log
+❌ [WORKER] Falha no Job 5b6c609f-6412-4e24-adcf-d94ae50147b4: Error: Falha na geração IA: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent: [404 Not Found] models/gemini-1.5-flash-latest is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+❌ [WORKER] Falha no Job 58b8accc-51e1-425f-97bc-7ab157f283ac: Error: Falha na geração IA: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent: [404 Not Found] models/gemini-1.5-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+❌ [WORKER] Falha no Job 58b8accc-51e1-425f-97bc-7ab157f283ac: Error: Falha na geração IA: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent: [404 Not Found] models/gemini-1.5-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+❌ [WORKER] Falha no Job 507ba5e2-d110-4b9e-8653-28d8163213d2: Error: Falha na geração IA: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent: [404 Not Found] models/gemini-1.5-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+❌ [WORKER] Falha no Job 507ba5e2-d110-4b9e-8653-28d8163213d2: Error: Falha na geração IA: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent: [404 Not Found] models/gemini-1.5-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+❌ [WORKER] Falha no Job 77c7920c-c65b-471f-ad30-376d382eaab9: Error: Falha na geração IA: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent: [404 Not Found] models/gemini-1.5-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+root@srv1206052:~# grep "507ba5e2-d110-4b9e-8653-28d8163213d2" /root/.pm2/logs/mvp-backend-out.log /root/.pm2/logs/mvp-backend-error.log
+/root/.pm2/logs/mvp-backend-out.log:🚀 [JOB] Criando job 507ba5e2-d110-4b9e-8653-28d8163213d2 para cliente 52d99d80-0f1b-46c0-ae46-346d02fa665c
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160171348
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160171370
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:👷 [WORKER] Processando Job 507ba5e2-d110-4b9e-8653-28d8163213d2...
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160173398
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160175417
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160177436
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160179495
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160181525
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160183543
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160185565
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160196269
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160198301
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160200321
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160202345
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160204369
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160206395
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160208419
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160210440
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160212476
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160214499
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773160216526
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773163349765
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] GET /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] POST /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2/retry - Timestamp: 1773163362033
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] POST /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2/retry
+/root/.pm2/logs/mvp-backend-out.log:🔄 Job 507ba5e2-d110-4b9e-8653-28d8163213d2 colocado em retry pelo usuário.
+/root/.pm2/logs/mvp-backend-out.log:👷 [WORKER] Processando Job 507ba5e2-d110-4b9e-8653-28d8163213d2...
+/root/.pm2/logs/mvp-backend-out.log:📞 [GRAMPO] DELETE /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2 - Timestamp: 1773163504062
+/root/.pm2/logs/mvp-backend-out.log:🔔 [BACKEND RECEBEU] DELETE /api/jobs/52d99d80-0f1b-46c0-ae46-346d02fa665c/507ba5e2-d110-4b9e-8653-28d8163213d2
+/root/.pm2/logs/mvp-backend-out.log:🗑️ Job 507ba5e2-d110-4b9e-8653-28d8163213d2 excluído pelo usuário.
+/root/.pm2/logs/mvp-backend-error.log:❌ [WORKER] Falha no Job 507ba5e2-d110-4b9e-8653-28d8163213d2: Error: Falha na geração IA: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent: [404 Not Found] models/gemini-1.5-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+/root/.pm2/logs/mvp-backend-error.log:❌ [WORKER] Falha no Job 507ba5e2-d110-4b9e-8653-28d8163213d2: Error: Falha na geração IA: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent: [404 Not Found] models/gemini-1.5-pro is not found for API version v1beta, or is not supported for generateContent. Call ListModels to see the list of available models and their supported methods.
+root@srv1206052:~# grep -i "sucesso" /root/.pm2/logs/mvp-backend-out.log | tail -n 20
+✅ Calendário atualizado com sucesso
+✅ Calendário atualizado com sucesso
+✅ Calendário 79aeb23e-ab70-4026-a572-77d85f122ca8 excluído com sucesso
+✅ Calendário 5432cf98-2e97-4edf-9395-0cbf70febc32 excluído com sucesso
+✅ Calendário 93491ce2-96e9-400e-ad46-5f4243836b70 excluído com sucesso
+✅ Calendário 4f9e5bca-ed45-4ef0-83e5-8ead2d607f58 excluído com sucesso
+✅ Calendário atualizado com sucesso
+✅ Calendário atualizado com sucesso
+✅ Calendário atualizado com sucesso
+✅ Calendário atualizado com sucesso
+✅ Calendário atualizado com sucesso
+[SUCCESS] Processo concluído com sucesso!
+ [SUCCESS] Python script executado com sucesso
+✅ [WORKER] Job d06d233c-c769-4639-9b2d-3ed134a2b1a2 concluído com sucesso.
+✅ Calendário atualizado com sucesso
+✅ [DEBUG] Sucesso com gemini-2.5-flash
+✅ [DEBUG] Sucesso com gemini-2.5-flash
+[SUCESSO] Laminas geradas.
+[SUCESSO] Laminas geradas.
+[SUCESSO] Laminas geradas.
+root@srv1206052:~# sudo -u postgres psql -d NOME_DO_SEU_BANCO -c "SELECT id, status, attempts, error, created_at, updated_at FROM calendar_generation_jobs ORDER BY created_at DESC LIMIT 10;"
+psql: error: connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: No such file or directory
+        Is the server running locally and accepting connections on that socket?
+root@srv1206052:~# sudo -u postgres psql -d NOME_DO_SEU_BANCO -c "SELECT id, status, attempts, error, created_at, updated_at FROM calendar_generation_jobs ORDER BY created_at DESC LIMIT 10;"
+psql: error: connection to server on socket "/var/run/postgresql/.s.PGSQL.5432" failed: No such file or directory
+        Is the server running locally and accepting connections on that socket?
+root@srv1206052:~#

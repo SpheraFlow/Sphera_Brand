@@ -14,6 +14,9 @@ import os
 import calendar
 import re
 from openpyxl.styles import Alignment
+from openpyxl.utils import column_index_from_string, get_column_letter
+
+CALENDAR_FONT_SIZE_PT = 10.0
 
 def get_day_of_week(day, month, year):
     """
@@ -294,6 +297,48 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
 
     col_letters = _detect_grid_cols()
 
+    def _clone_week_block_structure(source_header_row: int, target_header_row: int) -> None:
+        block_height = 6
+        row_offset = target_header_row - source_header_row
+        min_col_idx = column_index_from_string(col_letters[0]) if col_letters else 1
+        max_col_idx = column_index_from_string(col_letters[-1]) if col_letters else 7
+
+        for rng in list(ws.merged_cells.ranges):
+            if rng.min_row >= target_header_row and rng.max_row <= target_header_row + block_height - 1:
+                if rng.min_col >= min_col_idx and rng.max_col <= max_col_idx:
+                    ws.unmerge_cells(str(rng))
+
+        for row in range(source_header_row, source_header_row + block_height):
+            src_dim = ws.row_dimensions[row]
+            dst_dim = ws.row_dimensions[row + row_offset]
+            dst_dim.height = src_dim.height
+            dst_dim.hidden = src_dim.hidden
+            dst_dim.outlineLevel = src_dim.outlineLevel
+            dst_dim.collapsed = src_dim.collapsed
+
+            for col_idx in range(min_col_idx, max_col_idx + 1):
+                src_cell = ws.cell(row=row, column=col_idx)
+                dst_cell = ws.cell(row=row + row_offset, column=col_idx)
+                if src_cell.has_style:
+                    dst_cell._style = copy(src_cell._style)
+                if src_cell.number_format:
+                    dst_cell.number_format = src_cell.number_format
+                dst_cell.value = None
+
+        for rng in list(ws.merged_cells.ranges):
+            if rng.min_row >= source_header_row and rng.max_row <= source_header_row + block_height - 1:
+                if rng.min_col >= min_col_idx and rng.max_col <= max_col_idx:
+                    target_ref = f"{get_column_letter(rng.min_col)}{rng.min_row + row_offset}:{get_column_letter(rng.max_col)}{rng.max_row + row_offset}"
+                    ws.merge_cells(target_ref)
+
+    def _set_font_size(cell_ref: str, size_pt: float = CALENDAR_FONT_SIZE_PT) -> None:
+        try:
+            font = copy(ws[cell_ref].font)
+            font.sz = size_pt
+            ws[cell_ref].font = font
+        except Exception:
+            pass
+
     def _detect_week_start_rows(max_scan_row: int = 80) -> list:
         # Procura por linhas que tenham cabeçalhos no formato "... (n)".
         # Ex.: "SEGUNDA (1)". Funciona tanto para A..G quanto para B..H.
@@ -354,11 +399,11 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
     day_labels = {
         0: 'DOMINGO',
         1: 'SEGUNDA',
-        2: 'TERÇA',
+        2: 'TER\u00c7A',
         3: 'QUARTA',
         4: 'QUINTA',
         5: 'SEXTA',
-        6: 'SÁBADO'
+        6: 'S\u00c1BADO'
     }
 
     # Converter de Monday-based para Sunday-based (0=Dom ... 6=Sáb)
@@ -380,8 +425,9 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
         else:
             step = 6
         next_row = week_start_rows[-1] + step
+        _clone_week_block_structure(week_start_rows[-1], next_row)
         week_start_rows.append(next_row)
-        print(f"[INFO] Linha de semana extra sintetizada: row={next_row} (necessárias={weeks_needed})")
+        print(f"[INFO] Linha de semana extra sintetizada: row={next_row} (necess?rias={weeks_needed})")
 
     day_to_slot = {}
     current_day = 1
@@ -404,6 +450,7 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
                 dow = first_weekday_sun0 + offset
                 if current_day <= days_in_month:
                     ws[f"{col}{header_row}"].value = f"{day_labels[dow]} ({current_day})"
+                    _set_font_size(f"{col}{header_row}")
                     day_to_slot[current_day] = (header_row, col)
                     current_day += 1
             continue
@@ -413,6 +460,7 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
             col = col_letters[dow]
             if current_day <= days_in_month:
                 ws[f"{col}{header_row}"].value = f"{day_labels[dow]} ({current_day})"
+                _set_font_size(f"{col}{header_row}")
                 day_to_slot[current_day] = (header_row, col)
                 current_day += 1
             else:
@@ -464,8 +512,16 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
         except Exception:
             return False
 
+    def _set_font_size(cell_ref: str, size_pt: float = CALENDAR_FONT_SIZE_PT) -> None:
+        try:
+            font = copy(ws[cell_ref].font)
+            font.sz = size_pt
+            ws[cell_ref].font = font
+        except Exception:
+            pass
+
     def _legend_style_for_formato(formato_excel: str):
-        # Só usado quando o template NÃO tem formatação condicional.
+        # Só usado quando o template NÒO tem formatação condicional.
         # Em templates novos (modelo final.xlsx), as cores vêm de conditional formatting.
         try:
             legend_col = 'G' if (col_letters and col_letters[0] == 'A') else 'H'
@@ -526,7 +582,7 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
             tipo_cell = _top_left_of_merged(f"{col}{header_row + 1}")
             ws[tipo_cell].value = formato_excel
 
-            # Em templates com conditional formatting (ex.: modelo final.xlsx), NÃO setar fill/font.
+            # Em templates com conditional formatting (ex.: modelo final.xlsx), NÒO setar fill/font.
             # A cor deve ser aplicada automaticamente pelo Excel baseado no texto.
             if not _has_conditional_formatting():
                 try:
@@ -537,6 +593,7 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
                 except Exception:
                     pass
             
+            _set_font_size(tipo_cell)
             # SEMPRE aplicar alinhamento centralizado (Ctrl+E no Excel) DEPOIS de copiar estilos
             try:
                 ws[tipo_cell].alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
@@ -548,6 +605,7 @@ def fill_single_month(ws, posts, month_num, year_num, client_name, month_label):
             # Exigência: resumo bem curto (máx 10 palavras)
             base_text = (short_title or post.get('descricao') or post.get('description') or post.get('copy_sugestao') or '').strip()
             ws[resumo_cell].value = _take_first_words(base_text, 10)
+            _set_font_size(resumo_cell)
             try:
                 ws[resumo_cell].alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
             except Exception:
@@ -592,11 +650,17 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
         try:
             # Suporte a ambas as chaves: 'data' (string de data) e 'dia' (número do dia)
             date_str = post.get('data') or ''
-            dia_num = post.get('dia')
+            if isinstance(date_str, str) and date_str.strip().lower() in ('undefined', 'null', 'none'):
+                date_str = ''
+            dia_num = post.get('dia', post.get('day'))
+            export_month = post.get('_export_month')
+            export_year = post.get('_export_year')
             if not date_str and dia_num is not None:
-                # Se só tem 'dia' (número), converter para string de data usando o mês base
+                # Se s? tem 'dia' (n?mero), converter para string de data usando o m?s expl?cito do post
                 try:
-                    date_str = f"{int(dia_num)}/{start_month_num}"
+                    month_for_post = int(export_month) if export_month is not None else start_month_num
+                    year_for_post = int(export_year) if export_year is not None else year_num
+                    date_str = f"{int(dia_num)}/{month_for_post}/{year_for_post}"
                 except (ValueError, TypeError):
                     date_str = '01/01'
             elif not date_str:
@@ -615,7 +679,7 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
             else:
                 # Se o post não tem ano, usamos o rollover baseado no mês inicial
                 y_num = year_num
-                # SÓ adiciona 1 ano se houver uma transição clara de final de ano (Nov/Dez -> Jan/Fev/Mar)
+                # S� adiciona 1 ano se houver uma transição clara de final de ano (Nov/Dez -> Jan/Fev/Mar)
                 # Ex: Planejamento começa em Dez/2025 e post é de Jan.
                 # Se m_num=2 (Fev) e start=3 (Mar), deve permanecer no mesmo ano (2026).
                 if m_num < start_month_num:
@@ -728,12 +792,13 @@ def fill_calendar_template(calendar_json, template_path, output_path, client_nam
     return output_path
 
 def main():
-    """Função principal"""
+    """Main entry point."""
+    use_stdin = len(sys.argv) >= 2 and sys.argv[1] == "--stdin"
+
     if len(sys.argv) < 7:
-        print("Uso: python calendar_to_excel.py <calendar_json> <template_path> <output_path> <client_name> <month_name> <year> [periodo]")
+        print("Uso: python calendar_to_excel.py <calendar_json|--stdin> <template_path> <output_path> <client_name> <month_name> <year> [periodo] [selected_months_json]")
         sys.exit(1)
-    
-    calendar_json_str = sys.argv[1]
+
     template_path = sys.argv[2]
     output_path = sys.argv[3]
     client_name = sys.argv[4]
@@ -746,14 +811,25 @@ def main():
             selected_months = json.loads(sys.argv[8])
         except Exception:
             selected_months = None
-    
+
+    if use_stdin:
+        calendar_json_str = sys.stdin.buffer.read().decode("utf-8-sig")
+    else:
+        calendar_source = sys.argv[1]
+        if os.path.isfile(calendar_source):
+            with open(calendar_source, "r", encoding="utf-8") as calendar_file:
+                calendar_json_str = calendar_file.read()
+        else:
+            calendar_json_str = calendar_source
+
     try:
-        # Parse JSON
+        if not calendar_json_str or not calendar_json_str.strip():
+            raise ValueError("Nenhum calendario recebido para exportacao")
+
         calendar_json = json.loads(calendar_json_str)
-        print(f"[INFO] Calendário carregado: {len(calendar_json)} posts")
-        
-        # Preencher template
-        result = fill_calendar_template(
+        print(f"[INFO] Calendario carregado: {len(calendar_json)} posts")
+
+        fill_calendar_template(
             calendar_json,
             template_path,
             output_path,
@@ -763,15 +839,15 @@ def main():
             periodo,
             selected_months
         )
-        
-        print(f"\n[SUCCESS] Processo concluído com sucesso!")
+
+        print("\n[SUCCESS] Processo concluido com sucesso!")
         sys.exit(0)
-        
+
     except Exception as e:
         print(f"[ERROR] Erro fatal: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
-
 if __name__ == "__main__":
     main()
+

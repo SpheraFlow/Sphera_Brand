@@ -1,26 +1,27 @@
-import { Router, Request, Response } from 'express';
+﻿import { Router, Request, Response } from 'express';
 import { exec } from 'child_process';
+import { promisify } from 'util';
+import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import db from '../config/database';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { updateTokenUsage } from '../utils/tokenTracker';
+import { getGeminiModelCandidates } from '../utils/googleModels';
 
 const router = Router();
 
-// Caminhos absolutos
-// Ajuste para sair de src/routes/presentation.ts -> backend/python_gen
 const GEN_DIR = path.resolve(__dirname, '../../python_gen');
-const CONTENT_FILE = path.join(GEN_DIR, 'content.json');
 const SCRIPT_FILE = path.join(GEN_DIR, 'main.py');
 const OUTPUT_DIR = path.join(GEN_DIR, 'output');
+const TMP_DIR = path.join(GEN_DIR, 'tmp');
+const execAsync = promisify(exec);
 
 const resolveClientLogoPathFromUrl = (logoUrl: unknown): string | null => {
     if (!logoUrl || typeof logoUrl !== 'string') return null;
 
     let pathname = logoUrl;
     if (logoUrl.startsWith('http://') || logoUrl.startsWith('https://')) {
-        // Remover scheme + host e manter apenas o path
         pathname = logoUrl.replace(/^https?:\/\/[^/]+/i, '');
     }
 
@@ -38,10 +39,902 @@ const resolveClientLogoPathFromUrl = (logoUrl: unknown): string | null => {
     return absolutePath;
 };
 
+const PT_MONTHS = ['Janeiro', 'Fevereiro', 'MarÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â§o', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+const PT_MONTH_ALIASES: Record<string, number> = {
+    janeiro: 0,
+    fevereiro: 1,
+    marco: 2,
+    abril: 3,
+    maio: 4,
+    junho: 5,
+    julho: 6,
+    agosto: 7,
+    setembro: 8,
+    outubro: 9,
+    novembro: 10,
+    dezembro: 11,
+};
+
+const normalizeAscii = (value: string) =>
+    String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+
+const DANGLING_ENDINGS = new Set([
+    'a', 'as', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em', 'na', 'nas', 'no', 'nos', 'ou', 'para', 'por', 'que', 'sem', 'sobre', 'um', 'uma'
+]);
+
+const stripDanglingEnding = (value: string, minWordsToTrim = 3): string => {
+    let current = String(value || '').trim();
+
+    while (current) {
+        const words = current.split(/\s+/).filter(Boolean);
+        if (words.length < minWordsToTrim) return current;
+
+        const lastWord = normalizeAscii(words[words.length - 1] || '').replace(/[^a-z0-9]/g, '');
+        if (!DANGLING_ENDINGS.has(lastWord)) return current;
+
+        words.pop();
+        current = words.join(' ').replace(/[,:;\/-]+$/g, '').trim();
+    }
+
+    return current;
+};
+
+const hasDanglingEnding = (value: string) => {
+    const lastWord = normalizeAscii(String(value || '').trim().split(/\s+/).pop() || '').replace(/[^a-z0-9]/g, '');
+    return !!lastWord && DANGLING_ENDINGS.has(lastWord);
+};
+
+const looksMonthDriven = (value: string, months: string[]) => {
+    const normalizedValue = normalizeAscii(String(value || ''));
+    const matches = months
+        .map((month) => normalizeAscii(month))
+        .filter(Boolean)
+        .filter((month) => normalizedValue.includes(month));
+    return matches.length >= 2;
+};
+
+const buildDiagnosticFallback = (clientName: string) => {
+    const brand = cleanSingleLine(clientName || 'a marca', 28, { keepTrailingPunctuation: true }) || 'a marca';
+    return [
+        'O cenario atual mostra ' + brand + ' inserida em um ambiente mais disputado, com excesso de mensagens, menor paciencia do publico e uma necessidade crescente de provar valor de forma imediata, clara e consistente em cada ponto de contato.',
+        'Nesse contexto, a tensao nao esta apenas em aparecer mais, mas em organizar a comunicacao para reduzir ruido, sustentar relevancia e transformar percepcao dispersa em uma leitura mais nitida da proposta, com mais coerencia entre marca, oferta e resultado.',
+        'A oportunidade esta em construir uma narrativa mais proprietaria, repetivel e estrategica, capaz de aumentar lembranca, diferenciar a marca no curto prazo e criar base para uma resposta comercial mais forte ao longo de toda a campanha.'
+    ].join('\n\n');
+};
+
+const buildCampaignGoalsFallback = (clientName: string) => {
+    const brand = cleanSingleLine(clientName || 'a marca', 28, { keepTrailingPunctuation: true }) || 'a marca';
+    return [
+        'A campanha foi desenhada para fortalecer o posicionamento de ' + brand + ', aumentar o valor percebido da marca e transformar interesse disperso em uma intencao comercial mais clara, consistente e recorrente ao longo de todo o periodo.',
+        'A estrategia organiza a comunicacao em torno de uma promessa unica, capaz de sustentar desejo, reconhecimento e proximidade com o publico sem perder clareza, relevancia e ritmo de mercado durante a jornada completa.',
+        'Com isso, a marca ganha mais presenca, mais consistencia narrativa e mais capacidade de converter atencao em resposta, conectando construcao de imagem e resultado de forma integrada.'
+    ].join('\n\n');
+};
+
+const buildCampaignDefenseFallback = (clientName: string, slogan: string) => {
+    const brand = cleanSingleLine(clientName || 'a marca', 28, { keepTrailingPunctuation: true }) || 'a marca';
+    const promise = cleanSingleLine(slogan || 'uma proposta clara de valor', 42, { keepTrailingPunctuation: true }) || 'uma proposta clara de valor';
+    return [
+        'A defesa da campanha parte da ideia de que ' + brand + ' precisa ocupar um lugar mais nitido na mente do publico, com uma narrativa capaz de traduzir valor, diferenciar a oferta e reduzir a distancia entre percepcao e decisao.',
+        'Ao organizar a comunicacao em torno de ' + promise + ', a campanha cria uma leitura mais simples, memoravel e consistente, ajudando a marca a repetir a mesma promessa com mais forca em diferentes pontos de contato.',
+        'Essa constancia melhora o entendimento da proposta, sustenta relevancia ao longo do periodo e faz com que cada ativacao reforce a anterior, em vez de competir por atencao como uma mensagem isolada.',
+        'O resultado esperado e uma campanha que combina imagem e resposta comercial, elevando lembranca, afinidade e intencao de compra com uma construcao estrategica mais coesa.'
+    ].join('\n\n');
+};
+
+const buildSloganFallback = (clientName: string) => {
+    const brand = cleanSingleLine(clientName || '', 18, { keepTrailingPunctuation: true });
+    return cleanSingleLine(
+        brand ? brand + ': mais valor em cada contato' : 'Mais valor em cada contato',
+        42,
+        { keepTrailingPunctuation: true }
+    );
+};
+
+const isWeakHeadline = (value: string, minWords = 3) => {
+    const words = String(value || '').trim().split(/\s+/).filter(Boolean);
+    return words.length < minWords || hasDanglingEnding(value);
+};
+
+const trimToWordBoundary = (value: string, maxChars: number): string => {
+    const clean = String(value || '').trim();
+    if (!clean || maxChars <= 0 || clean.length <= maxChars) return clean;
+
+    const sliced = clean.slice(0, maxChars + 1).trim();
+    const breakChars = [' ', '/', '-', ','];
+    let bestIndex = -1;
+    for (const char of breakChars) {
+        const found = sliced.lastIndexOf(char);
+        if (found > bestIndex) bestIndex = found;
+    }
+
+    if (bestIndex > Math.floor(maxChars * 0.35)) {
+        return sliced.slice(0, bestIndex).trim();
+    }
+
+    return clean.slice(0, maxChars).trim();
+};
+
+const cleanSingleLine = (
+    value: unknown,
+    maxChars: number,
+    options: { keepTrailingPunctuation?: boolean } = {}
+): string => {
+    const normalized = String(value ?? '')
+        .replace(/\r/g, ' ')
+        .replace(/\n+/g, ' ')
+        .replace(/[\u2022\u00B7\u25AA\u25A0\u25CF]/g, ' ')
+        .replace(/^\s*\d+[.)-]\s*/g, '')
+        .replace(/[\u201C\u201D"']/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!normalized) return '';
+
+    const clipped = trimToWordBoundary(normalized, maxChars);
+    const stabilized = stripDanglingEnding(clipped);
+    return options.keepTrailingPunctuation
+        ? stabilized.trim()
+        : stabilized.replace(/[.!?,;:]+$/g, '').trim();
+};
+
+const CHALLENGE_INCOMPLETE_HEADS = new Set([
+    'ausencia', 'carencia', 'deficit', 'dependencia', 'desconexao', 'desalinhamento', 'desperdicio',
+    'distancia', 'escassez', 'excesso', 'falta', 'fragilidade', 'gap', 'gargalo', 'necessidade',
+    'prisoes', 'prisao', 'queda', 'risco'
+]);
+
+const normalizeChallengeItem = (
+    value: unknown,
+    maxWords = 5,
+    maxChars = 42
+): string => {
+    const source = String(value ?? '')
+        .replace(/\r/g, ' ')
+        .replace(/\n+/g, ' ')
+        .replace(/[\u2022\u00B7\u25AA\u25A0\u25CF]/g, ' ')
+        .replace(/^\s*\d+[.)-]\s*/g, '')
+        .replace(/[\u201C\u201D"']/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    if (!source) return '';
+
+    const limitedWords = source.split(/\s+/).filter(Boolean).slice(0, maxWords).join(' ');
+    const clipped = trimToWordBoundary(limitedWords, maxChars);
+    const cleaned = stripDanglingEnding(clipped, 2).replace(/[.!?,;:]+$/g, '').trim();
+    if (!cleaned || hasDanglingEnding(cleaned)) return '';
+
+    const words = cleaned.split(/\s+/).filter(Boolean);
+    const firstWord = normalizeAscii(words[0] || '').replace(/[^a-z0-9]/g, '');
+    if (words.length <= 2 && CHALLENGE_INCOMPLETE_HEADS.has(firstWord)) return '';
+
+    return cleaned;
+};
+
+const buildChallengesFallback = () => ([
+    'Baixa previsibilidade comercial',
+    'Mensagem sem continuidade',
+    'Dependencia de esforco manual',
+    'Ritmo lento de resposta',
+    'Baixo aproveitamento de dados',
+    'Distancia entre marca e venda',
+    'Escala com custo elevado',
+    'Inovacao sem consistencia',
+    'Operacao pouco integrada'
+]);
+
+const cleanParagraphText = (
+    value: unknown,
+    maxChars: number,
+    maxParagraphs: number,
+    maxCharsPerParagraph: number
+): string => {
+    const source = String(value ?? '')
+        .replace(/\r/g, '')
+        .replace(/[ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢?ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦?]/g, ' ')
+        .trim();
+
+    if (!source) return '';
+
+    const paragraphSeeds = source
+        .split(/\n{2,}|\n/)
+        .map((paragraph) => paragraph.replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+
+    const normalizedParagraphs: string[] = [];
+    for (const seed of paragraphSeeds) {
+        const sentences = seed
+            .split(/(?<=[.!?])\s+/)
+            .map((sentence) => cleanSingleLine(sentence, maxCharsPerParagraph, { keepTrailingPunctuation: true }))
+            .filter(Boolean);
+
+        if (sentences.length === 0) continue;
+
+        let paragraph = '';
+        for (const sentence of sentences) {
+            const next = paragraph ? `${paragraph} ${sentence}` : sentence;
+            if (next.length > maxCharsPerParagraph) break;
+            paragraph = next;
+        }
+
+        normalizedParagraphs.push(
+            paragraph || cleanSingleLine(seed, maxCharsPerParagraph, { keepTrailingPunctuation: true })
+        );
+
+        if (normalizedParagraphs.length >= maxParagraphs) break;
+    }
+
+    const finalParagraphs: string[] = [];
+    let remaining = maxChars;
+    for (const paragraph of normalizedParagraphs) {
+        const separatorCost = finalParagraphs.length > 0 ? 2 : 0;
+        const allowance = Math.min(maxCharsPerParagraph, remaining - separatorCost);
+        if (allowance <= 0) break;
+
+        const clipped = cleanSingleLine(paragraph, allowance, { keepTrailingPunctuation: true });
+        if (!clipped) continue;
+
+        finalParagraphs.push(clipped);
+        remaining -= clipped.length + separatorCost;
+        if (finalParagraphs.length >= maxParagraphs) break;
+    }
+
+    return finalParagraphs.join('\n\n').trim();
+};
+
+const parseMonthToken = (value: string, fallbackIndex: number) => {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+
+    const normalized = normalizeAscii(raw);
+    const monthAlias = Object.keys(PT_MONTH_ALIASES).find((alias) => normalized.includes(alias));
+    const monthIndex = monthAlias !== undefined ? (PT_MONTH_ALIASES[monthAlias] ?? -1) : -1;
+    const yearMatch = normalized.match(/\b(20\d{2})\b/);
+    const year = yearMatch ? Number(yearMatch[1]) : null;
+
+    if (monthIndex === -1) {
+        return {
+            key: `raw-${fallbackIndex}-${normalized}`,
+            title: raw,
+            sortKey: Number.MAX_SAFE_INTEGER - 100 + fallbackIndex,
+        };
+    }
+
+    return {
+        key: `${year ?? 'none'}-${monthIndex}`,
+        title: PT_MONTHS[monthIndex],
+        sortKey: (year ?? 9999) * 12 + monthIndex,
+    };
+};
+
+const normalizeMonthList = (months: string[], fallbackLabel = ''): string[] => {
+    const primary = Array.isArray(months) && months.length > 0 ? months : String(fallbackLabel || '').split('|');
+
+    const parsed = primary
+        .map((item, index) => parseMonthToken(String(item || '').trim(), index))
+        .filter(Boolean) as Array<{ key: string; title: string; sortKey: number }>;
+
+    const deduped: Array<{ key: string; title: string; sortKey: number }> = [];
+    const seen = new Set<string>();
+    for (const item of parsed) {
+        if (seen.has(item.key)) continue;
+        seen.add(item.key);
+        deduped.push(item);
+    }
+
+    deduped.sort((a, b) => a.sortKey - b.sortKey);
+    return deduped.map((item) => item.title).filter(Boolean).slice(0, 3);
+};
+
+const buildPlannerLabel = (months: string[]) => months.filter(Boolean).slice(0, 3).join(' | ');
+
+const normalizeShortItems = (items: unknown, count = 9, maxChars = 42, maxWords = 5): string[] => {
+    const source = Array.isArray(items)
+        ? items
+        : String(items || '')
+            .split(/\n+/)
+            .map((item) => item.trim())
+            .filter(Boolean);
+
+    const normalized = source
+        .map((item) => normalizeChallengeItem(item, maxWords, maxChars))
+        .filter(Boolean)
+        .slice(0, count);
+
+    const fallbackItems = buildChallengesFallback();
+    for (const fallbackItem of fallbackItems) {
+        if (normalized.length >= count) break;
+        if (normalized.includes(fallbackItem)) continue;
+        normalized.push(fallbackItem);
+    }
+
+    while (normalized.length < count) normalized.push('');
+    return normalized;
+};
+
+const normalizeRoadmapCards = (cards: any, fallbackMonths: string[]) => {
+    const source = Array.isArray(cards) ? cards : [];
+    const normalized = [];
+    for (let index = 0; index < 3; index += 1) {
+        const card = source[index] && typeof source[index] === 'object' ? source[index] : {};
+        const fallbackMonth = fallbackMonths[index] || '';
+        const normalizedMonth = normalizeMonthList([String(card.mes || fallbackMonth)], fallbackMonth)[0] || fallbackMonth;
+        normalized.push({
+            mes: normalizedMonth,
+            titulo: cleanSingleLine(card.titulo || '', 24),
+            detalhe: '',
+            descricao: cleanSingleLine(card.descricao || '', 58),
+            sugestao: cleanSingleLine(card.sugestao || '', 28),
+        });
+    }
+    return normalized;
+};
+
+const normalizeGeneratedContent = (
+    rawContent: any,
+    options: { plannerLabel: string; roadmapMonths: string[]; clientName?: string; logoPath?: string | null }
+) => {
+    const content = typeof rawContent === 'object' && rawContent ? rawContent : {};
+
+    content.planner = typeof content.planner === 'object' && content.planner ? content.planner : {};
+    content.diagnostico = typeof content.diagnostico === 'object' && content.diagnostico ? content.diagnostico : {};
+    content.desafios = typeof content.desafios === 'object' && content.desafios ? content.desafios : {};
+    content.grid = typeof content.grid === 'object' && content.grid ? content.grid : {};
+    content.slogan = typeof content.slogan === 'object' && content.slogan ? content.slogan : {};
+    content.defesa = typeof content.defesa === 'object' && content.defesa ? content.defesa : {};
+    content.roadmap = typeof content.roadmap === 'object' && content.roadmap ? content.roadmap : {};
+
+    content.planner.mes = options.plannerLabel;
+    content.planner.nome_cliente = cleanSingleLine(options.clientName || content.planner.nome_cliente || '', 38, { keepTrailingPunctuation: true });
+    if (options.logoPath) {
+        content.planner.logo_path = options.logoPath;
+    }
+
+    const normalizedDiagnosticText = cleanParagraphText(
+        content.diagnostico.texto_longo || content.diagnostico.texto || '',
+        900,
+        3,
+        290
+    );
+    const diagnosticParagraphCount = normalizedDiagnosticText ? normalizedDiagnosticText.split(/\n{2,}/).filter(Boolean).length : 0;
+    content.diagnostico.texto_longo = !normalizedDiagnosticText || normalizedDiagnosticText.length < 520 || diagnosticParagraphCount < 3
+        ? buildDiagnosticFallback(options.clientName || '')
+        : normalizedDiagnosticText;
+
+    content.desafios.itens = normalizeShortItems(content.desafios.itens, 9, 42, 5);
+
+    content.grid.mes = options.plannerLabel;
+    const rawGridText = String(content.grid.texto_longo || content.grid.texto || '').trim();
+    const normalizedGridText = cleanParagraphText(
+        rawGridText,
+        980,
+        3,
+        320
+    );
+    const gridParagraphCount = normalizedGridText ? normalizedGridText.split(/\n{2,}/).filter(Boolean).length : 0;
+    content.grid.texto_longo = !normalizedGridText || normalizedGridText.length < 420 || gridParagraphCount < 2 || looksMonthDriven(rawGridText, options.roadmapMonths)
+        ? buildCampaignGoalsFallback(options.clientName || '')
+        : normalizedGridText;
+
+    const sloganSource = cleanSingleLine(String(content.slogan.frase || '').trim(), 42, { keepTrailingPunctuation: true });
+    content.slogan.frase = isWeakHeadline(sloganSource)
+        ? buildSloganFallback(options.clientName || '')
+        : sloganSource;
+
+    const defesaSubtitleSource = cleanSingleLine(String(content.defesa.subtitulo || content.slogan.frase || '').trim(), 42, { keepTrailingPunctuation: true });
+    content.defesa.subtitulo = isWeakHeadline(defesaSubtitleSource)
+        ? content.slogan.frase
+        : defesaSubtitleSource;
+    const normalizedDefenseText = cleanParagraphText(
+        content.defesa.texto_longo || content.defesa.texto || '',
+        1280,
+        4,
+        330
+    );
+    const defenseParagraphCount = normalizedDefenseText ? normalizedDefenseText.split(/\n{2,}/).filter(Boolean).length : 0;
+    content.defesa.texto_longo = !normalizedDefenseText || normalizedDefenseText.length < 560 || defenseParagraphCount < 3
+        ? buildCampaignDefenseFallback(options.clientName || '', content.slogan.frase)
+        : normalizedDefenseText;
+
+    content.roadmap.cards = normalizeRoadmapCards(content.roadmap.cards, options.roadmapMonths);
+    return content;
+};
+
+const getClientContext = async (clienteId: string) => {
+    const clientResult = await db.query('SELECT nome, logo_url FROM clientes WHERE id = $1', [clienteId]);
+    const clientRow = clientResult.rows?.[0] || {};
+    const clientName = clientRow?.nome || '';
+
+    const brandResult = await db.query(
+        'SELECT * FROM branding WHERE cliente_id = $1 ORDER BY updated_at DESC LIMIT 1',
+        [clienteId]
+    );
+
+    const brandingRow = brandResult.rows?.[0] || null;
+    const logoUrl = (brandingRow
+        ? (brandingRow.logo_url ?? brandingRow.logoUrl ?? brandingRow.logo ?? brandingRow.logo_path ?? brandingRow.logoPath)
+        : null) ?? clientRow?.logo_url ?? null;
+
+    return {
+        clientName,
+        logoPath: resolveClientLogoPathFromUrl(logoUrl),
+        branding: brandingRow
+            ? {
+                visual_style: brandingRow.visual_style,
+                tone_of_voice: brandingRow.tone_of_voice,
+                audience: brandingRow.audience,
+                keywords: brandingRow.keywords,
+            }
+            : {},
+    };
+};
+
+type PresentationProgressCallback = (progress: number, step: string) => Promise<void> | void;
+
+type PresentationGenerationContext = {
+    clienteId: string;
+    calendar: any;
+    monthLabel: string;
+    deckMonths: string[];
+    plannerLabel: string;
+    clientName: string;
+    logoPath: string | null;
+    branding: Record<string, any>;
+};
+
+const reportPresentationProgress = async (
+    callback: PresentationProgressCallback | undefined,
+    progress: number,
+    step: string
+) => {
+    if (!callback) return;
+    await callback(Math.max(0, Math.min(100, Math.round(progress))), step);
+};
+
+const extractJsonObjectFromResponse = (responseText: string) => {
+    let jsonStr = String(responseText || '').replace(/```json/gi, '').replace(/```/g, '').trim();
+    const startIdx = jsonStr.indexOf('{');
+    const endIdx = jsonStr.lastIndexOf('}');
+    if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+        jsonStr = jsonStr.substring(startIdx, endIdx + 1);
+    }
+    return JSON.parse(jsonStr);
+};
+
+const runGeminiJsonPrompt = async (
+    clienteId: string,
+    prompt: string,
+    usageScope: string,
+    tier: 'fast' | 'quality' = 'quality'
+) => {
+    if (!process.env.GOOGLE_API_KEY) {
+        throw new Error('GOOGLE_API_KEY nao configurada');
+    }
+
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+    const modelsToTry = getGeminiModelCandidates(tier);
+    let lastError: any = null;
+
+    for (const modelName of modelsToTry) {
+        try {
+            const model = genAI.getGenerativeModel({
+                model: modelName,
+                generationConfig: { responseMimeType: 'application/json' }
+            });
+            const result = await model.generateContent(prompt);
+            const responseText = result.response.text();
+
+            if (result.response.usageMetadata) {
+                await updateTokenUsage(clienteId, result.response.usageMetadata, usageScope, modelName);
+            }
+
+            return {
+                modelName,
+                parsed: extractJsonObjectFromResponse(responseText),
+                rawText: responseText,
+            };
+        } catch (error: any) {
+            lastError = error;
+            console.warn(`[PRESENTATION] ${modelName} falhou em ${usageScope}:`, error?.message || error);
+            if (modelName !== modelsToTry[modelsToTry.length - 1]) {
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+            }
+        }
+    }
+
+    throw lastError || new Error('Falha ao obter resposta JSON da IA.');
+};
+
+const loadPresentationGenerationContext = async (
+    clienteId: string,
+    months: string[] = []
+): Promise<PresentationGenerationContext> => {
+    const requestedMonths = Array.isArray(months)
+        ? months.map((month) => String(month || '').trim()).filter(Boolean)
+        : [];
+
+    let calendar: any = null;
+    let monthLabel = '';
+
+    if (requestedMonths.length > 0) {
+        const calResult = await db.query(
+            `SELECT mes, calendario_json, criado_em
+             FROM calendarios
+             WHERE cliente_id = $1 AND mes = ANY($2::text[])
+             ORDER BY criado_em DESC`,
+            [clienteId, requestedMonths]
+        );
+
+        if (calResult.rows.length === 0) {
+            throw new Error('Nenhum calendario encontrado para o periodo selecionado.');
+        }
+
+        monthLabel = requestedMonths.join(' | ');
+        calendar = {
+            selected_months: requestedMonths,
+            calendars: calResult.rows.map((row: any) => ({ mes: row.mes, calendario_json: row.calendario_json })),
+        };
+    } else {
+        const calResult = await db.query(
+            'SELECT * FROM calendarios WHERE cliente_id = $1 ORDER BY criado_em DESC LIMIT 1',
+            [clienteId]
+        );
+
+        if (calResult.rows.length === 0) {
+            throw new Error('Nenhum calendario encontrado para este cliente.');
+        }
+
+        calendar = calResult.rows[0].calendario_json;
+        monthLabel = calResult.rows[0].mes;
+    }
+
+    const { clientName, logoPath, branding } = await getClientContext(clienteId);
+    const deckMonths = normalizeMonthList(requestedMonths, monthLabel);
+    const plannerLabel = buildPlannerLabel(deckMonths) || cleanSingleLine(monthLabel, 40, { keepTrailingPunctuation: true });
+
+    return {
+        clienteId,
+        calendar,
+        monthLabel,
+        deckMonths,
+        plannerLabel,
+        clientName,
+        logoPath,
+        branding,
+    };
+};
+
+const buildPresentationStrategyPrompt = (context: PresentationGenerationContext) => `Voce e um estrategista senior de campanhas. Analise o calendario abaixo e extraia a estrategia central da apresentacao.
+
+CLIENTE: ${context.clientName || 'Cliente'}
+PERIODO: ${context.monthLabel}
+MESES DA APRESENTACAO: ${context.plannerLabel}
+
+BRANDING:
+${JSON.stringify(context.branding, null, 2)}
+
+CALENDARIO:
+${JSON.stringify(context.calendar, null, 2)}
+
+REGRAS:
+- Pense como planejamento de campanha, nao como cronograma bruto.
+- Identifique as tensoes reais do cliente e do publico.
+- Encontre uma grande ideia que conecte diagnostico, metas, slogan, defesa e roadmap.
+- Se houver muitos temas, sintetize em uma narrativa unica e clara.
+- pilar_mensal.campanha deve ser o nome da ideia do mes, sem prefixo "Campanha".
+- Responda APENAS JSON valido.
+
+JSON:
+{
+  "contexto_competitivo": "",
+  "objetivo_macro": "",
+  "promessa_central": "",
+  "grande_ideia": "",
+  "tom_editorial": "",
+  "tensoes_do_publico": ["", "", ""],
+  "oportunidades": ["", "", ""],
+  "pilares_mensais": [
+    { "mes": "${context.deckMonths[0] || ''}", "foco": "", "campanha": "", "apoio_tatico": "" },
+    { "mes": "${context.deckMonths[1] || ''}", "foco": "", "campanha": "", "apoio_tatico": "" },
+    { "mes": "${context.deckMonths[2] || ''}", "foco": "", "campanha": "", "apoio_tatico": "" }
+  ]
+}`;
+
+const buildPresentationSlidesPrompt = (context: PresentationGenerationContext, strategyBrief: any) => `Voce e um diretor de criacao e redator senior. A partir do brief estrategico abaixo, escreva os textos das laminas da apresentacao.
+
+CLIENTE: ${context.clientName || 'Cliente'}
+PERIODO: ${context.monthLabel}
+MESES DA APRESENTACAO: ${context.plannerLabel}
+
+BRIEF ESTRATEGICO:
+${JSON.stringify(strategyBrief, null, 2)}
+
+CALENDARIO DE APOIO:
+${JSON.stringify(context.calendar, null, 2)}
+
+REGRAS DE COMPOSICAO DAS LAMINAS:
+- planner.mes: use exatamente estes meses, nessa ordem: ${context.plannerLabel}.
+- use apenas o nome do mes, sem ano, tanto em planner.mes quanto em roadmap.cards[i].mes.
+- diagnostico.texto_longo: maximo 900 caracteres, em 3 paragrafos mais cheios, coerentes, com frases completas e leitura consultiva.
+- cada paragrafo de diagnostico.texto_longo: idealmente entre 180 e 300 caracteres.
+- diagnostico deve explicar cenario, tensao e oportunidade, sem soar generico.
+- desafios.itens: exatamente 9 itens.
+- cada item em desafios.itens: ate 5 palavras e ate 42 caracteres, sem ponto final, com frase completa, sem acabar em "de", "para" ou termos pendurados, forte, especifico e pensado para caber em 2 ou 3 linhas no maximo.
+- grid.texto_longo: maximo 980 caracteres, em 2 ou 3 paragrafos, com densidade editorial maior, falando da campanha no geral, sem citar meses especificos e sem virar lista mensal.
+- grid.mes: repita exatamente ${context.plannerLabel}.
+- slogan.frase: maximo 42 caracteres, frase completa, memoravel, coerente com a promessa central e podendo quebrar em ate 2 linhas.
+- defesa.subtitulo: maximo 42 caracteres, coerente com o slogan, sem cortes.
+- defesa.texto_longo: maximo 1280 caracteres, em 3 ou 4 paragrafos mais robustos, com leitura clara e consultiva, defendendo por que a campanha funciona.
+- roadmap.cards: exatamente 3 cards, um por mes do periodo.
+- roadmap.cards[i].titulo: maximo 24 caracteres e deve ser apenas o nome da campanha/ideia do mes, sem prefixo "Campanha".
+- roadmap.cards[i].detalhe: deixe vazio ("") porque este campo nao sera exibido.
+- roadmap.cards[i].descricao: maximo 58 caracteres e deve explicar a ideia da campanha daquele mes com frase completa.
+- roadmap.cards[i].sugestao: maximo 28 caracteres e deve aparecer por ultimo.
+- Nao use bullets numerados dentro de textos corridos.
+- Nao invente um quarto mes.
+- Priorize clareza, ritmo visual, acentuacao correta e pouco texto por bloco.
+- Use o brief estrategico como fonte da verdade; o calendario serve como apoio e prova.
+
+Retorne APENAS este JSON preenchido:
+{
+  "planner": {
+    "mes": "${context.plannerLabel}",
+    "nome_cliente": "${context.clientName || 'Nome do Cliente'}"
+  },
+  "diagnostico": {
+    "texto_longo": ""
+  },
+  "desafios": {
+    "itens": ["", "", "", "", "", "", "", "", ""]
+  },
+  "grid": {
+    "mes": "${context.plannerLabel}",
+    "texto_longo": ""
+  },
+  "slogan": {
+    "frase": ""
+  },
+  "defesa": {
+    "subtitulo": "",
+    "texto_longo": ""
+  },
+  "roadmap": {
+    "cards": [
+      {
+        "mes": "${context.deckMonths[0] || ''}",
+        "titulo": "",
+        "detalhe": "",
+        "descricao": "",
+        "sugestao": ""
+      },
+      {
+        "mes": "${context.deckMonths[1] || ''}",
+        "titulo": "",
+        "detalhe": "",
+        "descricao": "",
+        "sugestao": ""
+      },
+      {
+        "mes": "${context.deckMonths[2] || ''}",
+        "titulo": "",
+        "detalhe": "",
+        "descricao": "",
+        "sugestao": ""
+      }
+    ]
+  }
+}`;
+
+const buildPresentationReviewPrompt = (context: PresentationGenerationContext, strategyBrief: any, draftContent: any) => `Voce e um revisor editorial de apresentacoes. Revise o JSON abaixo e devolva uma versao final mais coerente, mais enxuta e mais alinhada ao layout.
+
+CLIENTE: ${context.clientName || 'Cliente'}
+PERIODO: ${context.monthLabel}
+MESES DA APRESENTACAO: ${context.plannerLabel}
+
+BRIEF ESTRATEGICO:
+${JSON.stringify(strategyBrief, null, 2)}
+
+RASCUNHO DAS LAMINAS:
+${JSON.stringify(draftContent, null, 2)}
+
+CHECKLIST OBRIGATORIO:
+- diagnostico: 3 paragrafos mais cheios, coerentes e sem repeticao.
+- desafios: 9 itens curtos, especificos e sem ponto final.
+- grid: foco na campanha como um todo, sem organizar por mes.
+- slogan: frase completa, memoravel e sem truncamento.
+- defesa: subtitulo coerente com o slogan e texto consultivo em paragrafos curtos.
+- roadmap: 3 cards, meses corretos, cada um com campanha, descricao e sugestao curtos.
+- remova cortes estranhos, palavras penduradas e frases sem fechamento.
+- preserve o sentido estrategico do brief.
+- responda APENAS JSON valido no mesmo schema do rascunho.
+
+Retorne somente o JSON final.`;
+
+const sanitizePresentationRenderKey = (value?: string) => {
+    const raw = String(value || randomUUID()).trim();
+    const cleaned = raw.replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 80);
+    return cleaned || randomUUID();
+};
+
+const ensureDirExists = (dirPath: string) => {
+    if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+    }
+};
+
+const normalizePresentationRenderInput = async (rawData: any) => {
+    const data = typeof rawData === 'object' && rawData ? { ...rawData } : {};
+    const requestedMonths = normalizeMonthList(
+        Array.isArray(data?.months) ? data.months.map((month: any) => String(month)).filter(Boolean) : [],
+        data?.planner?.mes || ''
+    );
+    const roadmapMonths = requestedMonths.length > 0
+        ? requestedMonths
+        : normalizeMonthList([], data?.planner?.mes || '');
+    const plannerLabel = buildPlannerLabel(roadmapMonths) || cleanSingleLine(data?.planner?.mes || '', 40, { keepTrailingPunctuation: true });
+
+    data.planner = typeof data.planner === 'object' && data.planner ? data.planner : {};
+    data.grid = typeof data.grid === 'object' && data.grid ? data.grid : {};
+    data.diagnostico = typeof data.diagnostico === 'object' && data.diagnostico ? data.diagnostico : { texto_longo: '' };
+    data.slogan = typeof data.slogan === 'object' && data.slogan ? data.slogan : { frase: '' };
+    data.defesa = typeof data.defesa === 'object' && data.defesa ? data.defesa : { subtitulo: '', texto_longo: '' };
+    data.desafios = typeof data.desafios === 'object' && data.desafios ? data.desafios : { itens: [] };
+    data.roadmap = typeof data.roadmap === 'object' && data.roadmap ? data.roadmap : { cards: [] };
+    data.link_cta = typeof data.link_cta === 'object' && data.link_cta ? data.link_cta : { url: '' };
+    data.encerramento = typeof data.encerramento === 'object' && data.encerramento ? data.encerramento : {};
+
+    let normalizedClientName = cleanSingleLine(data?.planner?.nome_cliente || '', 38, { keepTrailingPunctuation: true });
+    let normalizedLogoPath = data?.planner?.logo_path || null;
+
+    const clienteId = data?.clienteId;
+    if (clienteId) {
+        try {
+            const { clientName, logoPath } = await getClientContext(clienteId);
+            if (clientName) {
+                normalizedClientName = clientName;
+            }
+            if (data?.planner?.logo_url) {
+                const fromPayload = resolveClientLogoPathFromUrl(data.planner.logo_url);
+                if (fromPayload) {
+                    normalizedLogoPath = fromPayload;
+                }
+            }
+            if (logoPath && !normalizedLogoPath) {
+                normalizedLogoPath = logoPath;
+            }
+        } catch (contextError) {
+            console.warn('[PRESENTATION] Falha ao enriquecer planner com dados do cliente:', contextError);
+        }
+    }
+
+    return normalizeGeneratedContent(data, {
+        plannerLabel,
+        roadmapMonths,
+        clientName: normalizedClientName,
+        logoPath: normalizedLogoPath,
+    });
+};
+
+export const generatePresentationContentPipeline = async (
+    clienteId: string,
+    months: string[] = [],
+    onProgress?: PresentationProgressCallback
+) => {
+    await reportPresentationProgress(onProgress, 5, 'Carregando calendario e branding...');
+    const context = await loadPresentationGenerationContext(clienteId, months);
+
+    await reportPresentationProgress(onProgress, 20, 'Montando o brief estrategico da campanha...');
+    const strategyResponse = await runGeminiJsonPrompt(
+        clienteId,
+        buildPresentationStrategyPrompt(context),
+        'presentation_strategy',
+        'quality'
+    );
+
+    await reportPresentationProgress(onProgress, 48, 'Escrevendo os textos das laminas...');
+    const slidesDraftResponse = await runGeminiJsonPrompt(
+        clienteId,
+        buildPresentationSlidesPrompt(context, strategyResponse.parsed),
+        'presentation_slides',
+        'quality'
+    );
+
+    await reportPresentationProgress(onProgress, 76, 'Revisando coerencia, tamanho e ritmo visual...');
+    let reviewedContent = slidesDraftResponse.parsed;
+    try {
+        const reviewResponse = await runGeminiJsonPrompt(
+            clienteId,
+            buildPresentationReviewPrompt(context, strategyResponse.parsed, slidesDraftResponse.parsed),
+            'presentation_review',
+            'fast'
+        );
+        reviewedContent = reviewResponse.parsed;
+    } catch (reviewError) {
+        console.warn('[PRESENTATION] Revisao editorial falhou, seguindo com rascunho normalizado:', reviewError);
+    }
+
+    const content = normalizeGeneratedContent(reviewedContent, {
+        plannerLabel: context.plannerLabel,
+        roadmapMonths: context.deckMonths,
+        clientName: context.clientName,
+        logoPath: context.logoPath,
+    });
+
+    await reportPresentationProgress(onProgress, 100, 'Conteudo da apresentacao concluido.');
+    return {
+        content,
+        strategyBrief: strategyResponse.parsed,
+        plannerLabel: context.plannerLabel,
+        roadmapMonths: context.deckMonths,
+        clientName: context.clientName,
+    };
+};
+
+export const renderPresentationDeck = async (
+    rawData: any,
+    options: { renderKey?: string; onProgress?: PresentationProgressCallback } = {}
+) => {
+    await reportPresentationProgress(options.onProgress, 10, 'Preparando estrutura da apresentacao...');
+    const normalizedData = await normalizePresentationRenderInput(rawData);
+
+    ensureDirExists(TMP_DIR);
+    ensureDirExists(OUTPUT_DIR);
+
+    const renderKey = sanitizePresentationRenderKey(options.renderKey);
+    const outputDir = path.join(OUTPUT_DIR, renderKey);
+    const contentFile = path.join(TMP_DIR, `${renderKey}.json`);
+
+    fs.rmSync(outputDir, { recursive: true, force: true });
+    ensureDirExists(outputDir);
+    fs.writeFileSync(contentFile, JSON.stringify(normalizedData, null, 2), { encoding: 'utf-8' });
+
+    await reportPresentationProgress(options.onProgress, 38, 'Renderizando as laminas no motor grafico...');
+
+    const pythonBin = process.env.PYTHON_BIN || 'python3';
+    if (!fs.existsSync(SCRIPT_FILE)) {
+        throw new Error(`Script Python nao encontrado: ${SCRIPT_FILE}`);
+    }
+
+    try {
+        await execAsync(`${pythonBin} "${SCRIPT_FILE}"`, {
+            cwd: GEN_DIR,
+            env: {
+                ...process.env,
+                PRESENTATION_CONTENT_FILE: contentFile,
+                PRESENTATION_OUTPUT_DIR: outputDir,
+            },
+        });
+    } catch (error: any) {
+        const details = error?.stderr || error?.message || 'Falha na execucao do script Python';
+        throw new Error(details);
+    }
+
+    await reportPresentationProgress(options.onProgress, 92, 'Organizando arquivos gerados...');
+
+    const files = fs.existsSync(outputDir)
+        ? fs.readdirSync(outputDir).filter((file) => file.endsWith('.png')).sort((a, b) => a.localeCompare(b))
+        : [];
+    const tempFiles = files.map((file) => `${renderKey}/${file}`);
+    const images = files.map((file) => `/presentation-output/${renderKey}/${file}?t=${Date.now()}`);
+
+    await reportPresentationProgress(options.onProgress, 100, 'Apresentacao renderizada com sucesso.');
+    return {
+        content: normalizedData,
+        images,
+        tempFiles,
+        renderKey,
+    };
+};
 router.get('/available-months/:clienteId', async (req: Request, res: Response) => {
     try {
         const { clienteId } = req.params;
-        if (!clienteId) return res.status(400).json({ success: false, error: 'Cliente ID é obrigatório' });
+        if (!clienteId) {
+            return res.status(400).json({ success: false, error: 'Cliente ID e obrigatorio' });
+        }
 
         const result = await db.query(
             `SELECT mes
@@ -53,429 +946,191 @@ router.get('/available-months/:clienteId', async (req: Request, res: Response) =
         );
 
         const months = (result.rows || [])
-            .map((r: any) => (r?.mes ? String(r.mes) : ''))
-            .filter((m: string) => !!m);
+            .map((row: any) => (row?.mes ? String(row.mes) : ''))
+            .filter(Boolean);
 
         return res.json({ success: true, months });
     } catch (error: any) {
-        console.error('❌ Erro ao listar meses disponíveis:', error);
+        console.error('[PRESENTATION] Erro ao listar meses:', error);
         return res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// ROTA NOVA: Gerar conteúdo com IA baseado no calendário
 router.post('/generate-content', async (req: Request, res: Response) => {
     try {
-        const { clienteId, months } = req.body;
-
+        const { clienteId, months } = req.body || {};
         if (!clienteId) {
-            return res.status(400).json({ success: false, error: 'Cliente ID é obrigatório' });
+            return res.status(400).json({ success: false, error: 'Cliente ID e obrigatorio' });
         }
 
-        // 1. Buscar Calendário e Posts (último ou período selecionado)
-        const requestedMonths: string[] = Array.isArray(months)
-            ? months.map((m: any) => String(m)).filter((m: string) => !!m)
+        const requestedMonths = Array.isArray(months)
+            ? months.map((month: any) => String(month || '').trim()).filter(Boolean)
             : [];
-
-        let calendar: any = null;
-        let monthLabel = '';
-
-        if (requestedMonths.length > 0) {
-            const calResult = await db.query(
-                `SELECT mes, calendario_json, criado_em
-                 FROM calendarios
-                 WHERE cliente_id = $1 AND mes = ANY($2::text[])
-                 ORDER BY criado_em DESC`,
-                [clienteId, requestedMonths]
-            );
-
-            if (calResult.rows.length === 0) {
-                return res.status(404).json({ success: false, error: 'Nenhum calendário encontrado para o período selecionado.' });
-            }
-
-            monthLabel = requestedMonths.join(' | ');
-            calendar = {
-                selected_months: requestedMonths,
-                calendars: calResult.rows.map((r: any) => ({ mes: r.mes, calendario_json: r.calendario_json }))
-            };
-        } else {
-            const calResult = await db.query(
-                "SELECT * FROM calendarios WHERE cliente_id = $1 ORDER BY criado_em DESC LIMIT 1",
-                [clienteId]
-            );
-
-            if (calResult.rows.length === 0) {
-                return res.status(404).json({ success: false, error: 'Nenhum calendário encontrado para este cliente.' });
-            }
-
-            calendar = calResult.rows[0].calendario_json;
-            monthLabel = calResult.rows[0].mes;
-        }
-
-        // 2. Buscar Branding (para contexto)
-        const brandResult = await db.query(
-            "SELECT * FROM branding WHERE cliente_id = $1 ORDER BY updated_at DESC LIMIT 1",
-            [clienteId]
-        );
-
-        let logoPath = null;
-        let brandingData = {};
-
-        if (brandResult.rows.length > 0) {
-            const b = brandResult.rows[0];
-            brandingData = {
-                visual_style: b.visual_style,
-                tone_of_voice: b.tone_of_voice,
-                audience: b.audience,
-                keywords: b.keywords
-            };
-
-            const logoUrl = (b.logo_url ?? b.logoUrl ?? b.logo ?? b.logo_path ?? b.logoPath) as unknown;
-            logoPath = resolveClientLogoPathFromUrl(logoUrl);
-        }
-
-        const branding = brandingData;
-
-        // 2.1 Buscar nome do cliente (para o planner)
-        const clientResult = await db.query(
-            "SELECT nome FROM clientes WHERE id = $1",
-            [clienteId]
-        );
-        const clientName = clientResult.rows?.[0]?.nome || '';
-
-        // 3. Montar Prompt para IA
-        const prompt = `Você é um assistente de marketing. Analise os dados e retorne APENAS JSON válido, sem texto adicional.
-
-CALENDÁRIO (Período: ${monthLabel}):
-${JSON.stringify(calendar, null, 2)}
-
-BRANDING:
-${JSON.stringify(branding, null, 2)}
-
-REGRAS IMPORTANTES:
-- "defesa.texto_longo" deve ter no máximo 850 caracteres (contando espaços e quebras de linha)
-- "grid.texto_longo" deve ter no máximo 850 caracteres (contando espaços e quebras de linha)
-- "desafios.itens" deve conter exatamente 9 itens
-- cada item em "desafios.itens" deve ter no máximo 55 caracteres (contando espaços e quebras de linha)
-
-Retorne APENAS este JSON preenchido:
-{
-  "defesa": {
-    "subtitulo": "Frase do slogan",
-    "texto_longo": "Estratégia em 3 parágrafos (ATÉ 850 caracteres, contando espaços e quebras de linha)"
-  },
-  "grid": {
-    "texto_longo": "Metas em 2 parágrafos (ATÉ 850 caracteres, contando espaços e quebras de linha)"
-  },
-  "slogan": {
-    "frase": "Máximo 5 palavras"
-  },
-  "desafios": {
-    "itens": ["Item 1", "Item 2", "Item 3", "Item 4", "Item 5", "Item 6", "Item 7", "Item 8", "Item 9"]
-  },
-  "planner": {
-    "mes": "MÊS1 | MÊS2 | MÊS3",
-    "nome_cliente": "${clientName || 'Nome do Cliente'}"
-  }
-}`;
-
-        // 4. Chamar Gemini
-        if (!process.env.GOOGLE_API_KEY) {
-            throw new Error('GOOGLE_API_KEY não configurada');
-        }
-        const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-
-        let result;
-        let responseText = "";
-
-        const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
-
-        let successModelName = "";
-        for (const modelName of modelsToTry) {
-            try {
-                console.log(`🤖 [DEBUG] Tentando modelo: ${modelName}...`);
-                const model = genAI.getGenerativeModel({ model: modelName });
-                result = await model.generateContent(prompt);
-                responseText = result.response.text();
-                successModelName = modelName;
-                console.log(`✅ [DEBUG] Sucesso com ${modelName}`);
-                break;
-            } catch (modelError: any) {
-                console.warn(`⚠️ [DEBUG] ${modelName} falhou:`, modelError.message);
-
-                if (modelName === modelsToTry[modelsToTry.length - 1]) {
-                    throw new Error(`Todos os modelos falharam. Erro final: ${modelError.message}`);
-                }
-
-                console.log("⏳ [DEBUG] Aguardando 2s antes do próximo modelo...");
-                await new Promise(resolve => setTimeout(resolve, 2000));
-            }
-        }
-
-        // Rastrear tokens gastos na geração de lâminas
-        if (result) {
-            const usageMetadata = result.response.usageMetadata;
-            if (usageMetadata) {
-                await updateTokenUsage(clienteId, usageMetadata, "laminas_generation", successModelName);
-            }
-        }
-
-        console.log("🤖 [AI] Resposta recebida (primeiros 500 chars):", responseText.substring(0, 500));
-
-        // Extrair JSON da resposta (pode vir com texto extra)
-        let jsonStr = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-
-        // Tentar encontrar o JSON entre { e }
-        const startIdx = jsonStr.indexOf('{');
-        const endIdx = jsonStr.lastIndexOf('}');
-
-        if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
-            jsonStr = jsonStr.substring(startIdx, endIdx + 1);
-        }
-
-        console.log("📦 [AI] JSON extraído (primeiros 300 chars):", jsonStr.substring(0, 300));
-
-        const content = JSON.parse(jsonStr);
-
-        // Injetar logoPath no planner se existir (prioriza logo vinda do frontend, se houver)
-        if (content.planner) {
-            const fromPayload = resolveClientLogoPathFromUrl(content.planner.logo_url);
-            const finalLogoPath = fromPayload || logoPath;
-            if (finalLogoPath) content.planner.logo_path = finalLogoPath;
-        }
-
-        // Garantir nome do cliente vindo do cadastro
-        if (content.planner && clientName) {
-            content.planner.nome_cliente = clientName;
-        }
-
-        // 🚨 CRÍTICO: Metas (grid) NUNCA deve ter mês - remover se IA gerou
-        if (content.grid) {
-            delete content.grid.mes;
-        }
-
-        return res.json({ success: true, content });
-
+        const result = await generatePresentationContentPipeline(String(clienteId), requestedMonths);
+        return res.json({ success: true, content: result.content, strategyBrief: result.strategyBrief });
     } catch (error: any) {
-        console.error("❌ Erro ao gerar conteúdo com IA:", error);
-
-        // Tratamento especial para erro de cota
-        if (error.status === 429) {
+        console.error('[PRESENTATION] Erro ao gerar conteudo:', error);
+        if (error?.status === 429) {
             return res.status(429).json({
                 success: false,
-                error: 'Cota da API Gemini excedida. Aguarde alguns minutos e tente novamente, ou preencha os campos manualmente.',
-                retryAfter: error.errorDetails?.find((d: any) => d['@type']?.includes('RetryInfo'))?.retryDelay || '1 minuto'
+                error: 'Cota da API Gemini excedida. Aguarde alguns minutos e tente novamente.',
+                retryAfter: error.errorDetails?.find((detail: any) => detail['@type']?.includes('RetryInfo'))?.retryDelay || '1 minuto',
             });
         }
-
-        // Se for erro de parsing JSON, logar a resposta completa
         if (error instanceof SyntaxError && error.message.includes('JSON')) {
-            console.error("📄 Resposta da IA que causou erro:");
-            console.error(error.message);
             return res.status(500).json({
                 success: false,
-                error: 'A IA retornou um formato inválido. Tente novamente ou preencha manualmente.'
+                error: 'A IA retornou um formato invalido. Tente novamente ou preencha manualmente.',
             });
         }
+        return res.status(500).json({ success: false, error: error.message });
+    }
+});
 
+router.post('/generate-content-job', async (req: Request, res: Response) => {
+    try {
+        const { clienteId, months } = req.body || {};
+        if (!clienteId) {
+            return res.status(400).json({ success: false, error: 'Cliente ID e obrigatorio' });
+        }
+
+        const requestedMonths = Array.isArray(months)
+            ? months.map((month: any) => String(month || '').trim()).filter(Boolean)
+            : [];
+        const jobId = randomUUID();
+        const payload = {
+            jobType: 'presentation',
+            operation: 'content',
+            clienteId: String(clienteId),
+            months: requestedMonths,
+        };
+
+        await db.query(
+            `INSERT INTO calendar_generation_jobs (id, cliente_id, status, progress, current_step, payload, created_at)
+             VALUES ($1, $2, 'pending', 0, 'Aguardando inicio...', $3, NOW())`,
+            [jobId, clienteId, JSON.stringify(payload)]
+        );
+
+        return res.status(202).json({
+            success: true,
+            message: 'Geracao de conteudo iniciada em background.',
+            jobId,
+        });
+    } catch (error: any) {
+        console.error('[PRESENTATION] Erro ao iniciar job de conteudo:', error);
+        return res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/generate-job', async (req: Request, res: Response) => {
+    try {
+        const data = req.body || {};
+        const clienteId = String(data?.clienteId || '').trim();
+        if (!clienteId) {
+            return res.status(400).json({ success: false, error: 'Cliente ID e obrigatorio' });
+        }
+
+        const jobId = randomUUID();
+        const payload = {
+            jobType: 'presentation',
+            operation: 'render',
+            clienteId,
+            input: data,
+        };
+
+        await db.query(
+            `INSERT INTO calendar_generation_jobs (id, cliente_id, status, progress, current_step, payload, created_at)
+             VALUES ($1, $2, 'pending', 0, 'Aguardando inicio...', $3, NOW())`,
+            [jobId, clienteId, JSON.stringify(payload)]
+        );
+
+        return res.status(202).json({
+            success: true,
+            message: 'Geracao da apresentacao iniciada em background.',
+            jobId,
+        });
+    } catch (error: any) {
+        console.error('[PRESENTATION] Erro ao iniciar job de render:', error);
         return res.status(500).json({ success: false, error: error.message });
     }
 });
 
 router.post('/generate', async (req: Request, res: Response): Promise<void> => {
-    console.log("🎨 [PRESENTATION] Solicitada geração de lâminas");
     try {
-        const data = req.body;
-
-        // Metas (grid): o usuário não quer mês nessa lâmina.
-        // Garantir que nunca vai para o Python, independente do payload/estado.
-        if (data?.grid && typeof data.grid === 'object') {
-            const before = (data.grid as any).mes;
-            if (before !== undefined && before !== '') {
-                console.log(`🧼 [PRESENTATION] Removendo grid.mes no início do /generate (antes: "${String(before)}")`);
-            }
-            delete (data.grid as any).mes;
-        }
-
-        const requestedMonths: string[] = Array.isArray(data?.months)
-            ? data.months.map((m: any) => String(m)).filter((m: string) => !!m)
-            : [];
-
-        if (requestedMonths.length > 0) {
-            const label = requestedMonths.join(' | ');
-            if (data?.planner && (!data.planner.mes || String(data.planner.mes).toLowerCase().includes('mês'))) {
-                data.planner.mes = label;
-            }
-        }
-
-        // Resolver logo do planner vinda do frontend (se existir)
-        if (data?.planner?.logo_url) {
-            const fromPayload = resolveClientLogoPathFromUrl(data.planner.logo_url);
-            if (fromPayload) data.planner.logo_path = fromPayload;
-        }
-
-        // Injetar nome do cliente e logo no planner, se clienteId vier no payload
-        const clienteId = data?.clienteId;
-        if (clienteId) {
-            try {
-                const clientResult = await db.query(
-                    "SELECT nome FROM clientes WHERE id = $1",
-                    [clienteId]
-                );
-                const clientName = clientResult.rows?.[0]?.nome;
-
-                const brandResult = await db.query(
-                    "SELECT * FROM branding WHERE cliente_id = $1 ORDER BY updated_at DESC LIMIT 1",
-                    [clienteId]
-                );
-                const b = brandResult.rows?.[0];
-                const logoUrl = b ? (b.logo_url ?? b.logoUrl ?? b.logo ?? b.logo_path ?? b.logoPath) : null;
-
-                const logoPath = resolveClientLogoPathFromUrl(logoUrl);
-
-                if (data.planner && clientName) {
-                    data.planner.nome_cliente = clientName;
-                }
-                if (data.planner && logoPath && !data.planner.logo_path) {
-                    data.planner.logo_path = logoPath;
-                }
-            } catch (e) {
-                console.warn('⚠️ [PRESENTATION] Falha ao enriquecer planner com dados do cliente:', e);
-            }
-        }
-
-        // 1. Salvar JSON
-        // Blindagem final: garantir que nada reintroduziu o mês nas Metas
-        if (data?.grid && typeof data.grid === 'object') {
-            const beforeFinal = (data.grid as any).mes;
-            if (beforeFinal !== undefined && beforeFinal !== '') {
-                console.log(`🧼 [PRESENTATION] Removendo grid.mes antes de salvar content.json (antes: "${String(beforeFinal)}")`);
-            }
-            delete (data.grid as any).mes;
-        }
-        console.log(`📝 [PRESENTATION] Payload final antes de salvar - grid.mes: "${(data?.grid as any)?.mes ?? 'undefined'}"`);
-        fs.writeFileSync(CONTENT_FILE, JSON.stringify(data, null, 2), { encoding: 'utf-8' });
-        console.log("📝 [PRESENTATION] content.json salvo");
-
-        // 2. Rodar Python
-        // Comando: python main.py
-        // cwd é importante para o script achar templates/fonts relativos a ele
-        const pythonBin = process.env.PYTHON_BIN || "python3";
-        if (!fs.existsSync(SCRIPT_FILE)) {
-            res.status(500).json({
-                success: false,
-                error: 'Script Python não encontrado',
-                details: SCRIPT_FILE
-            });
-            return;
-        }
-
-        exec(`${pythonBin} "${SCRIPT_FILE}"`, { cwd: GEN_DIR }, (error, stdout, stderr) => {
-            if (error) {
-                console.error(`❌ [PRESENTATION] Erro ao executar Python: ${error.message}`);
-                console.error(`❌ [PRESENTATION] Stderr: ${stderr}`);
-                res.status(500).json({
-                    success: false,
-                    error: 'Falha na execução do script Python',
-                    details: stderr || error.message
-                });
-                return;
-            }
-
-            console.log(`✅ [PRESENTATION] Python output: ${stdout}`);
-
-            // 3. Listar arquivos gerados
-            let files: string[] = [];
-            try {
-                if (fs.existsSync(OUTPUT_DIR)) {
-                    files = fs.readdirSync(OUTPUT_DIR).filter(f => f.endsWith('.png'));
-                }
-            } catch (readErr) {
-                console.error("Erro ao ler pasta output:", readErr);
-            }
-
-            // Retornar URLs para o frontend
-            // As URLs serão servidas estaticamente
-            const urls = files.map(f => `/presentation-output/${f}?t=${Date.now()}`); // timestamp para evitar cache
-
-            res.json({
-                success: true,
-                message: 'Lâminas geradas com sucesso',
-                images: urls,
-                tempFiles: files // Nomes dos arquivos para salvar depois
-            });
+        const result = await renderPresentationDeck(req.body || {});
+        res.json({
+            success: true,
+            message: 'Laminas geradas com sucesso',
+            images: result.images,
+            tempFiles: result.tempFiles,
+            content: result.content,
         });
-
     } catch (error: any) {
-        console.error("❌ [PRESENTATION] Erro no handler:", error);
+        console.error('[PRESENTATION] Erro no handler:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// ROTA NOVA: Salvar versão definitiva
 router.post('/save', async (req: Request, res: Response) => {
     try {
         const { clienteId, tempFiles, dataJson, titulo, tipo, metadata } = req.body;
-
         if (!clienteId || !tempFiles || !Array.isArray(tempFiles)) {
             return res.status(400).json({ success: false, error: 'Dados incompletos' });
         }
 
-        // Criar pasta de destino
         const timestamp = Date.now();
         const clientStorageDir = path.resolve(__dirname, `../../storage/presentations/${clienteId}/${timestamp}`);
-
         if (!fs.existsSync(clientStorageDir)) {
             fs.mkdirSync(clientStorageDir, { recursive: true });
         }
 
         const savedUrls: string[] = [];
-
-        // Mover arquivos
-        for (const filename of tempFiles) {
-            const sourcePath = path.join(OUTPUT_DIR, filename);
-            const destPath = path.join(clientStorageDir, filename);
-
+        for (const tempFile of tempFiles) {
+            const relativeFile = String(tempFile || '').replace(/\\/g, '/').replace(/^\/+/, '');
+            const sourcePath = path.resolve(OUTPUT_DIR, relativeFile);
+            const relativeToOutput = path.relative(OUTPUT_DIR, sourcePath);
+            if (relativeToOutput.startsWith("..") || path.isAbsolute(relativeToOutput)) {
+                continue;
+            }
+            const finalName = path.basename(relativeFile);
+            const destPath = path.join(clientStorageDir, finalName);
             if (fs.existsSync(sourcePath)) {
                 fs.copyFileSync(sourcePath, destPath);
-                savedUrls.push(`/storage/presentations/${clienteId}/${timestamp}/${filename}`);
+                savedUrls.push(`/storage/presentations/${clienteId}/${timestamp}/${finalName}`);
             }
         }
 
-        // Salvar no banco
         const result = await db.query(
             `INSERT INTO presentations (cliente_id, titulo, arquivos, dados_json, tipo, metadata)
              VALUES ($1, $2, $3, $4, $5, $6)
              RETURNING id, criado_em`,
             [
                 clienteId,
-                titulo || `Apresentação ${new Date().toLocaleDateString()}`,
+                titulo || `Apresentacao ${new Date().toLocaleDateString()}`,
                 JSON.stringify(savedUrls),
                 JSON.stringify(dataJson),
                 tipo || 'laminas',
-                metadata ? JSON.stringify(metadata) : null
+                metadata ? JSON.stringify(metadata) : null,
             ]
         );
 
         return res.json({
             success: true,
-            message: 'Apresentação salva com sucesso!',
+            message: 'Apresentacao salva com sucesso!',
             id: result.rows[0].id,
-            savedUrls
+            savedUrls,
         });
-
     } catch (error: any) {
-        console.error("❌ Erro ao salvar apresentação:", error);
+        console.error('[PRESENTATION] Erro ao salvar apresentacao:', error);
         return res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// ROTA NOVA: Listar histórico
 router.get('/history/:clienteId', async (req: Request, res: Response) => {
     try {
         const { clienteId } = req.params;
         const result = await db.query(
-            "SELECT * FROM presentations WHERE cliente_id = $1 ORDER BY criado_em DESC",
+            'SELECT * FROM presentations WHERE cliente_id = $1 ORDER BY criado_em DESC',
             [clienteId]
         );
 
@@ -485,14 +1140,14 @@ router.get('/history/:clienteId', async (req: Request, res: Response) => {
 
             try {
                 if (typeof arquivos === 'string') arquivos = JSON.parse(arquivos);
-            } catch (_e) {
-                // manter como está
+            } catch (_error) {
+                // noop
             }
 
             try {
                 if (typeof dados_json === 'string') dados_json = JSON.parse(dados_json);
-            } catch (_e) {
-                // manter como está
+            } catch (_error) {
+                // noop
             }
 
             return { ...row, arquivos, dados_json };
@@ -505,3 +1160,22 @@ router.get('/history/:clienteId', async (req: Request, res: Response) => {
 });
 
 export default router;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

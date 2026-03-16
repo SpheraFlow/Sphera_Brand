@@ -1,30 +1,227 @@
 {
-  "defesa": {
-    "subtitulo": "Conexão, Valor e Reconhecimento.",
-    "texto_longo": "Nossa estratégia para Março de 2026 foca em estabelecer a marca como uma voz relevante e empática, combinando celebrações importantes com a oferta de valor prático. O objetivo é construir uma conexão genuína com o público, mostrando que a marca entende suas aspirações e desafios, seja na vida pessoal ou profissional. A abordagem é dupla: inspirar e capacitar.\n\nUtilizaremos datas comemorativas, como o Dia Internacional da Mulher, para fortalecer o posicionamento da marca em causas sociais importantes, gerando engajamento emocional com um post estático de homenagem. Complementaremos com conteúdo educacional e prático, como o carrossel \"3 Dicas para Organizar o Seu Dia\", que visa oferecer soluções tangíveis para problemas cotidianos, posicionando a marca como uma fonte confiável de informação útil e aplicável.\n\nA combinação desses formatos e temas visa não apenas aumentar o alcance e o engajamento, mas também solidificar a percepção de uma marca que se importa e entrega valor. Ao alternar entre conteúdo inspirador e prático, buscaremos gerar conversas, aumentar o tempo de permanência nas publicações e incentivar o compartilhamento, culminando no crescimento orgânico da comunidade e da lealdade à marca."
+  "clienteId": "c3e5cae0-68ed-4d1a-9b7d-744937c63f1b",
+  "months": [
+    "Abril de 2026",
+    "Maio de 2026",
+    "Junho de 2026"
+  ],
+  "planner": {
+    "mes": "Abril | Maio | Junho",
+    "nome_cliente": "Sphera Flow"
   },
-  "grid": {
-    "texto_longo": "As metas para este período em Março de 2026 são claras: elevar o engajamento do público em 20% através de interações significativas nas publicações, como curtidas, comentários e compartilhamentos. Buscamos também fortalecer a percepção da marca como um recurso valioso e confiável, medido pelo feedback qualitativo e pelo aumento no tempo médio de visualização dos conteúdos.\n\nAdicionalmente, pretendemos expandir nossa audiência em 15% com a atração de novos seguidores alinhados aos nossos valores, utilizando conteúdos que ressoam com suas necessidades e interesses. O posicionamento como uma marca que celebra datas importantes e oferece soluções práticas contribuirá para a construção de uma comunidade leal e engajada, pronta para interagir e advocate pela marca."
-  },
-  "slogan": {
-    "frase": "Conexão, Valor e Reconhecimento."
+  "diagnostico": {
+    "texto_longo": "PMEs perdem vendas valiosas no WhatsApp devido a respostas lentas e falta de operação 24/7. O investimento em marketing é subaproveitado, com leads esfriando rapidamente e custos ocultos afetando o faturamento potencial.\n\nSoluções genéricas falham ao não oferecer hiperpersonalização e contexto, afastando clientes e diluindo a percepção de valor da marca.\n\nA Sphera Flow entrega inteligência estratégica: hiperpersonalização e automação precisa. Garantimos respostas imediatas e contextuais, transformando desafios operacionais em crescimento sustentável e mensurável para sua PME."
   },
   "desafios": {
     "itens": [
-      "Manter relevância em feed saturado.",
-      "Gerar engajamento significativo.",
-      "Posicionar marca como autoridade.",
-      "Converter engajamento em valor.",
-      "Equilibrar conteúdo inspirador e prático.",
-      "Atrair novos seguidores qualificados.",
-      "Manter a consistência da marca.",
-      "Otimizar tempo e produtividade pessoal.",
-      "Conectar-se com datas importantes."
+      "Resposta Lenta",
+      "Custo Operacional Alto",
+      "Atendimento 24/7",
+      "Frieza Algorítmica",
+      "Dados Fragmentados",
+      "Perda de Leads",
+      "IA Genérica",
+      "Dificuldade Escala",
+      "Gestão no Escuro"
+    ],
+    "texto": "• Resposta Lenta\n• Custo Operacional Alto\n• Atendimento 24/7\n• Frieza Algorítmica\n• Dados Fragmentados\n• Perda de Leads\n• IA Genérica\n• Dificuldade Escala\n• Gestão no Escuro",
+    "layout": [
+      {
+        "id": "item-0",
+        "x": 900,
+        "y": 260,
+        "width": 280,
+        "height": 170,
+        "fontSize": 24,
+        "color": "#FFFFFF",
+        "fontWeight": "normal",
+        "align": "center",
+        "fontFamily": "Lato",
+        "kind": "text",
+        "shadow": true
+      },
+      {
+        "id": "item-1",
+        "x": 1200,
+        "y": 250,
+        "width": 280,
+        "height": 170,
+        "fontSize": 24,
+        "color": "#FFFFFF",
+        "fontWeight": "normal",
+        "align": "center",
+        "fontFamily": "Lato",
+        "kind": "text",
+        "shadow": true
+      },
+      {
+        "id": "item-2",
+        "x": 1470,
+        "y": 270,
+        "width": 280,
+        "height": 170,
+        "fontSize": 24,
+        "color": "#000000",
+        "fontWeight": "normal",
+        "align": "center",
+        "fontFamily": "Lato",
+        "kind": "text",
+        "shadow": true
+      },
+      {
+        "id": "item-3",
+        "x": 920,
+        "y": 460,
+        "width": 280,
+        "height": 170,
+        "fontSize": 24,
+        "color": "#000000",
+        "fontWeight": "normal",
+        "align": "center",
+        "fontFamily": "Lato",
+        "kind": "text",
+        "shadow": true
+      },
+      {
+        "id": "item-4",
+        "x": 1190,
+        "y": 470,
+        "width": 280,
+        "height": 170,
+        "fontSize": 24,
+        "color": "#FFFFFF",
+        "fontWeight": "normal",
+        "align": "center",
+        "fontFamily": "Lato",
+        "kind": "text",
+        "shadow": true
+      },
+      {
+        "id": "item-5",
+        "x": 1450,
+        "y": 460,
+        "width": 280,
+        "height": 170,
+        "fontSize": 24,
+        "color": "#FFFFFF",
+        "fontWeight": "normal",
+        "align": "center",
+        "fontFamily": "Lato",
+        "kind": "text",
+        "shadow": true
+      },
+      {
+        "id": "item-6",
+        "x": 900,
+        "y": 680,
+        "width": 280,
+        "height": 170,
+        "fontSize": 24,
+        "color": "#FFFFFF",
+        "fontWeight": "normal",
+        "align": "center",
+        "fontFamily": "Lato",
+        "kind": "text",
+        "shadow": true
+      },
+      {
+        "id": "item-7",
+        "x": 1180,
+        "y": 690,
+        "width": 280,
+        "height": 170,
+        "fontSize": 24,
+        "color": "#000000",
+        "fontWeight": "normal",
+        "align": "center",
+        "fontFamily": "Lato",
+        "kind": "text",
+        "shadow": true
+      },
+      {
+        "id": "item-8",
+        "x": 1460,
+        "y": 680,
+        "width": 280,
+        "height": 170,
+        "fontSize": 24,
+        "color": "#FFFFFF",
+        "fontWeight": "normal",
+        "align": "center",
+        "fontFamily": "Lato",
+        "kind": "text",
+        "shadow": true
+      }
     ]
   },
-  "planner": {
-    "mes": "MARÇO | ABRIL | MAIO",
-    "nome_cliente": "f"
+  "grid": {
+    "mes": "Abril | Maio | Junho",
+    "texto_longo": "A campanha Fluxo de Elite posiciona a Sphera Flow como a inteligência estratégica essencial para PMEs. Com foco em autoridade e diferenciação, desmistificamos a automação.\n\nCada conteúdo quebra objeções, transformando complexidade operacional em crescimento sustentável e mensurável. Conduzimos da conscientização à conversão, destacando o ROI da automação e assistência dedicada."
   },
-  "clienteId": "b1ea0a74-7bd5-44dc-a293-9b50360aeb4c"
+  "slogan": {
+    "frase": "Sphera Flow: A Inteligência"
+  },
+  "defesa": {
+    "subtitulo": "Sua PME no topo com precisão estratégica.",
+    "texto_longo": "A campanha Fluxo de Elite foca em PMEs que buscam crescimento sem caos.\n\nQuebramos a desconfiança em automações. Apresentamos a hiperpersonalização e a Visão 360º, elevando o atendimento. A tecnologia amplifica a voz da marca, sem anular a conexão humana, essencial à experiência do cliente.\n\nProvamos o ROI imediato da Sphera Flow. Desmistificamos que eficiência custa caro.\n\nA campanha educa e converte com tom assertivo, tecnológico e prático.",
+    "layout": [
+      {
+        "id": "subtitulo",
+        "x": 185,
+        "y": 679,
+        "width": 540,
+        "height": 34,
+        "fontSize": 22,
+        "color": "#FFFFFF",
+        "fontWeight": "normal",
+        "align": "left",
+        "fontFamily": "Lato",
+        "kind": "text",
+        "shadow": true
+      },
+      {
+        "id": "texto",
+        "x": 940,
+        "y": 100,
+        "width": 827.3794612615305,
+        "height": 879.2895095722511,
+        "fontSize": 31,
+        "color": "#FFFFFF",
+        "fontWeight": "normal",
+        "align": "left",
+        "fontFamily": "Lato",
+        "kind": "text",
+        "shadow": true
+      }
+    ]
+  },
+  "roadmap": {
+    "cards": [
+      {
+        "mes": "Abril",
+        "titulo": "Despertar da Eficiência",
+        "detalhe": "Identificando o",
+        "descricao": "Focamos em conscientizar sobre as perdas por ineficiência",
+        "sugestao": "Avalie sua operação agora"
+      },
+      {
+        "mes": "Maio",
+        "titulo": "Arquitetura Inteligente",
+        "detalhe": "Avançando com Dados",
+        "descricao": "Educação sobre Hiperpersonalização e Visão 360º",
+        "sugestao": "Otimize seus fluxos já"
+      },
+      {
+        "mes": "Junho",
+        "titulo": "Consolidando a Elite",
+        "detalhe": "Acelere sua Conversão",
+        "descricao": "Campanha de conversão com urgência, diferenciação e prova",
+        "sugestao": "Transforme lucro este mês"
+      }
+    ]
+  },
+  "link_cta": {
+    "url": "http://localhost:3006/"
+  },
+  "encerramento": {}
 }

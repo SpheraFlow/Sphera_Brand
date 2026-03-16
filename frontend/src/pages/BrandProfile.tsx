@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type ChangeEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import api from '../services/api';
+import { resolveAssetUrl } from '../utils/assetHelpers';
 import { getArchetypeInfo, JUNG_ARCHETYPES } from '../utils/jungArchetypes';
 
 interface BrandingData {
@@ -25,6 +26,7 @@ interface BrandingData {
   usp?: string;
   anti_keywords?: string[];
   niche?: string;
+  logo_url?: string;
   updated_at?: string;
 }
 
@@ -47,21 +49,22 @@ type BrandingVersionDetail = BrandingVersionMeta & {
 
 export default function BrandProfile() {
   // ============================================
-  // 🔴 PROVA DE VIDA - FRONTEND
+  //  PROVA DE VIDA - FRONTEND
   // ============================================
   const RENDER_ID = Date.now();
-  console.log(`\n🔴 [FRONTEND VIVO] BrandProfile renderizado - ID: ${RENDER_ID}`);
-  console.log(`📍 Timestamp: ${new Date().toISOString()}`);
+  console.log(`\n [FRONTEND VIVO] BrandProfile renderizado - ID: ${RENDER_ID}`);
+  console.log(` Timestamp: ${new Date().toISOString()}`);
 
   const { clientId } = useParams<{ clientId: string }>();
-  console.log(`🆔 Cliente ID da URL: ${clientId}`);
+  console.log(`x  Cliente ID da URL: ${clientId}`);
 
   // Estado inicial com valores vazios
   const emptyBranding: BrandingData = {
     visual_style: { colors: [], fonts: [], archeType: '' },
     tone_of_voice: { description: '', keywords: [] },
     audience: { persona: '', demographics: '' },
-    keywords: []
+    keywords: [],
+    logo_url: ''
   };
 
   const [branding, setBranding] = useState<BrandingData>(emptyBranding);
@@ -74,7 +77,7 @@ export default function BrandProfile() {
   const [uploadCaptions, setUploadCaptions] = useState('');
   const [isUploading, setIsUploading] = useState(false);
 
-  // Estados para edição
+  // Estados para edicao
   const [editColors, setEditColors] = useState<string[]>([]);
   const [editFonts, setEditFonts] = useState<string[]>([]);
   const [editArcheType, setEditArcheType] = useState('');
@@ -89,6 +92,8 @@ export default function BrandProfile() {
   const [editUsp, setEditUsp] = useState('');
   const [editAntiKeywords, setEditAntiKeywords] = useState<string[]>([]);
   const [editNiche, setEditNiche] = useState('');
+  const [editLogoUrl, setEditLogoUrl] = useState('');
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
 
   const [clientCategoriasNicho, setClientCategoriasNicho] = useState<string[]>([]);
   const [editCategoriasNicho, setEditCategoriasNicho] = useState<string[]>([]);
@@ -102,11 +107,11 @@ export default function BrandProfile() {
   const [selectedVersion, setSelectedVersion] = useState<BrandingVersionDetail | null>(null);
   const [restoringVersion, setRestoringVersion] = useState(false);
 
-  // Estado para controlar se há rascunho restaurado
+  // Estado para controlar se ha rascunho restaurado
   const [hasDraftRestored, setHasDraftRestored] = useState(false);
   const ignoreAutoSave = useRef(false);
 
-  // Inputs temporários
+  // Inputs temporarios
   const [newColor, setNewColor] = useState('');
   const [newFont, setNewFont] = useState('');
   const [newToneKeyword, setNewToneKeyword] = useState('');
@@ -130,7 +135,7 @@ export default function BrandProfile() {
     setEditCategoriasNicho((prev: string[]) => prev.filter((c) => String(c).toLowerCase() !== key));
   };
 
-  // Função para salvar no localStorage
+  // Funcao para salvar no localStorage
   const saveToLocalStorage = (data: BrandingData) => {
     if (clientId) {
       const draftKey = `branding_draft_${clientId}`;
@@ -138,11 +143,11 @@ export default function BrandProfile() {
         ...data,
         lastSaved: Date.now()
       }));
-      console.log('💾 [AUTO-SAVE] Dados salvos no localStorage');
+      console.log(' [AUTO-SAVE] Dados salvos no localStorage');
     }
   };
 
-  // Função para carregar do localStorage
+  // Funcao para carregar do localStorage
   const loadFromLocalStorage = (): BrandingData | null => {
     if (clientId) {
       const draftKey = `branding_draft_${clientId}`;
@@ -150,10 +155,10 @@ export default function BrandProfile() {
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          console.log('📂 [AUTO-SAVE] Rascunho encontrado no localStorage');
+          console.log('x [AUTO-SAVE] Rascunho encontrado no localStorage');
           return parsed;
         } catch (error) {
-          console.error('❌ [AUTO-SAVE] Erro ao parsear rascunho:', error);
+          console.error('R [AUTO-SAVE] Erro ao parsear rascunho:', error);
           return null;
         }
       }
@@ -161,12 +166,12 @@ export default function BrandProfile() {
     return null;
   };
 
-  // Função para limpar localStorage
+  // Funcao para limpar localStorage
   const clearLocalStorage = () => {
     if (clientId) {
       const draftKey = `branding_draft_${clientId}`;
       localStorage.removeItem(draftKey);
-      console.log('🗑️ [AUTO-SAVE] Rascunho removido do localStorage');
+      console.log('x [AUTO-SAVE] Rascunho removido do localStorage');
     }
   };
 
@@ -200,7 +205,7 @@ export default function BrandProfile() {
 
   const restoreVersion = async (versionId: string) => {
     if (!clientId) return;
-    const ok = window.confirm('Restaurar esta versão do DNA? Uma cópia do estado atual será salva automaticamente.');
+    const ok = window.confirm('Restaurar esta versao do DNA? Uma copia do estado atual sera salva automaticamente.');
     if (!ok) return;
     setRestoringVersion(true);
     try {
@@ -228,12 +233,12 @@ export default function BrandProfile() {
   useEffect(() => {
     if (branding && Object.keys(branding).length > 0 && !loading) {
       if (ignoreAutoSave.current) {
-        console.log('🛡️ [AUTO-SAVE] Ignorando salvamento (dados vindos do backend)');
+        console.log(' [AUTO-SAVE] Ignorando salvamento (dados vindos do backend)');
         ignoreAutoSave.current = false;
         return;
       }
 
-      // Só salva se não for dados vazios iniciais
+      // So salva se nao for dados vazios iniciais
       const hasContent = (branding.visual_style?.colors?.length ?? 0) > 0 ||
         branding.tone_of_voice?.description ||
         branding.audience?.persona ||
@@ -250,63 +255,65 @@ export default function BrandProfile() {
   }, [branding, loading, clientId]);
 
   const loadBranding = async () => {
-    console.log('📥 [LOAD BRANDING] Iniciando carregamento para cliente:', clientId);
+    console.log(' [LOAD BRANDING] Iniciando carregamento para cliente:', clientId);
 
     try {
       setLoading(true);
+      let currentLogoUrl = '';
 
       try {
         const clientRes = await api.get(`/clients/${clientId}`);
-        const cliente: ClienteData | undefined = clientRes.data?.cliente;
+        const cliente: (ClienteData & { logo_url?: string | null }) | undefined = clientRes.data?.cliente;
         const currentCats = Array.isArray(cliente?.categorias_nicho)
           ? cliente?.categorias_nicho?.map((c) => String(c).trim()).filter(Boolean)
           : [];
+        currentLogoUrl = typeof cliente?.logo_url === 'string' ? cliente.logo_url : '';
         setClientCategoriasNicho(currentCats);
       } catch (_e) {
         setClientCategoriasNicho([]);
       }
 
-      // Primeiro: verificar se há rascunho no localStorage
+      // Primeiro: verificar se ha rascunho no localStorage
       const draftData = loadFromLocalStorage();
       if (draftData) {
-        console.log('📂 [LOAD BRANDING] Rascunho encontrado, restaurando...');
-        setBranding(draftData);
+        console.log('x [LOAD BRANDING] Rascunho encontrado, restaurando...');
+        setBranding({ ...draftData, logo_url: draftData.logo_url || currentLogoUrl });
         setHasDraftRestored(true);
         setIsNewBrand(false);
-        setIsEditing(true); // Permite edição imediata do rascunho
+        setIsEditing(true); // Permite edicao imediata do rascunho
         setLoading(false);
         return;
       }
 
       // Segundo: buscar dados salvos do banco
-      console.log('📥 [LOAD BRANDING] Nenhum rascunho encontrado, buscando do banco...');
-      console.log('📥 [LOAD BRANDING] Fazendo requisição para:', `/branding/${clientId}`);
+      console.log(' [LOAD BRANDING] Nenhum rascunho encontrado, buscando do banco...');
+      console.log(' [LOAD BRANDING] Fazendo requisicao para:', `/branding/${clientId}`);
 
       const response = await api.get(`/branding/${clientId}`);
-      console.log('📥 [LOAD BRANDING] Resposta recebida:', response.data);
-      console.log('📥 [LOAD BRANDING] Branding data:', response.data.branding);
+      console.log(' [LOAD BRANDING] Resposta recebida:', response.data);
+      console.log(' [LOAD BRANDING] Branding data:', response.data.branding);
 
       ignoreAutoSave.current = true; // Evitar salvar como rascunho ao carregar do banco
-      setBranding(response.data.branding);
+      setBranding({ ...response.data.branding, logo_url: currentLogoUrl || response.data?.branding?.logo_url || '' });
       setIsNewBrand(false);
       setHasDraftRestored(false);
 
-      console.log('📥 [LOAD BRANDING] Estado atualizado com dados do banco');
+      console.log(' [LOAD BRANDING] Estado atualizado com dados do banco');
 
     } catch (err: any) {
-      console.log('⚠️ [LOAD BRANDING] Branding não encontrado no banco, inicializando vazio');
-      console.log('⚠️ [LOAD BRANDING] Erro:', err.response?.data || err.message);
+      console.log('a [LOAD BRANDING] Branding nao encontrado no banco, inicializando vazio');
+      console.log('a [LOAD BRANDING] Erro:', err.response?.data || err.message);
 
-      // Em vez de mostrar erro, inicializa com valores vazios e ativa edição
+      // Em vez de mostrar erro, inicializa com valores vazios e ativa edicao
       setBranding(emptyBranding);
       setIsNewBrand(true);
-      setIsEditing(true); // Entra automaticamente em modo de edição
+      setIsEditing(true); // Entra automaticamente em modo de edicao
       setHasDraftRestored(false);
 
-      console.log('📥 [LOAD BRANDING] Estado inicializado como vazio');
+      console.log(' [LOAD BRANDING] Estado inicializado como vazio');
     } finally {
       setLoading(false);
-      console.log('📥 [LOAD BRANDING] Finalizado');
+      console.log(' [LOAD BRANDING] Finalizado');
     }
   };
 
@@ -324,6 +331,7 @@ export default function BrandProfile() {
     setEditUsp(branding.usp || '');
     setEditAntiKeywords(branding.anti_keywords || []);
     setEditNiche(branding.niche || '');
+    setEditLogoUrl(branding.logo_url || '');
     setEditCategoriasNicho(clientCategoriasNicho || []);
     setCategoriasQuery('');
     setIsEditing(true);
@@ -344,7 +352,7 @@ export default function BrandProfile() {
 
   const cancelEditing = () => {
     if (isNewBrand) {
-      // Se for novo e cancelar, volta para o estado vazio mas não sai do modo edição
+      // Se for novo e cancelar, volta para o estado vazio mas nao sai do modo edicao
       return;
     }
     setIsEditing(false);
@@ -378,35 +386,36 @@ export default function BrandProfile() {
         niche: editNiche
       };
 
-      console.log('💾 [BRANDING SAVE] Salvando branding definitivo:', payload);
+      console.log(' [BRANDING SAVE] Salvando branding definitivo:', payload);
 
       await api.put(`/branding/${clientId}`, payload);
 
       try {
         await api.put(`/clients/${clientId}`, {
           categorias_nicho: editCategoriasNicho,
+          logo_url: editLogoUrl || null,
         });
       } catch (e: any) {
-        console.error('❌ Erro ao salvar categorias_nicho do cliente:', e);
+        console.error('R Erro ao salvar categorias_nicho do cliente:', e);
       }
 
-      // Após salvar com sucesso, limpar o rascunho do localStorage
+      // Apos salvar com sucesso, limpar o rascunho do localStorage
       clearLocalStorage();
       setHasDraftRestored(false);
 
-      alert('✅ DNA da Marca salvo com sucesso!');
+      alert('S& DNA da Marca salvo com sucesso!');
       setIsEditing(false);
       setIsNewBrand(false);
       loadBranding(); // Recarrega os dados
     } catch (error: any) {
-      console.error('❌ Erro ao salvar branding:', error);
+      console.error('R Erro ao salvar branding:', error);
       alert('Erro ao salvar: ' + (error.response?.data?.error || error.message));
     } finally {
       setIsSaving(false);
     }
   };
 
-  // Funções auxiliares para adicionar/remover itens
+  // Funcoes auxiliares para adicionar/remover itens
   const addColor = () => {
     if (newColor && !editColors.includes(newColor)) {
       setEditColors([...editColors, newColor]);
@@ -464,31 +473,52 @@ export default function BrandProfile() {
 
   const handleImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      const filesArray = Array.from(e.target.files).slice(0, 3); // Máximo 3 imagens
+      const filesArray = Array.from(e.target.files).slice(0, 3); // Maximo 3 imagens
       setUploadImages(filesArray);
     }
   };
 
+  const handleClientLogoUpload = async (file: File | null | undefined) => {
+    if (!file) return;
+
+    try {
+      setIsUploadingLogo(true);
+      const formData = new FormData();
+      formData.append('file', file);
+      const response = await api.post('/client-logos/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const uploadedUrl = String(response.data?.url || '').trim();
+      if (!uploadedUrl) throw new Error('Upload sem URL de retorno');
+      setEditLogoUrl(uploadedUrl);
+    } catch (error: any) {
+      console.error('Erro ao enviar logo do cliente:', error);
+      alert('Erro ao enviar a logo do cliente. Tente novamente.');
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
   const processUpload = async () => {
-    console.log('🎯 [BRANDPROFILE] ======= PROCESS UPLOAD INICIADO =======');
-    console.log('🎯 [BRANDPROFILE] processUpload chamado!');
-    console.log('🎯 [BRANDPROFILE] clientId:', clientId, 'Type:', typeof clientId);
-    console.log('🎯 [BRANDPROFILE] uploadImages.length:', uploadImages.length);
-    console.log('🎯 [BRANDPROFILE] uploadImages:', uploadImages);
-    console.log('🎯 [BRANDPROFILE] ======= PROCESS UPLOAD INICIADO =======');
+    console.log(' [BRANDPROFILE] ======= PROCESS UPLOAD INICIADO =======');
+    console.log(' [BRANDPROFILE] processUpload chamado!');
+    console.log(' [BRANDPROFILE] clientId:', clientId, 'Type:', typeof clientId);
+    console.log(' [BRANDPROFILE] uploadImages.length:', uploadImages.length);
+    console.log(' [BRANDPROFILE] uploadImages:', uploadImages);
+    console.log(' [BRANDPROFILE] ======= PROCESS UPLOAD INICIADO =======');
 
     if (!clientId) {
-      alert('❌ Erro: Cliente ID não encontrado');
+      alert('R Erro: Cliente ID nao encontrado');
       return;
     }
 
     if (uploadImages.length === 0) {
-      alert('⚠️ Adicione pelo menos 1 imagem');
+      alert('a Adicione pelo menos 1 imagem');
       return;
     }
 
     try {
-      console.log('🎯 [BRANDPROFILE] Iniciando upload...');
+      console.log(' [BRANDPROFILE] Iniciando upload...');
       setIsUploading(true);
 
       const formData = new FormData();
@@ -497,16 +527,16 @@ export default function BrandProfile() {
       // Enviar apenas a primeira imagem (conforme a rota backend)
       formData.append('file', uploadImages[0]);
 
-      console.log('\n📤 ============================================');
-      console.log('📤 [FRONTEND] Preparando upload');
-      console.log('📤 ============================================');
-      console.log('🆔 Cliente ID:', clientId);
-      console.log('📝 Legendas:', uploadCaptions ? 'Sim' : 'Não');
-      console.log('📸 Imagem selecionada:', uploadImages[0].name);
-      console.log('🎯 [UPLOAD] Enviando para Cliente:', clientId);
+      console.log('\n ============================================');
+      console.log(' [FRONTEND] Preparando upload');
+      console.log(' ============================================');
+      console.log('x  Cliente ID:', clientId);
+      console.log(' Legendas:', uploadCaptions ? 'Sim' : 'Nao');
+      console.log(' Imagem selecionada:', uploadImages[0].name);
+      console.log(' [UPLOAD] Enviando para Cliente:', clientId);
 
       // Log detalhado do FormData
-      console.log('\n📦 Conteúdo do FormData:');
+      console.log('\n Conteudo do FormData:');
       for (let [key, value] of formData.entries()) {
         if (value instanceof File) {
           console.log(`  - ${key}: ${value.name} (${value.type}, ${value.size} bytes)`);
@@ -516,10 +546,10 @@ export default function BrandProfile() {
       }
 
       const targetUrl = '/knowledge/branding/extract';
-      console.log('🚀 [BRANDPROFILE] Enviando requisição para:', targetUrl);
-      console.log('🚀 [BRANDPROFILE] Cliente ID:', clientId);
-      console.log('🚀 [BRANDPROFILE] Arquivo:', uploadImages[0]?.name);
-      console.log('🚀 [BRANDPROFILE] BaseURL da API:', api.defaults.baseURL);
+      console.log('xa [BRANDPROFILE] Enviando requisicao para:', targetUrl);
+      console.log('xa [BRANDPROFILE] Cliente ID:', clientId);
+      console.log('xa [BRANDPROFILE] Arquivo:', uploadImages[0]?.name);
+      console.log('xa [BRANDPROFILE] BaseURL da API:', api.defaults.baseURL);
 
       const response = await api.post(
         targetUrl,
@@ -529,25 +559,25 @@ export default function BrandProfile() {
         }
       );
 
-      console.log('\n✅ ============================================');
-      console.log('✅ [FRONTEND] Resposta recebida');
-      console.log('✅ ============================================');
-      console.log('DNA extraído:', response.data);
+      console.log('\nS& ============================================');
+      console.log('S& [FRONTEND] Resposta recebida');
+      console.log('S& ============================================');
+      console.log('DNA extraido:', response.data);
 
       // Atualizar estado local com os dados retornados
-      console.log('🔄 [BRANDPROFILE] Verificando resposta da API...');
-      console.log('🔄 [BRANDPROFILE] response.data:', response.data);
-      console.log('🔄 [BRANDPROFILE] response.data.success:', response.data.success);
-      console.log('🔄 [BRANDPROFILE] response.data.suggestion:', response.data.suggestion);
+      console.log('x [BRANDPROFILE] Verificando resposta da API...');
+      console.log('x [BRANDPROFILE] response.data:', response.data);
+      console.log('x [BRANDPROFILE] response.data.success:', response.data.success);
+      console.log('x [BRANDPROFILE] response.data.suggestion:', response.data.suggestion);
 
-      console.log('🔄 [BRANDPROFILE] Verificando condições de sucesso...');
-      console.log('🔄 [BRANDPROFILE] response.data.success:', response.data.success);
-      console.log('🔄 [BRANDPROFILE] response.data.suggestion exists:', !!response.data.suggestion);
+      console.log('x [BRANDPROFILE] Verificando condicoes de sucesso...');
+      console.log('x [BRANDPROFILE] response.data.success:', response.data.success);
+      console.log('x [BRANDPROFILE] response.data.suggestion exists:', !!response.data.suggestion);
 
       if (response.data.success && response.data.suggestion) {
-        console.log('🔄 [BRANDPROFILE] Sugestões da IA recebidas:', response.data.suggestion);
+        console.log('x [BRANDPROFILE] Sugestoes da IA recebidas:', response.data.suggestion);
 
-        // Aplicar sugestões da IA ao estado local (auto-save fará o resto)
+        // Aplicar sugestoes da IA ao estado local (auto-save fara o resto)
         const aiSuggestions = response.data.suggestion;
         const updatedBranding: BrandingData = {
           ...branding,
@@ -573,37 +603,37 @@ export default function BrandProfile() {
 
         setBranding(updatedBranding);
 
-        // Após salvar, recarregar os dados do banco para garantir consistência
-        console.log('🔄 [BRANDPROFILE] Recarregando dados do banco...');
+        // Apos salvar, recarregar os dados do banco para garantir consistencia
+        console.log('x [BRANDPROFILE] Recarregando dados do banco...');
 
         try {
           await loadBranding();
-          console.log('🔄 [BRANDPROFILE] loadBranding() executado com sucesso');
+          console.log('x [BRANDPROFILE] loadBranding() executado com sucesso');
         } catch (loadError) {
-          console.error('❌ [BRANDPROFILE] Erro ao executar loadBranding():', loadError);
+          console.error('R [BRANDPROFILE] Erro ao executar loadBranding():', loadError);
         }
 
-        // Garantir que não estamos em modo de edição para mostrar os dados
+        // Garantir que nao estamos em modo de edicao para mostrar os dados
         setIsEditing(false);
         setIsNewBrand(false);
 
-        console.log('🔄 [BRANDPROFILE] Modo edição desativado após recarregar dados');
+        console.log('x [BRANDPROFILE] Modo edicao desativado apos recarregar dados');
 
-        // Forçar re-render
+        // Forcar re-render
         setTimeout(() => {
-          console.log('🔄 [BRANDPROFILE] Forçando re-render após delay');
+          console.log('x [BRANDPROFILE] Forcando re-render apos delay');
         }, 500);
 
       } else {
-        console.log('❌ [BRANDPROFILE] Condições de sucesso não atendidas');
-        console.log('❌ [BRANDPROFILE] response.data:', response.data);
+        console.log('R [BRANDPROFILE] Condicoes de sucesso nao atendidas');
+        console.log('R [BRANDPROFILE] response.data:', response.data);
       }
 
-      // Sempre executar após o upload (sucesso ou falha)
+      // Sempre executar apos o upload (sucesso ou falha)
       setIsNewBrand(false);
       setIsEditing(false);
 
-      alert('✨ DNA da marca extraído com sucesso!');
+      alert('S DNA da marca extraido com sucesso!');
 
       // Fechar modal
       setShowUploadModal(false);
@@ -611,7 +641,7 @@ export default function BrandProfile() {
       setUploadCaptions('');
 
     } catch (error: any) {
-      console.error('❌ Erro ao processar upload:', error);
+      console.error('R Erro ao processar upload:', error);
       alert('Erro: ' + (error.response?.data?.error || error.message));
     } finally {
       setIsUploading(false);
@@ -633,6 +663,7 @@ export default function BrandProfile() {
   const persona = isEditing ? editPersona : (branding.audience?.persona || '');
   const demographics = isEditing ? editDemographics : (branding.audience?.demographics || '');
   const keywords = isEditing ? editKeywords : (branding.keywords || []);
+  const currentLogoUrl = resolveAssetUrl((isEditing ? editLogoUrl : (branding.logo_url || '')) || '');
 
   const archetypeInfo = getArchetypeInfo(isEditing ? editArchetype : branding.archetype);
 
@@ -640,19 +671,19 @@ export default function BrandProfile() {
     {
       label: 'Educativo & Direto',
       description:
-        'Tom educativo, direto e objetivo. Linguagem simples, sem jargões desnecessários. Misturar didática com exemplos práticos e CTAs claros. Evitar formalidade excessiva.',
-      keywords: ['educativo', 'direto', 'prático', 'confiante'],
+        'Tom educativo, direto e objetivo. Linguagem simples, sem jargoes desnecessarios. Misturar didatica com exemplos praticos e CTAs claros. Evitar formalidade excessiva.',
+      keywords: ['educativo', 'direto', 'pratico', 'confiante'],
     },
     {
       label: 'Humano & Inspirador',
       description:
-        'Tom humano, acolhedor e inspirador. Incentivar consistência, progresso e autoestima. Evitar culpa e discurso agressivo. Use storytelling e empatia.',
-      keywords: ['humano', 'inspirador', 'acolhedor', 'empático'],
+        'Tom humano, acolhedor e inspirador. Incentivar consistencia, progresso e autoestima. Evitar culpa e discurso agressivo. Use storytelling e empatia.',
+      keywords: ['humano', 'inspirador', 'acolhedor', 'empatico'],
     },
     {
       label: 'Premium & Sofisticado',
       description:
-        'Tom premium e sofisticado. Frases curtas, vocabulário refinado, foco em exclusividade e experiência. Evitar gírias e exageros.',
+        'Tom premium e sofisticado. Frases curtas, vocabulario refinado, foco em exclusividade e experiencia. Evitar girias e exageros.',
       keywords: ['premium', 'sofisticado', 'exclusivo', 'elegante'],
     },
   ];
@@ -661,79 +692,79 @@ export default function BrandProfile() {
     {
       label: 'Urbano Ocupado (25-40)',
       persona:
-        'Homem ou mulher, 25-40 anos, rotina corrida, trabalha e precisa de soluções práticas. Quer resultados e clareza, sem perda de tempo. Valoriza marcas confiáveis.',
+        'Homem ou mulher, 25-40 anos, rotina corrida, trabalha e precisa de solucoes praticas. Quer resultados e clareza, sem perda de tempo. Valoriza marcas confiaveis.',
       demographics:
-        '25-40 anos, capitais e regiões metropolitanas, interesses: produtividade, bem-estar, tecnologia e estilo de vida.',
+        '25-40 anos, capitais e regioes metropolitanas, interesses: produtividade, bem-estar, tecnologia e estilo de vida.',
     },
     {
-      label: 'Família & Rotina (30-55)',
+      label: 'Familia & Rotina (30-55)',
       persona:
-        'Pessoa responsável pela família, 30-55 anos, busca segurança, qualidade e previsibilidade. Quer orientações claras e confiança no serviço/produto.',
+        'Pessoa responsavel pela familia, 30-55 anos, busca seguranca, qualidade e previsibilidade. Quer orientacoes claras e confianca no servico/produto.',
       demographics:
-        '30-55 anos, Brasil, interesses: família, saúde, educação, finanças pessoais e consumo consciente.',
+        '30-55 anos, Brasil, interesses: familia, saude, educacao, financas pessoais e consumo consciente.',
     },
     {
       label: 'Aspiracional Premium (28-45)',
       persona:
-        'Pessoa 28-45 anos, aspiracional, busca status, estética e experiência. Compra por qualidade e diferenciação, quer referências e prova social.',
+        'Pessoa 28-45 anos, aspiracional, busca status, estetica e experiencia. Compra por qualidade e diferenciacao, quer referencias e prova social.',
       demographics:
-        '28-45 anos, capitais, interesses: moda, lifestyle, luxo acessível, gastronomia, viagens.',
+        '28-45 anos, capitais, interesses: moda, lifestyle, luxo acessivel, gastronomia, viagens.',
     },
   ];
 
   const uspExamples = [
     {
       label: 'Rapidez + Garantia',
-      text: 'Atendimento em até 30 minutos + garantia estendida + suporte pós-venda com acompanhamento.',
+      text: 'Atendimento em ate 30 minutos + garantia estendida + suporte pos-venda com acompanhamento.',
     },
     {
-      label: 'Premium + Personalização',
-      text: 'Experiência premium com personalização completa: diagnóstico, recomendação sob medida e acabamento superior.',
+      label: 'Premium + Personalizacao',
+      text: 'Experiencia premium com personalizacao completa: diagnostico, recomendacao sob medida e acabamento superior.',
     },
     {
-      label: 'Preço Justo + Clareza',
-      text: 'Preço justo com transparência total: planos claros, sem taxas escondidas e entrega consistente.',
+      label: 'Preco Justo + Clareza',
+      text: 'Preco justo com transparencia total: planos claros, sem taxas escondidas e entrega consistente.',
     },
   ];
 
   const nicheExamples = [
     {
-      label: 'Serviço Local (bairro/cidade)',
-      text: 'Negócio local com foco em atendimento humano e recorrência. Público da região, busca conveniência e confiança.',
+      label: 'Servico Local (bairro/cidade)',
+      text: 'Negocio local com foco em atendimento humano e recorrencia. Publico da regiao, busca conveniencia e confianca.',
     },
     {
       label: 'B2B (decisores)',
-      text: 'Solução B2B para decisores (gestores e diretores) com foco em ROI, previsibilidade, prova social e implementação.',
+      text: 'Solucao B2B para decisores (gestores e diretores) com foco em ROI, previsibilidade, prova social e implementacao.',
     },
     {
-      label: 'Infoproduto/educação',
-      text: 'Oferta educacional (curso/mentoria) com foco em transformação prática, comunidade e execução passo-a-passo.',
+      label: 'Infoproduto/educacao',
+      text: 'Oferta educacional (curso/mentoria) com foco em transformacao pratica, comunidade e execucao passo-a-passo.',
     },
   ];
 
   const keywordsExamples = [
     {
-      label: 'Saúde/Bem-estar',
-      items: ['bem-estar', 'saúde', 'qualidade de vida', 'rotina', 'autocuidado'],
+      label: 'Saude/Bem-estar',
+      items: ['bem-estar', 'saude', 'qualidade de vida', 'rotina', 'autocuidado'],
     },
     {
       label: 'Tecnologia/Produto',
-      items: ['tecnologia', 'inovação', 'performance', 'durabilidade', 'design'],
+      items: ['tecnologia', 'inovacao', 'performance', 'durabilidade', 'design'],
     },
     {
-      label: 'Serviço/Premium',
-      items: ['atendimento', 'experiência', 'premium', 'confiança', 'garantia'],
+      label: 'Servico/Premium',
+      items: ['atendimento', 'experiencia', 'premium', 'confianca', 'garantia'],
     },
   ];
 
   const antiKeywordsExamples = [
     {
       label: 'Promessas vazias',
-      items: ['milagre', 'cura garantida', 'resultado imediato', 'antes e depois', 'sem esforço'],
+      items: ['milagre', 'cura garantida', 'resultado imediato', 'antes e depois', 'sem esforco'],
     },
     {
       label: 'Baixo valor',
-      items: ['barato', 'qualquer coisa', 'genérico', 'improviso', 'mal feito'],
+      items: ['barato', 'qualquer coisa', 'generico', 'improviso', 'mal feito'],
     },
   ];
 
@@ -744,13 +775,13 @@ export default function BrandProfile() {
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-3xl">
-                🎨
+              <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-full flex items-center justify-center text-lg font-bold">
+                DNA
               </div>
               <div>
                 <h1 className="text-3xl font-bold">DNA da Marca</h1>
                 <p className="text-gray-400">
-                  {isNewBrand ? 'Criar identidade visual e estratégica' : 'Identidade visual e estratégica'}
+                  {isNewBrand ? 'Criar identidade visual e estrategica' : 'Identidade visual e estrategica'}
                 </p>
               </div>
             </div>
@@ -759,16 +790,16 @@ export default function BrandProfile() {
             {hasDraftRestored && (
               <div className="bg-yellow-500/20 border border-yellow-500/30 rounded-lg p-4 mb-4">
                 <div className="flex items-center gap-2 text-yellow-400">
-                  <span className="text-lg">💾</span>
+                  <span className="text-lg">!</span>
                   <div>
                     <div className="font-semibold">Rascunho restaurado!</div>
-                    <div className="text-sm">Restauramos seu trabalho não salvo automaticamente.</div>
+                    <div className="text-sm">Restauramos seu trabalho nao salvo automaticamente.</div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Botões de Ação */}
+            {/* Botoes de Acao */}
             <div className="flex gap-3">
               <button
                 onClick={() => setShowUploadModal(true)}
@@ -783,7 +814,7 @@ export default function BrandProfile() {
                 disabled={!clientId}
                 type="button"
               >
-                🕘 Versões
+                 Versões
               </button>
 
               {!isEditing ? (
@@ -808,19 +839,19 @@ export default function BrandProfile() {
                     disabled={isSaving}
                     className="bg-green-600 hover:bg-green-700 px-6 py-3 rounded-lg font-semibold transition-colors disabled:opacity-50"
                   >
-                    {isSaving ? '💾 Salvando...' : '💾 Salvar Definitivo'}
+                    {isSaving ? ' Salvando...' : ' Salvar Definitivo'}
                   </button>
                 </>
               )}
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-gradient-to-r from-purple-500/20 to-pink-500/20 border border-purple-500/30 rounded-xl p-5">
               <div className="flex items-start gap-3">
-                <span className="text-2xl">{archetypeInfo?.emoji || '👑'}</span>
+                <span className="text-2xl">{archetypeInfo?.emoji || '🎭'}</span>
                 <div className="flex-1">
-                  <div className="text-sm text-gray-400">Arquétipo da Marca</div>
+                  <div className="text-sm text-gray-400">Arquetipo da Marca</div>
 
                   {isEditing ? (
                     <div className="mt-2">
@@ -829,7 +860,7 @@ export default function BrandProfile() {
                         onChange={(e) => setEditArchetype(e.target.value)}
                         className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-purple-500"
                       >
-                        <option value="">Selecione um arquétipo (ex: Criador)</option>
+                        <option value="">Selecione um arquetipo (ex: Criador)</option>
                         {JUNG_ARCHETYPES.map((a) => (
                           <option key={a.key} value={a.key}>
                             {a.emoji} {a.label}
@@ -854,7 +885,7 @@ export default function BrandProfile() {
                           <div className="mt-1 text-sm text-gray-400">Tom sugerido: {archetypeInfo.tone_hint}</div>
                         </div>
                       ) : (
-                        <div className="text-xl font-bold text-gray-500">Arquétipo não definido</div>
+                        <div className="text-xl font-bold text-gray-500">Arquetipo nao definido</div>
                       )}
                     </div>
                   )}
@@ -866,7 +897,7 @@ export default function BrandProfile() {
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm text-gray-400">Categorias do cliente</div>
-                  <div className="text-lg font-semibold">Nicho (filtro do Calendário + contexto do prompt)</div>
+                  <div className="text-lg font-semibold">Nicho (filtro do Calendario + contexto do prompt)</div>
                 </div>
                 <div className="text-xs text-gray-500">{(isEditing ? editCategoriasNicho : clientCategoriasNicho).length} selecionadas</div>
               </div>
@@ -883,7 +914,7 @@ export default function BrandProfile() {
                           className="text-blue-200/70 hover:text-white"
                           disabled={isSaving}
                         >
-                          ✕
+                          S"
                         </button>
                       </span>
                     ))}
@@ -894,7 +925,7 @@ export default function BrandProfile() {
                       type="text"
                       value={categoriasQuery}
                       onChange={(e) => setCategoriasQuery(e.target.value)}
-                      placeholder={loadingCategoriasSuggestions ? 'Carregando categorias…' : 'Busque e selecione uma categoria'}
+                      placeholder={loadingCategoriasSuggestions ? 'Carregando categorias' : 'Busque e selecione uma categoria'}
                       className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
                       disabled={isSaving}
                     />
@@ -924,7 +955,7 @@ export default function BrandProfile() {
 
                     {(!loadingCategoriasSuggestions && categoriasSuggestions.length === 0) && (
                       <div className="px-3 py-3 text-sm text-gray-400">
-                        Nenhuma categoria disponível.
+                        Nenhuma categoria disponivel.
                       </div>
                     )}
                   </div>
@@ -947,11 +978,72 @@ export default function BrandProfile() {
                 </div>
               )}
             </div>
+
+            <div className="bg-gradient-to-r from-cyan-500/15 to-sky-500/15 border border-cyan-500/30 rounded-xl p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-sm text-gray-400">Logo do cliente</div>
+                  <div className="text-lg font-semibold">Usada na capa do planner trimestral</div>
+                </div>
+                {currentLogoUrl ? (
+                  <span className="text-xs text-cyan-200">Configurada</span>
+                ) : (
+                  <span className="text-xs text-gray-500">Opcional</span>
+                )}
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <div className="rounded-xl border border-gray-700 bg-gray-900/70 p-4 min-h-[170px] flex items-center justify-center overflow-hidden">
+                  {currentLogoUrl ? (
+                    <img src={currentLogoUrl} alt="Logo do cliente" className="max-h-28 w-auto object-contain" />
+                  ) : (
+                    <div className="text-sm text-gray-500 text-center">Nenhuma logo configurada no DNA ainda.</div>
+                  )}
+                </div>
+
+                {isEditing ? (
+                  <div className="space-y-3">
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      className="w-full text-sm text-gray-300"
+                      onChange={(e) => handleClientLogoUpload(e.target.files?.[0])}
+                      disabled={isSaving || isUploadingLogo}
+                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={editLogoUrl}
+                        onChange={(e) => setEditLogoUrl(e.target.value)}
+                        placeholder="/static/client-logos/logo.png"
+                        className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-500"
+                        disabled={isSaving}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setEditLogoUrl('')}
+                        className="px-3 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm text-white"
+                        disabled={isSaving || isUploadingLogo || !editLogoUrl}
+                      >
+                        Remover
+                      </button>
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      {isUploadingLogo ? 'Enviando logo...' : 'A logo salva aqui entra automaticamente na capa do planner trimestral.'}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-xs text-gray-400">
+                    Salve a logo no DNA para reutilizar automaticamente na capa do planner trimestral.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Seção 1: Paleta de Cores */}
+          {/* Secao 1: Paleta de Cores */}
           <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <span className="text-2xl">🎨</span>
@@ -990,7 +1082,7 @@ export default function BrandProfile() {
                         onClick={() => removeColor(index)}
                         className="absolute top-1 right-1 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        ×
+                        x
                       </button>
                     )}
                   </div>
@@ -998,13 +1090,13 @@ export default function BrandProfile() {
               </div>
             ) : (
               <div className="text-center py-8 text-gray-500">
-                <div className="text-4xl mb-2">🎨</div>
+                <div className="text-4xl mb-2"></div>
                 <div>{isEditing ? 'Adicione cores acima' : 'Nenhuma cor definida'}</div>
               </div>
             )}
           </div>
 
-          {/* Seção 2: Tipografia */}
+          {/* Secao 2: Tipografia */}
           <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <span className="text-2xl">🔤</span>
@@ -1017,7 +1109,7 @@ export default function BrandProfile() {
                   type="text"
                   value={newFont}
                   onChange={(e) => setNewFont(e.target.value)}
-                  placeholder="Ex: Inter (principal), Playfair Display (títulos)"
+                  placeholder="Ex: Inter (principal), Playfair Display (titulos)"
                   className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
                 />
                 <button
@@ -1037,7 +1129,7 @@ export default function BrandProfile() {
                     className="bg-gray-700/50 rounded-lg p-4 border border-gray-600 relative group"
                   >
                     <div className="text-sm text-gray-400 mb-1">
-                      {index === 0 ? 'Principal' : `Secundária ${index}`}
+                      {index === 0 ? 'Principal' : `Secundaria ${index}`}
                     </div>
                     <div className="text-lg font-semibold">{font}</div>
                     {isEditing && (
@@ -1045,7 +1137,7 @@ export default function BrandProfile() {
                         onClick={() => removeFont(index)}
                         className="absolute top-2 right-2 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        ×
+                        x
                       </button>
                     )}
                   </div>
@@ -1054,17 +1146,17 @@ export default function BrandProfile() {
             ) : (
               <div className="bg-gray-700/30 rounded-lg p-6 text-center text-gray-500">
                 <div className="text-4xl mb-2">Aa</div>
-                <div>{isEditing ? 'Adicione fontes acima' : 'Fontes não definidas'}</div>
+                <div>{isEditing ? 'Adicione fontes acima' : 'Fontes nao definidas'}</div>
               </div>
             )}
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Seção 3: Tom de Voz */}
+          {/* Secao 3: Tom de Voz */}
           <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
             <div className="flex items-center gap-3 mb-4">
-              <span className="text-2xl">💬</span>
+              <span className="text-2xl">🗣️</span>
               <h2 className="text-xl font-semibold">Tom de Voz</h2>
             </div>
 
@@ -1102,7 +1194,7 @@ export default function BrandProfile() {
                     type="text"
                     value={newToneKeyword}
                     onChange={(e) => setNewToneKeyword(e.target.value)}
-                    placeholder="Ex: Inspirador, técnico, humano, confiante"
+                    placeholder="Ex: Inspirador, tecnico, humano, confiante"
                     className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
                     onKeyPress={(e) => e.key === 'Enter' && addToneKeyword()}
                   />
@@ -1115,7 +1207,7 @@ export default function BrandProfile() {
                 </div>
               </>
             ) : (
-              <p className="text-gray-300 mb-4">{toneDescription || 'Não definido'}</p>
+              <p className="text-gray-300 mb-4">{toneDescription || 'Nao definido'}</p>
             )}
 
             {toneKeywords.length > 0 && (
@@ -1131,7 +1223,7 @@ export default function BrandProfile() {
                         onClick={() => removeToneKeyword(index)}
                         className="ml-2 text-red-400 hover:text-red-300"
                       >
-                        ×
+                        x
                       </button>
                     )}
                   </span>
@@ -1140,19 +1232,19 @@ export default function BrandProfile() {
             )}
           </div>
 
-          {/* Seção 4: Público & Persona */}
+          {/* Secao 4: Publico & Persona */}
           <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
             <div className="flex items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-3">
                 <span className="text-2xl">👥</span>
-                <h2 className="text-xl font-semibold">Público-Alvo</h2>
+                <h2 className="text-xl font-semibold">Publico-Alvo</h2>
               </div>
 
               <div
                 className="w-10 h-10 rounded-full bg-gray-700 border border-gray-600 flex items-center justify-center text-xl"
-                title={archetypeInfo ? `Arquétipo: ${archetypeInfo.label}` : 'Arquétipo não definido'}
+                title={archetypeInfo ? `Arquetipo: ${archetypeInfo.label}` : 'Arquetipo nao definido'}
               >
-                {archetypeInfo?.emoji || '🙂'}
+                {archetypeInfo?.emoji || '🎭'}
               </div>
             </div>
 
@@ -1183,12 +1275,12 @@ export default function BrandProfile() {
                   <textarea
                     value={editPersona}
                     onChange={(e) => setEditPersona(e.target.value)}
-                    placeholder="Ex: Mulher, 28-40 anos, trabalha e treina após o expediente. Busca praticidade, autoestima e resultados sem complicação."
+                    placeholder="Ex: Mulher, 28-40 anos, trabalha e treina apos o expediente. Busca praticidade, autoestima e resultados sem complicacao."
                     className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 min-h-[80px]"
                   />
                 </>
               ) : (
-                <p className="text-gray-300">{persona || 'Não definido'}</p>
+                <p className="text-gray-300">{persona || 'Nao definido'}</p>
               )}
             </div>
 
@@ -1198,17 +1290,17 @@ export default function BrandProfile() {
                 <textarea
                   value={editDemographics}
                   onChange={(e) => setEditDemographics(e.target.value)}
-                  placeholder="Ex: 25-44 anos, Brasil (capitais), interesses: bem-estar, treino, autocuidado, estética."
+                  placeholder="Ex: 25-44 anos, Brasil (capitais), interesses: bem-estar, treino, autocuidado, estetica."
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 min-h-[80px]"
                 />
               ) : (
-                <p className="text-gray-300 text-sm">{demographics || 'Não definido'}</p>
+                <p className="text-gray-300 text-sm">{demographics || 'Nao definido'}</p>
               )}
             </div>
           </div>
         </div>
 
-        {/* Seção 5: Keywords & Elementos */}
+        {/* Secao 5: Keywords & Elementos */}
         <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <span className="text-2xl">🏷️</span>
@@ -1246,7 +1338,7 @@ export default function BrandProfile() {
                 type="text"
                 value={newKeyword}
                 onChange={(e) => setNewKeyword(e.target.value)}
-                placeholder="Ex: óculos 3D, saúde visual, armações, lentes, estilo"
+                placeholder="Ex: oculos 3D, saude visual, armacoes, lentes, estilo"
                 className="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500"
                 onKeyPress={(e) => e.key === 'Enter' && addKeyword()}
               />
@@ -1272,7 +1364,7 @@ export default function BrandProfile() {
                       onClick={() => removeKeyword(index)}
                       className="ml-2 text-red-400 hover:text-red-300"
                     >
-                      ×
+                      x
                     </button>
                   )}
                 </span>
@@ -1280,18 +1372,18 @@ export default function BrandProfile() {
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
-              <div className="text-4xl mb-2">🔖</div>
+              <div className="text-4xl mb-2">x</div>
               <div>{isEditing ? 'Adicione keywords acima' : 'Nenhuma keyword definida'}</div>
             </div>
           )}
         </div>
 
 
-        {/* Seção 7: Proposta Única de Valor (USP) */}
+        {/* Secao 7: Proposta Unica de Valor (USP) */}
         <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <span className="text-2xl">💎</span>
-            <h2 className="text-xl font-semibold">Proposta Única de Valor (USP)</h2>
+            <h2 className="text-xl font-semibold">Proposta Unica de Valor (USP)</h2>
           </div>
 
           {isEditing ? (
@@ -1316,20 +1408,20 @@ export default function BrandProfile() {
               <textarea
                 value={editUsp}
                 onChange={(e) => setEditUsp(e.target.value)}
-                placeholder="Ex: Atendimento em até 30 minutos + armações premium com ajuste personalizado e garantia estendida."
+                placeholder="Ex: Atendimento em ate 30 minutos + armacoes premium com ajuste personalizado e garantia estendida."
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 min-h-[100px]"
               />
             </>
           ) : (
-            <p className="text-gray-300">{branding.usp || 'Não definido'}</p>
+            <p className="text-gray-300">{branding.usp || 'Nao definido'}</p>
           )}
         </div>
 
-        {/* Seção 8: Aversões da Marca */}
+        {/* Secao 8: Aversoes da Marca */}
         <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <span className="text-2xl">🚫</span>
-            <h2 className="text-xl font-semibold">Aversões da Marca</h2>
+            <h2 className="text-xl font-semibold">Aversoes da Marca</h2>
           </div>
 
           {isEditing && (
@@ -1389,7 +1481,7 @@ export default function BrandProfile() {
                       onClick={() => removeAntiKeyword(index)}
                       className="ml-2 text-red-400 hover:text-red-300"
                     >
-                      ×
+                      x
                     </button>
                   )}
                 </span>
@@ -1397,13 +1489,13 @@ export default function BrandProfile() {
             </div>
           ) : (
             <div className="text-center py-8 text-gray-500">
-              <div className="text-4xl mb-2">🚫</div>
-              <div>{isEditing ? 'Adicione aversões acima' : 'Nenhuma aversão definida'}</div>
+              <div className="text-4xl mb-2">xa</div>
+              <div>{isEditing ? 'Adicione aversoes acima' : 'Nenhuma aversao definida'}</div>
             </div>
           )}
         </div>
 
-        {/* Seção 9: Nicho de Mercado */}
+        {/* Secao 9: Nicho de Mercado */}
         <div className="bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <span className="text-2xl">🎯</span>
@@ -1432,19 +1524,19 @@ export default function BrandProfile() {
               <textarea
                 value={editNiche}
                 onChange={(e) => setEditNiche(e.target.value)}
-                placeholder="Ex: Ótica premium com foco em tecnologia (lentes e óculos 3D) para público urbano."
+                placeholder="Ex: tica premium com foco em tecnologia (lentes e oculos 3D) para publico urbano."
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 focus:outline-none focus:border-blue-500 min-h-[80px]"
               />
             </>
           ) : (
-            <p className="text-gray-300">{branding.niche || 'Não definido'}</p>
+            <p className="text-gray-300">{branding.niche || 'Nao definido'}</p>
           )}
         </div>
 
         {/* Footer Info */}
         {!isNewBrand && branding.updated_at && (
           <div className="mt-6 text-center text-sm text-gray-500">
-            Última atualização: {new Date(branding.updated_at).toLocaleDateString('pt-BR')}
+            altima atualizacao: {new Date(branding.updated_at).toLocaleDateString('pt-BR')}
           </div>
         )}
       </div>
@@ -1462,7 +1554,7 @@ export default function BrandProfile() {
                 onClick={() => setShowUploadModal(false)}
                 className="text-gray-400 hover:text-white text-3xl leading-none"
               >
-                ×
+                x
               </button>
             </div>
 
@@ -1471,7 +1563,7 @@ export default function BrandProfile() {
               {/* Upload de Imagens */}
               <div>
                 <label className="block text-sm font-semibold text-gray-300 mb-3">
-                  📸 Upload de Imagens (Máx: 3)
+                   Upload de Imagens (Max: 3)
                 </label>
                 <input
                   type="file"
@@ -1512,20 +1604,20 @@ export default function BrandProfile() {
               {/* Legendas de Exemplo */}
               <div>
                 <label className="block text-sm font-semibold text-gray-300 mb-3">
-                  📝 Legendas de Exemplo (Opcional)
+                   Legendas de Exemplo (Opcional)
                 </label>
                 <textarea
                   value={uploadCaptions}
                   onChange={(e) => setUploadCaptions(e.target.value)}
-                  placeholder="Cole aqui 2 ou 3 legendas de posts da marca...&#10;&#10;Exemplo:&#10;🚀 Transforme suas ideias em realidade!&#10;💡 Inovação que conecta pessoas."
+                  placeholder="Cole aqui 2 ou 3 legendas de posts da marca...&#10;&#10;Exemplo:&#10;xa Transforme suas ideias em realidade!&#10; Inovacao que conecta pessoas."
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 min-h-[150px]"
                 />
                 <p className="text-xs text-gray-500 mt-2">
-                  💡 Dica: Quanto mais contexto, melhor a análise da IA!
+                   Dica: Quanto mais contexto, melhor a analise da IA!
                 </p>
               </div>
 
-              {/* Botões de Ação */}
+              {/* Botoes de Acao */}
               <div className="flex gap-3 pt-4">
                 <button
                   onClick={() => setShowUploadModal(false)}
@@ -1552,7 +1644,7 @@ export default function BrandProfile() {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <h2 className="text-2xl font-bold">Versões do DNA</h2>
-                <p className="text-gray-400 text-sm mt-1">Histórico automático do que foi salvo/restaurado</p>
+                <p className="text-gray-400 text-sm mt-1">Historico automatico do que foi salvo/restaurado</p>
               </div>
               <button
                 onClick={() => setShowVersionsModal(false)}
@@ -1560,7 +1652,7 @@ export default function BrandProfile() {
                 type="button"
                 disabled={restoringVersion}
               >
-                ✕
+                S"
               </button>
             </div>
 
@@ -1571,9 +1663,9 @@ export default function BrandProfile() {
                 </div>
                 <div className="max-h-[420px] overflow-auto">
                   {loadingVersions ? (
-                    <div className="px-4 py-4 text-sm text-gray-400">Carregando…</div>
+                    <div className="px-4 py-4 text-sm text-gray-400">Carregando</div>
                   ) : versions.length === 0 ? (
-                    <div className="px-4 py-4 text-sm text-gray-400">Nenhuma versão encontrada ainda.</div>
+                    <div className="px-4 py-4 text-sm text-gray-400">Nenhuma versao encontrada ainda.</div>
                   ) : (
                     versions.map((v) => (
                       <div key={v.id} className="px-4 py-3 border-b border-gray-700">
@@ -1582,7 +1674,7 @@ export default function BrandProfile() {
                             <div className="text-sm text-gray-200 font-semibold">
                               {new Date(v.created_at).toLocaleString('pt-BR')}
                             </div>
-                            <div className="text-xs text-gray-500">{v.reason || '—'}</div>
+                            <div className="text-xs text-gray-500">{v.reason || ''}</div>
                           </div>
                           <div className="flex gap-2">
                             <button
@@ -1599,7 +1691,7 @@ export default function BrandProfile() {
                               onClick={() => restoreVersion(v.id)}
                               disabled={loadingVersions || restoringVersion}
                             >
-                              {restoringVersion ? 'Restaurando…' : 'Restaurar'}
+                              {restoringVersion ? 'Restaurando' : 'Restaurar'}
                             </button>
                           </div>
                         </div>
@@ -1619,7 +1711,7 @@ export default function BrandProfile() {
                       {JSON.stringify(selectedVersion.snapshot, null, 2)}
                     </pre>
                   ) : (
-                    <div className="px-4 py-4 text-sm text-gray-400">Selecione uma versão para visualizar.</div>
+                    <div className="px-4 py-4 text-sm text-gray-400">Selecione uma versao para visualizar.</div>
                   )}
                 </div>
               </div>
@@ -1630,3 +1722,10 @@ export default function BrandProfile() {
     </div>
   );
 }
+
+
+
+
+
+
+

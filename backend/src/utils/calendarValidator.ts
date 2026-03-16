@@ -1,36 +1,60 @@
 /**
  * backend/src/utils/calendarValidator.ts
  *
- * Módulo de validação rigorosa (Runtime) para o output do LLM.
- * Assegura o cumprimento do contrato canônico V1.
+ * Runtime validation for the canonical calendar schema returned by the LLM.
  */
 
 import { randomUUID } from "crypto";
 
-// ─── Tipos e Contratos ────────────────────────────────────────────────────────
-
-// Mapa de sinônimos: cada chave (normalizada lowercase) mapeia para o valor canônico PT-BR.
-// O LLM às vezes retorna variantes em inglês — normalizamos aqui em vez de falhar a geração.
 const FORMAT_ALIASES: Record<string, string> = {
-    "reels": "Reels",
-    "reel": "Reels",
-    "arte": "Arte",
-    "static": "Arte",
-    "carrossel": "Carrossel",
-    "carousel": "Carrossel",
-    "story": "Story",
-    "stories": "Story",
-    "foto": "Foto",
-    "fotos": "Foto",
-    "photo": "Foto",
-    "photos": "Foto",
+    reels: "Reels",
+    reel: "Reels",
+    arte: "Arte",
+    static: "Arte",
+    carrossel: "Carrossel",
+    carousel: "Carrossel",
+    story: "Story",
+    stories: "Story",
+    foto: "Foto",
+    fotos: "Foto",
+    photo: "Foto",
+    photos: "Foto",
 };
 
-
-/** Normaliza o valor de formato do LLM para o canônico PT-BR, retornando undefined se inválido. */
 function normalizeFormato(raw: any): string | undefined {
     if (typeof raw !== "string") return undefined;
-    return FORMAT_ALIASES[raw.trim().toLowerCase()];
+
+    const normalized = raw
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[()\[\]{}]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const direct = FORMAT_ALIASES[normalized];
+    if (direct) return direct;
+
+    if (normalized.includes("reel")) return "Reels";
+    if (normalized.includes("carrossel") || normalized.includes("carousel")) return "Carrossel";
+    if (normalized.includes("story") || normalized.includes("stories")) return "Story";
+    if (normalized.includes("foto") || normalized.includes("photo")) return "Foto";
+    if (
+        normalized.includes("arte") ||
+        normalized.includes("static") ||
+        normalized.includes("estatico") ||
+        normalized.includes("imagem unica") ||
+        normalized.includes("editorial")
+    ) {
+        return "Arte";
+    }
+
+    return undefined;
+}
+
+function isCarouselFormato(raw: any): boolean {
+    return normalizeFormato(raw) === "Carrossel";
 }
 
 export interface ValidationResult {
@@ -45,7 +69,7 @@ export class InvalidCalendarOutputError extends Error {
     public correlationId: string;
 
     constructor(details: string[], correlationId: string) {
-        super("O calendário gerado não cumpre o schema requerido.");
+        super("O calendario gerado nao cumpre o schema requerido.");
         this.name = "InvalidCalendarOutputError";
         this.details = details;
         this.correlationId = correlationId;
@@ -53,17 +77,10 @@ export class InvalidCalendarOutputError extends Error {
     }
 }
 
-// ─── Funções de Validação ─────────────────────────────────────────────────────
-
-/**
- * Valida o JSON (já parseado como objeto/array) retornado pelo LLM.
- * Verifica a estrutura, campos obrigatórios, tipos e restrições simples.
- */
 export function validateCalendarSchema(data: any): ValidationResult {
     const errors: string[] = [];
     const correlationId = randomUUID();
 
-    // 1. Deve ser um array
     if (!Array.isArray(data)) {
         return {
             isValid: false,
@@ -73,17 +90,14 @@ export function validateCalendarSchema(data: any): ValidationResult {
     }
 
     if (data.length === 0) {
-        errors.push("O array retornado está vazio.");
+        errors.push("O array retornado esta vazio.");
     }
 
-    // 2. Iterar cada post e validar
     const usedDays = new Set<number>();
-    // Helper to get next unused day
     const getNextDay = (startFrom: number): number => {
         let d = startFrom;
         while (usedDays.has(d) && d <= 31) d++;
         if (d > 31) {
-            // Wrap: find any unused day from 1
             d = 1;
             while (usedDays.has(d) && d <= 31) d++;
         }
@@ -95,46 +109,45 @@ export function validateCalendarSchema(data: any): ValidationResult {
         const prefix = `[Post #${i + 1}]`;
 
         if (!post || typeof post !== "object") {
-            errors.push(`${prefix} não é um objeto JSON válido.`);
+            errors.push(`${prefix} nao e um objeto JSON valido.`);
             continue;
         }
 
-        // -- Validando "dia" — auto-fix duplicates instead of failing
         if (typeof post.dia !== "number" || post.dia < 1 || post.dia > 31) {
-            errors.push(`${prefix} Campo 'dia' deve ser um número entre 1 e 31.`);
+            errors.push(`${prefix} Campo 'dia' deve ser um numero entre 1 e 31.`);
         } else {
             if (usedDays.has(post.dia)) {
-                // Auto-fix: assign next available day
-                const fixedDay = getNextDay(post.dia + 1);
-                post.dia = fixedDay;
+                post.dia = getNextDay(post.dia + 1);
             }
             usedDays.add(post.dia);
         }
 
-        // -- Validando "formato" e normalizando alias em inglês para PT-BR
         const normalizedFormato = normalizeFormato(post.formato);
         if (!normalizedFormato) {
             errors.push(`${prefix} Campo 'formato' deve ser: Reels, Arte, Carrossel, Foto ou Story. Veio: "${post.formato}"`);
         } else if (normalizedFormato !== post.formato) {
-            // Corrige silenciosamente o valor para o canônico (ex: Photo → Foto)
             post.formato = normalizedFormato;
         }
 
-        // -- Validando "palavras_chave"
         if (!Array.isArray(post.palavras_chave) || post.palavras_chave.length === 0) {
             errors.push(`${prefix} Campo 'palavras_chave' deve ser um array com pelo menos 1 string.`);
         } else {
             const allStrings = post.palavras_chave.every((k: any) => typeof k === "string" && k.trim().length > 0);
             if (!allStrings) {
-                errors.push(`${prefix} Campo 'palavras_chave' não pode conter itens vazios ou não-strings.`);
+                errors.push(`${prefix} Campo 'palavras_chave' nao pode conter itens vazios ou nao-strings.`);
             }
         }
 
-        // -- Validando os demais campos textuais
         const stringFields = ["tema", "instrucoes_visuais", "copy_inicial", "objetivo", "cta"];
         for (const field of stringFields) {
             if (typeof post[field] !== "string" || post[field].trim() === "") {
-                errors.push(`${prefix} Campo '${field}' é obrigatório e não pode ser vazio.`);
+                errors.push(`${prefix} Campo '${field}' e obrigatorio e nao pode ser vazio.`);
+            }
+        }
+
+        if (isCarouselFormato(post.formato)) {
+            if (typeof post.legenda !== "string" || post.legenda.trim() === "") {
+                errors.push(`${prefix} Carrossel deve incluir o campo 'legenda' com a legenda final do post.`);
             }
         }
     }

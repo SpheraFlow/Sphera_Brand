@@ -5,6 +5,7 @@ import { updateTokenUsage } from "../utils/tokenTracker";
 import { spawn } from "child_process";
 import path from "path";
 import fs from "fs";
+import { getGeminiModelCandidates } from "../utils/googleModels";
 
 const router = Router();
 
@@ -54,7 +55,7 @@ router.post("/datas-comemorativas/sync", async (req: Request, res: Response) => 
 });
 
 router.post("/generate-calendar", async (req: Request, res: Response) => {
-  console.log("\n🛑 [DEBUG] ROTA /generate-calendar ACIONADA (Async Job)");
+  console.log("\n[DEBUG] ROTA /generate-calendar ACIONADA (Async Job)");
 
   try {
     const {
@@ -87,7 +88,7 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
 
     if (req.body.monthsToGenerate && Array.isArray(req.body.monthsToGenerate) && req.body.monthsToGenerate.length > 0) {
       monthsToGenerate = req.body.monthsToGenerate;
-      console.log(`✅ [DEBUG] Usando meses diretos do corpo da requisição:`, monthsToGenerate);
+      console.log(`�S& [DEBUG] Usando meses diretos do corpo da requisição:`, monthsToGenerate);
     } else {
       const buildMonthLabelList = (startMesLabel: string, count: number) => {
         const labels: string[] = [];
@@ -100,7 +101,7 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
           const ano = parseInt(anoStr, 10);
 
           const map: Record<string, number> = {
-            janeiro: 0, fevereiro: 1, marco: 2, março: 2, abril: 3, maio: 4, junho: 5,
+            janeiro: 0, fevereiro: 1, marco: 2, "março": 2, abril: 3, maio: 4, junho: 5,
             julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11
           };
 
@@ -136,9 +137,9 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
       }
     }
 
-    console.log(`✅ [DEBUG] Meses para geração:`, monthsToGenerate);
+    console.log(`�S& [DEBUG] Meses para geração:`, monthsToGenerate);
 
-    // CRIAÇÃO DO JOB
+    // CRIA�!ÒO DO JOB
     const { randomUUID } = await import('crypto');
     const jobId = randomUUID();
 
@@ -157,7 +158,7 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
       produtosFocoIds
     };
 
-    console.log(`🚀 [JOB] Criando job ${jobId} para cliente ${clienteId}`);
+    console.log(`�xa� [JOB] Criando job ${jobId} para cliente ${clienteId}`);
 
     await db.query(`
       INSERT INTO calendar_generation_jobs (
@@ -173,7 +174,7 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
     });
 
   } catch (error: any) {
-    console.error("❌ Erro ao iniciar job:", error);
+    console.error("�R Erro ao iniciar job:", error);
     return res.status(500).json({
       success: false,
       error: "Erro ao iniciar job.",
@@ -251,52 +252,55 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
 
     const carouselRule = targetFormato.toLowerCase() === 'carrossel'
       ? (slideCount && slideCount !== 'auto'
-        ? `\n\nObrigatório para Carrosséis: divida sua resposta em exatamente ${slideCount} slides estruturados do tipo [Slide 1] ..., [Slide 2] ...`
-        : `\n\nObrigatório para Carrosséis: divida sua resposta em slides estruturados do tipo [Slide 1] ..., [Slide 2] ...`)
+        ? `\n\nObrigatorio para Carrosseis: retorne a legenda final em "copy_sugestao" e divida o campo "texto_slides" em exatamente ${slideCount} slides estruturados do tipo [Slide 1] ..., [Slide 2] ...`
+        : `\n\nObrigatorio para Carrosseis: retorne a legenda final em "copy_sugestao" e divida o campo "texto_slides" em slides estruturados do tipo [Slide 1] ..., [Slide 2] ...`)
       : '';
 
-    // Montar prompt para regenerar um único post
+    // Montar prompt para regenerar um unico post
     const regenPrompt = `
-      Você é um estrategista de social media especialista em adaptação de conteúdo.
+      Voce e um estrategista de social media especialista em adaptacao de conteudo.
 
-      Regere UM ÚNICO post para um calendário editorial, adaptando o conteúdo abaixo para o FORMATO: "${targetFormato}".
+      Regere UM UNICO post para um calendario editorial, adaptando o conteudo abaixo para o FORMATO: "${targetFormato}".
 
       CONTEXTO DA MARCA:
       - Tom de Voz: ${branding.tone_of_voice}
     - Estilo Visual: ${branding.visual_style}
-    - Público: ${branding.audience}
+    - Publico: ${branding.audience}
 
-      REGRAS OBRIGATÓRIAS(Não viole):
+      REGRAS OBRIGATORIAS (Nao viole):
       ${rules}
 
-      POST ATUAL(referência):
+      POST ATUAL (referencia):
       {
         "data": "${originalPost.data}",
         "tema": "${originalPost.tema}",
         "formato": "${originalPost.formato}",
         "ideia_visual": "${originalPost.ideia_visual}",
-        "copy_sugestao": "${originalPost.copy_sugestao}",
+        "copy_sugestao": "${originalPost.legenda || originalPost.copy_sugestao || ""}",
+        "texto_slides": "${originalPost.texto_slides || originalPost.copy_inicial || ""}",
         "objetivo": "${originalPost.objetivo}",
         "image_generation_prompt": "${originalPost.image_generation_prompt || ""}"
       }
 
-      INSTRUÇÕES DO ESTRATEGISTA(opcional/adicional):
-      Adapte o conteúdo para o novo formato mantendo a essência estratégica, mas otimizando copy, ideia visual e objetivo para aumentar desempenho.
-      INSTRUÇÕES ESPECÍFICAS DO USUÁRIO: ${customPrompt || "Nenhuma instrução extra."}${carouselRule}
+      INSTRUCOES DO ESTRATEGISTA (opcional/adicional):
+      Adapte o conteudo para o novo formato mantendo a essencia estrategica, mas otimizando copy, ideia visual e objetivo para aumentar desempenho.
+      INSTRUCOES ESPECIFICAS DO USUARIO: ${customPrompt || "Nenhuma instrucao extra."}${carouselRule}
 
-      SAÍDA ESPERADA:
-      - Crie UMA ÚNICA SUGESTÃO DE POST no formato JSON, sem markdown, com exatamente estes campos:
+      SAIDA ESPERADA:
+      - Crie UMA UNICA SUGESTAO DE POST no formato JSON, sem markdown, com exatamente estes campos:
       {
         "data": "DD/MM", // mantenha a mesma data do post original
         "tema": "...",
         "formato": "${targetFormato}",
         "ideia_visual": "...",
-        "copy_sugestao": "...",
+        "copy_sugestao": "...", // legenda final do post
+        "texto_slides": "...", // se for Carrossel, texto estruturado dos slides
         "objetivo": "...",
-        "image_generation_prompt": "..." // prompt técnico para IA de imagem
+        "image_generation_prompt": "..." // prompt tecnico para IA de imagem
       }
 
-      Não inclua explicações adicionais, apenas o JSON puro do objeto.
+      Se o formato for Carrossel, "ideia_visual" tambem deve vir estruturado em slides.
+      Nao inclua explicacoes adicionais, apenas o JSON puro do objeto.
     `;
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
@@ -305,11 +309,11 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
     let responseText = "";
 
     // Lista de modelos para tentar em ordem (Fallback Robusto)
-    const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
+    const modelsToTry = getGeminiModelCandidates("quality");
 
     for (const modelName of modelsToTry) {
       try {
-        console.log(`🤖[DEBUG] Tentando modelo(regen): ${modelName}...`);
+        console.log(`[DEBUG] Tentando modelo(regen): ${modelName}...`);
         const model = genAI.getGenerativeModel({
           model: modelName,
           generationConfig: { responseMimeType: "application/json" }
@@ -320,19 +324,19 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
         // Log de uso de tokens
         const usageMetadata = result.response.usageMetadata;
         if (usageMetadata) {
-          console.log(`📊[TOKENS REGEN] Modelo: ${modelName}`);
-          console.log(`📊[TOKENS REGEN] Prompt Tokens: ${usageMetadata.promptTokenCount || 0}`);
-          console.log(`📊[TOKENS REGEN] Completion Tokens: ${usageMetadata.candidatesTokenCount || 0}`);
-          console.log(`📊[TOKENS REGEN] Total Tokens: ${usageMetadata.totalTokenCount || 0}`);
+          console.log(`[TOKENS REGEN] Modelo: ${modelName}`);
+          console.log(`[TOKENS REGEN] Prompt Tokens: ${usageMetadata.promptTokenCount || 0}`);
+          console.log(`[TOKENS REGEN] Completion Tokens: ${usageMetadata.candidatesTokenCount || 0}`);
+          console.log(`[TOKENS REGEN] Total Tokens: ${usageMetadata.totalTokenCount || 0}`);
 
           // Atualizar contador de tokens do cliente
           await updateTokenUsage(calendar.cliente_id, usageMetadata, "post_regeneration", modelName);
         }
 
-        console.log(`✅[DEBUG] Resposta recebida do ${modelName}(tamanho: ${responseText.length})`);
+        console.log(`�S&[DEBUG] Resposta recebida do ${modelName}(tamanho: ${responseText.length})`);
         break; // Sucesso
       } catch (modelError: any) {
-        console.warn(`⚠️[DEBUG] ${modelName} falhou em regen: `, modelError.message);
+        console.warn(`�a�️[DEBUG] ${modelName} falhou em regen: `, modelError.message);
 
         if (modelName === modelsToTry[modelsToTry.length - 1]) {
           // Se foi o último, não tem mais o que fazer
@@ -383,14 +387,14 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
       [JSON.stringify(posts), calendarId]
     );
 
-    console.log("✅ Post atualizado com sucesso");
+    console.log("�S& Post atualizado com sucesso");
 
     return res.json({
       success: true,
       post: posts[index],
     });
   } catch (error: any) {
-    console.error("❌ Erro ao regenerar post com IA:", error);
+    console.error("�R Erro ao regenerar post com IA:", error);
     return res.status(500).json({
       success: false,
       error: "Erro ao regenerar post com IA.",
@@ -443,7 +447,7 @@ router.get("/calendars/:clientId/list", async (req: Request, res: Response) => {
       }))
     });
   } catch (error: any) {
-    console.error("❌ Erro ao listar calendários:", error);
+    console.error("�R Erro ao listar calendários:", error);
     return res.status(500).json({ success: false, error: "Erro ao listar calendários." });
   }
 });
@@ -454,8 +458,8 @@ router.get("/calendars/:clientId", async (req: Request, res: Response) => {
     const { clientId } = req.params;
     const { month } = req.query;
 
-    console.log(`🔍 [DEBUG] Buscando calendário para cliente: ${clientId}, mês: ${month || 'último'}`);
-    console.log(`🔍 [DEBUG] Tipo do month: ${typeof month}, valor: "${month}"`);
+    console.log(`[DEBUG] Buscando calend?rio para cliente: ${clientId}, m?s: ${month || '?ltimo'}`);
+    console.log(`[DEBUG] Tipo do month: ${typeof month}, valor: "${month}"`);
 
     let query;
     let params;
@@ -473,7 +477,7 @@ router.get("/calendars/:clientId", async (req: Request, res: Response) => {
       // Buscar calendário específico do mês
       // Normaliza o mês removendo preposições (ex: 'Agosto de 2026' == 'Agosto 2026')
       // para compatibilidade entre Intl.DateTimeFormat e date-fns
-      console.log(`🔍 [DEBUG] Buscando calendário específico do mês: "${month}" (includeDrafts=${includeDrafts})`);
+      console.log(`[DEBUG] Buscando calend?rio espec?fico do m?s: "${month}" (includeDrafts=${includeDrafts})`);
       query = `
         SELECT id, cliente_id, mes, calendario_json, periodo, criado_em, updated_at, metadata, status
         FROM calendarios
@@ -497,18 +501,18 @@ router.get("/calendars/:clientId", async (req: Request, res: Response) => {
       params = [clientId];
     }
 
-    console.log(`🔍 [DEBUG] Executando query: ${query}`);
-    console.log(`🔍 [DEBUG] Parâmetros:`, params);
+    console.log(`[DEBUG] Executando query: ${query}`);
+    console.log(`[DEBUG] Par?metros:`, params);
 
     const result = await db.query(query, params);
 
-    console.log(`🔍 [DEBUG] Resultados encontrados: ${result.rows.length}`);
+    console.log(`[DEBUG] Resultados encontrados: ${result.rows.length}`);
     if (result.rows.length > 0) {
-      console.log(`🔍 [DEBUG] Mês encontrado no banco: "${result.rows[0].mes}"`);
+      console.log(`[DEBUG] M?s encontrado no banco: "${result.rows[0].mes}"`);
     }
 
     if (result.rows.length === 0) {
-      console.log(`🔍 [DEBUG] Nenhum calendário encontrado`);
+      console.log(`[DEBUG] Nenhum calend?rio encontrado`);
       return res.status(404).json({
         success: false,
         error: month ? `Nenhum calendário encontrado para ${month}.` : "Nenhum calendário encontrado para este cliente."
@@ -532,7 +536,7 @@ router.get("/calendars/:clientId", async (req: Request, res: Response) => {
       }
     });
   } catch (error: any) {
-    console.error("❌ Erro ao buscar calendário:", error);
+    console.error("�R Erro ao buscar calendário:", error);
     return res.status(500).json({
       success: false,
       error: "Erro ao buscar calendário.",
@@ -549,8 +553,8 @@ router.put("/calendars/:calendarId", async (req: Request, res: Response) => {
     const { calendarId } = req.params;
     const { posts } = req.body;
 
-    console.log(`💾 Atualizando calendário: ${calendarId}`);
-    console.log(`📊 Total de posts recebidos: ${posts?.length || 0}`);
+    console.log(`[INFO] Atualizando calend?rio: ${calendarId}`);
+    console.log(`[INFO] Total de posts recebidos: ${posts?.length || 0}`);
 
     if (!posts || !Array.isArray(posts)) {
       return res.status(400).json({
@@ -568,14 +572,14 @@ router.put("/calendars/:calendarId", async (req: Request, res: Response) => {
       [JSON.stringify(posts), calendarId]
     );
 
-    console.log("✅ Calendário atualizado com sucesso");
+    console.log("�S& Calendário atualizado com sucesso");
 
     return res.json({
       success: true,
       message: "Calendário atualizado com sucesso."
     });
   } catch (error) {
-    console.error("❌ Erro ao atualizar calendário:", error);
+    console.error("�R Erro ao atualizar calendário:", error);
     return res.status(500).json({
       success: false,
       error: "Erro ao atualizar calendário."
@@ -589,7 +593,7 @@ router.put("/calendars/post/:calendarId/:postIndex", async (req: Request, res: R
     const { calendarId, postIndex } = req.params;
     const updatedPost = req.body;
 
-    console.log(`✏️ Atualizando post ${postIndex} do calendário ${calendarId}`);
+    console.log(`�S�️ Atualizando post ${postIndex} do calendário ${calendarId}`);
 
     if (!calendarId || !postIndex) {
       return res.status(400).json({
@@ -633,7 +637,7 @@ router.put("/calendars/post/:calendarId/:postIndex", async (req: Request, res: R
       [JSON.stringify(posts), calendarId]
     );
 
-    console.log("✅ Post atualizado com sucesso");
+    console.log("�S& Post atualizado com sucesso");
 
     return res.json({
       success: true,
@@ -641,7 +645,7 @@ router.put("/calendars/post/:calendarId/:postIndex", async (req: Request, res: R
       post: posts[index]
     });
   } catch (error) {
-    console.error("❌ Erro ao atualizar post:", error);
+    console.error("�R Erro ao atualizar post:", error);
     return res.status(500).json({
       success: false,
       error: "Erro ao atualizar post."
@@ -654,7 +658,7 @@ router.delete("/calendars/post/:calendarId/:postIndex", async (req: Request, res
   try {
     const { calendarId, postIndex } = req.params;
 
-    console.log(`🗑️ Excluindo post ${postIndex} do calendário ${calendarId}`);
+    console.log(`[INFO] Excluindo post ${postIndex} do calend?rio ${calendarId}`);
 
     if (!calendarId || !postIndex) {
       return res.status(400).json({
@@ -696,14 +700,14 @@ router.delete("/calendars/post/:calendarId/:postIndex", async (req: Request, res
       [JSON.stringify(posts), calendarId]
     );
 
-    console.log("✅ Post excluído com sucesso");
+    console.log("�S& Post excluído com sucesso");
 
     return res.json({
       success: true,
       message: "Post excluído com sucesso."
     });
   } catch (error) {
-    console.error("❌ Erro ao excluir post:", error);
+    console.error("�R Erro ao excluir post:", error);
     return res.status(500).json({
       success: false,
       error: "Erro ao excluir post."
@@ -718,7 +722,7 @@ router.delete("/calendars/:clientId/:month", async (req: Request, res: Response)
 
     const includeDrafts = req.query.includeDrafts === 'true';
 
-    console.log(`🗑️ Excluindo calendário do mês ${month} para cliente: ${clientId} (includeDrafts=${includeDrafts})`);
+    console.log(`[INFO] Excluindo calend?rio do m?s ${month} para cliente: ${clientId} (includeDrafts=${includeDrafts})`);
 
     let query = "SELECT id FROM calendarios WHERE cliente_id = $1 AND LOWER(mes) = LOWER($2) AND status = 'published'";
     if (includeDrafts) {
@@ -743,7 +747,7 @@ router.delete("/calendars/:clientId/:month", async (req: Request, res: Response)
       [calendarId]
     );
 
-    console.log(`✅ Calendário ${calendarId} excluído com sucesso`);
+    console.log(`�S& Calendário ${calendarId} excluído com sucesso`);
 
     return res.json({
       success: true,
@@ -751,7 +755,7 @@ router.delete("/calendars/:clientId/:month", async (req: Request, res: Response)
     });
 
   } catch (error) {
-    console.error("❌ Erro ao excluir calendário:", error);
+    console.error("�R Erro ao excluir calendário:", error);
     return res.status(500).json({
       success: false,
       error: "Erro ao excluir calendário."
@@ -765,7 +769,7 @@ router.put("/calendars/:calendarId/metadata", async (req: Request, res: Response
     const { calendarId } = req.params;
     const { month_references, format_instructions } = req.body;
 
-    console.log(`📝 Atualizando metadata do calendário: ${calendarId}`);
+    console.log(`[INFO] Atualizando metadata do calend?rio: ${calendarId}`);
 
     // Buscar metadata atual
     const result = await db.query(
@@ -796,7 +800,7 @@ router.put("/calendars/:calendarId/metadata", async (req: Request, res: Response
       [JSON.stringify(updatedMetadata), calendarId]
     );
 
-    console.log("✅ Metadata atualizado com sucesso");
+    console.log("�S& Metadata atualizado com sucesso");
 
     return res.json({
       success: true,
@@ -909,6 +913,12 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
       return map[token] ?? null;
     };
 
+    const parseYearFromMonthLabel = (label: string, fallbackYear: number): number => {
+      const match = String(label || "").match(/(\d{4})/);
+      const parsed = match?.[1] ? parseInt(match[1], 10) : NaN;
+      return Number.isNaN(parsed) ? fallbackYear : parsed;
+    };
+
     const sanitizeFilePart = (value: string): string => {
       return value
         .normalize("NFD")
@@ -931,8 +941,85 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
       return Array.from(months).sort((a, b) => a - b);
     };
 
+    const parsePostDate = (value: any): { day: number; month: number; year?: number } | null => {
+      const raw = String(value ?? "").trim();
+      if (!raw || ["undefined", "null", "none"].includes(raw.toLowerCase())) {
+        return null;
+      }
+
+      let match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (match) {
+        return {
+          day: parseInt(match[3] || "", 10),
+          month: parseInt(match[2] || "", 10),
+          year: parseInt(match[1] || "", 10),
+        };
+      }
+
+      match = raw.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/);
+      if (!match) {
+        return null;
+      }
+
+      const day = parseInt(match[1] || "", 10);
+      const month = parseInt(match[2] || "", 10);
+      const yearValue = match[3] ? parseInt(match[3], 10) : undefined;
+      if (Number.isNaN(day) || Number.isNaN(month)) {
+        return null;
+      }
+
+      return { day, month, year: yearValue };
+    };
+
+    const buildExportDate = (day: number, monthNum: number, yearNum: number): string => {
+      return `${String(day).padStart(2, "0")}/${String(monthNum).padStart(2, "0")}/${yearNum}`;
+    };
+
+    const normalizePostsForExcelExport = (calendarPosts: any[], sourceMonthLabel: string): any[] => {
+      const fallbackMonthNum = parseMonthLabelToNumber(sourceMonthLabel) || parseMonthLabelToNumber(String(monthLabel)) || 1;
+      const fallbackYearNum = parseYearFromMonthLabel(
+        sourceMonthLabel,
+        parseInt(String(year), 10) || new Date().getFullYear()
+      );
+
+      return (Array.isArray(calendarPosts) ? calendarPosts : []).map((post: any) => {
+        const parsedDate = parsePostDate(post?.data);
+        const rawDay = post?.dia ?? post?.day;
+        const fallbackDay = parseInt(String(rawDay ?? ""), 10);
+
+        let normalizedDate = "";
+        if (parsedDate?.day && parsedDate?.month) {
+          normalizedDate = buildExportDate(
+            parsedDate.day,
+            parsedDate.month,
+            parsedDate.year || fallbackYearNum
+          );
+        } else if (!Number.isNaN(fallbackDay) && fallbackDay >= 1 && fallbackDay <= 31) {
+          normalizedDate = buildExportDate(fallbackDay, fallbackMonthNum, fallbackYearNum);
+        } else if (typeof post?.data === "string") {
+          normalizedDate = post.data;
+        }
+
+        return {
+          ...post,
+          data: normalizedDate,
+          _export_month: fallbackMonthNum,
+          _export_year: fallbackYearNum,
+        };
+      });
+    };
+
+    const baseMonthNum = parseMonthLabelToNumber(String(monthLabel)) || 1;
+    const baseYearNum = parseInt(String(year), 10) || new Date().getFullYear();
+    const requestedMonths = Array.isArray(monthsSelected) && monthsSelected.length > 0
+      ? monthsSelected
+        .map((mm) => parseInt(String(mm), 10))
+        .filter((mm) => !Number.isNaN(mm) && mm >= 1 && mm <= 12)
+        .sort((a, b) => a - b)
+      : [];
     const monthsDetected = detectMonths(posts);
-    const monthsToExport = Array.isArray(monthsSelected) && monthsSelected.length > 0 ? monthsSelected : monthsDetected;
+    const monthsToExport = requestedMonths.length > 0 ? requestedMonths : monthsDetected;
+    let exportMonthLabel = String(monthLabel);
 
     try {
       const baseCount = Array.isArray(posts) ? posts.length : 0;
@@ -949,13 +1036,32 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
           .filter((mm) => !isNaN(mm) && mm >= 1 && mm <= 12)
         : [];
 
-      console.log(` [DEBUG] Merge check: normalizedMonths=${JSON.stringify(normalizedMonths)}, cliente_id=${calendar.cliente_id || 'NULL'}`);
+      console.log(` [DEBUG] Merge check: normalizedMonths=${JSON.stringify(normalizedMonths)}, cliente_id=${calendar.cliente_id || "NULL"}`);
 
-      if (normalizedMonths.length >= 2 && calendar.cliente_id) {
+      const resolvedMonthLabels = new Map<number, string>();
+      const mergedPosts: any[] = [];
+
+      const appendExportPosts = (calendarPosts: any[], sourceMonthLabel: string) => {
+        const normalized = normalizePostsForExcelExport(calendarPosts, sourceMonthLabel);
+        if (normalized.length > 0) {
+          mergedPosts.push(...normalized);
+        }
+
+        const sourceMonthNum = parseMonthLabelToNumber(sourceMonthLabel);
+        if (sourceMonthNum && !resolvedMonthLabels.has(sourceMonthNum)) {
+          resolvedMonthLabels.set(sourceMonthNum, sourceMonthLabel);
+        }
+      };
+
+      const shouldUseRequestedMonths = normalizedMonths.length > 0;
+      const shouldIncludeBase = !shouldUseRequestedMonths || normalizedMonths.includes(baseMonthNum);
+
+      if (shouldIncludeBase) {
+        appendExportPosts(Array.isArray(posts) ? posts : [], String(monthLabel));
+      }
+
+      if (shouldUseRequestedMonths && calendar.cliente_id) {
         console.log(` [DEBUG] Iniciando merge de ${normalizedMonths.length} meses para cliente_id=${calendar.cliente_id}`);
-        const baseMonthNum = parseMonthLabelToNumber(String(monthLabel)) || normalizedMonths[0] || 1;
-        const baseYearNum = parseInt(String(year), 10) || new Date().getFullYear();
-        const mergedPosts: any[] = Array.isArray(posts) ? [...posts] : [];
 
         const monthSearchTokens = (monthNum: number): string[] => {
           const n = Number(monthNum);
@@ -964,17 +1070,15 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
         };
 
         for (const m of normalizedMonths) {
-          if (m === baseMonthNum) continue;
-          const yNum = m < baseMonthNum ? baseYearNum + 1 : baseYearNum;
+          if (m === baseMonthNum && shouldIncludeBase) continue;
+          const yNum = m < baseMonthNum && baseMonthNum >= 9 && m <= 4 ? baseYearNum + 1 : baseYearNum;
           const label = `${monthNamePt(m)} ${yNum}`;
 
-          // 1) Match exato
           let other = await db.query(
             "SELECT calendario_json, mes FROM calendarios WHERE cliente_id = $1 AND lower(mes) = lower($2) ORDER BY updated_at DESC NULLS LAST, criado_em DESC NULLS LAST LIMIT 1",
             [calendar.cliente_id, label]
           );
 
-          // 2) Fallback tolerante: contém mês + contém ano
           if (!other.rows?.length) {
             const yearToken = String(yNum);
             for (const token of monthSearchTokens(m)) {
@@ -986,7 +1090,6 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
             }
           }
 
-          // 3) Fallback extra: contém apenas o mês (quando o campo mes não tem ano)
           if (!other.rows?.length) {
             for (const token of monthSearchTokens(m)) {
               other = await db.query(
@@ -1005,30 +1108,42 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
           }
 
           console.log(
-            ` [DEBUG] Merge mês ${label}: encontrado mes='${String(other.rows?.[0]?.mes || "")}'`
+            ` [DEBUG] Merge mês ${label}: encontrado mes='${String(other.rows?.[0]?.mes || "") }'`
           );
 
           const otherPosts = other.rows?.[0]?.calendario_json;
+          const sourceMonthLabel = String(other.rows?.[0]?.mes || label);
           if (Array.isArray(otherPosts) && otherPosts.length > 0) {
             console.log(
               ` [DEBUG] Merge mês ${label}: adicionando ${otherPosts.length} posts (cliente_id=${calendar.cliente_id})`
             );
-            mergedPosts.push(...otherPosts);
+            appendExportPosts(otherPosts, sourceMonthLabel);
           } else {
             console.log(
               ` [WARN] Merge mês ${label}: calendário encontrado mas sem posts (cliente_id=${calendar.cliente_id})`
             );
           }
         }
+      }
 
+      if (mergedPosts.length > 0) {
         posts = mergedPosts;
+      } else {
+        posts = normalizePostsForExcelExport(Array.isArray(posts) ? posts : [], String(monthLabel));
+      }
 
-        try {
-          const mergedCount = Array.isArray(posts) ? posts.length : 0;
-          console.log(` [DEBUG] Export merge finalizado: posts total=${mergedCount}`);
-        } catch (_e) {
-          // ignore
-        }
+      if (normalizedMonths.length > 0) {
+        const firstRequestedMonth = normalizedMonths[0] ?? baseMonthNum;
+        exportMonthLabel =
+          resolvedMonthLabels.get(firstRequestedMonth) ||
+          `${monthNamePt(firstRequestedMonth)} ${baseYearNum}`;
+      }
+
+      try {
+        const mergedCount = Array.isArray(posts) ? posts.length : 0;
+        console.log(` [DEBUG] Export merge finalizado: posts total=${mergedCount}`);
+      } catch (_e) {
+        // ignore
       }
     } catch (_e) {
       // fallback
@@ -1077,20 +1192,41 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     console.log(`  Output: ${outputPath}`);
 
     const pythonBin = process.env.PYTHON_BIN || "python3";
-    const pythonProcess = spawn(pythonBin, [
-      pythonScript,
-      JSON.stringify(posts),
-      templatePath,
-      outputPath,
-      resolvedClientName,
-      String(monthLabel),
-      year,
-      String(periodo || ""),
-      JSON.stringify(monthsToExport),
-    ]);
+    const postsPayload = JSON.stringify(posts);
+    const pythonProcess = spawn(
+      pythonBin,
+      [
+        pythonScript,
+        "--stdin",
+        templatePath,
+        outputPath,
+        resolvedClientName,
+        String(exportMonthLabel),
+        String(year),
+        String(periodo || ""),
+        JSON.stringify(monthsToExport),
+      ],
+      {
+        stdio: ["pipe", "pipe", "pipe"],
+      }
+    );
 
     let pythonOutput = "";
     let pythonError = "";
+    let pythonStartFailed = false;
+
+    pythonProcess.on("error", (processError: any) => {
+      pythonStartFailed = true;
+      const details = processError?.message || String(processError);
+      console.error(` [ERROR] Falha ao iniciar processo Python: ${details}`);
+
+      if (!res.headersSent) {
+        res.status(500).json({
+          error: "Erro ao iniciar geracao do Excel",
+          details,
+        });
+      }
+    });
 
     pythonProcess.stdout.on("data", (data: any) => {
       const output = data.toString();
@@ -1104,7 +1240,19 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
       console.error(`[PYTHON ERROR] ${error.trim()}`);
     });
 
+    pythonProcess.stdin?.on("error", (stdinError: any) => {
+      const details = stdinError?.message || String(stdinError);
+      pythonError += `${details}\n`;
+      console.error(` [ERROR] Falha ao enviar payload para o Python: ${details}`);
+    });
+
+    pythonProcess.stdin?.end(postsPayload);
+
     pythonProcess.on("close", async (code: any) => {
+      if (pythonStartFailed || res.headersSent) {
+        return;
+      }
+
       if (code === 0) {
         console.log(` [SUCCESS] Python script executado com sucesso`);
         if (fs.existsSync(outputPath)) {

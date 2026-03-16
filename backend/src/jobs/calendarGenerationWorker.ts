@@ -1,33 +1,34 @@
-import db from "../config/database";
+﻿import db from "../config/database";
 import { generateCalendarForMonth, distributeMixAcrossMonths } from "../services/calendarGenerator";
+import { generatePresentationContentPipeline, renderPresentationDeck } from "../routes/presentation";
 
-// Configurações
+// ConfiguraÃ§Ãµes
 const POLLING_INTERVAL_MS = 5000; // 5 segundos
-// const MAX_CONCURRENT_JOBS = 1; // Por instância (simples por enquanto)
+// const MAX_CONCURRENT_JOBS = 1; // Por instÃ¢ncia (simples por enquanto)
 
 export const startCalendarGenerationWorker = () => {
-    console.log("👷 [WORKER] Iniciando Calendar Generation Worker...");
+    console.log("ðŸ‘· [WORKER] Iniciando Calendar Generation Worker...");
 
     // Loop infinito de polling
     const loop = async () => {
         try {
             await processNextJob();
         } catch (e) {
-            console.error("❌ [WORKER] Erro no loop de processamento:", e);
+            console.error("âŒ [WORKER] Erro no loop de processamento:", e);
         } finally {
             setTimeout(loop, POLLING_INTERVAL_MS);
         }
     };
 
-    // Cleanup de jobs órfãos antes de iniciar o loop
+    // Cleanup de jobs Ã³rfÃ£os antes de iniciar o loop
     // Se o servidor foi reiniciado no meio de um job 'running', ele nunca voltaria a 'pending'
-    // (o worker só pega status='pending'). Marcamos como 'failed' para a UI parar o polling.
+    // (o worker sÃ³ pega status='pending'). Marcamos como 'failed' para a UI parar o polling.
     const cleanupOrphanJobs = async () => {
         try {
             const result = await db.query(`
                 UPDATE calendar_generation_jobs
                 SET status = 'failed',
-                    error = '{"message":"Job órfão: servidor foi reiniciado durante a execução"}',
+                    error = '{"message":"Job Ã³rfÃ£o: servidor foi reiniciado durante a execuÃ§Ã£o"}',
                     finished_at = NOW(),
                     updated_at = NOW()
                 WHERE status = 'running'
@@ -35,20 +36,26 @@ export const startCalendarGenerationWorker = () => {
             `);
             const count = result.rowCount ?? 0;
             if (count > 0) {
-                console.warn(`⚠️ [WORKER] ${count} job(s) órfão(s) em 'running' marcados como 'failed'.`);
+                console.warn(`âš ï¸ [WORKER] ${count} job(s) Ã³rfÃ£o(s) em 'running' marcados como 'failed'.`);
             }
         } catch (err) {
-            console.error("❌ [WORKER] Erro ao limpar jobs órfãos:", err);
+            console.error("âŒ [WORKER] Erro ao limpar jobs Ã³rfÃ£os:", err);
         }
     };
 
     cleanupOrphanJobs().then(() => loop());
 };
 
+const updateJobProgress = async (jobId: string, progress: number, currentStep: string) => {
+    await db.query(
+        `UPDATE calendar_generation_jobs
+         SET progress = $1, current_step = $2, updated_at = NOW()
+         WHERE id = $3`,
+        [Math.max(0, Math.min(100, Math.round(progress))), currentStep, jobId]
+    );
+};
+
 const processNextJob = async () => {
-    // 1. Claim Job com Locking (Postgres)
-    // Seleciona o job mais antigo que está pending
-    // FOR UPDATE SKIP LOCKED garante que se tivermos múltiplos workers, eles não peguem o mesmo
     const client = await db.connect();
 
     try {
@@ -65,47 +72,57 @@ const processNextJob = async () => {
 
         if (claimResult.rows.length === 0) {
             await client.query("COMMIT");
-            return; // Sem jobs
+            return;
         }
 
         const job = claimResult.rows[0];
         const jobId = job.id;
+        const payload = job.payload && typeof job.payload === 'object' ? job.payload : {};
+        const jobType = String(payload.jobType || 'calendar');
+        const startStep = jobType === 'presentation' ? 'Iniciando apresentacao...' : 'Iniciando...';
 
-        console.log(`👷 [WORKER] Processando Job ${jobId}...`);
+        console.log(`👷 [WORKER] Processando Job ${jobId} (${jobType})...`);
 
-        // Atualiza para Running
         await client.query(`
       UPDATE calendar_generation_jobs
-      SET status = 'running', started_at = NOW(), updated_at = NOW(), progress = 0, current_step = 'Iniciando...'
+      SET status = 'running', started_at = NOW(), updated_at = NOW(), progress = 0, current_step = $2
       WHERE id = $1
-    `, [jobId]);
+    `, [jobId, startStep]);
 
-        await client.query("COMMIT"); // Libera o row lock, mas o status já é running, então outros workers ignoram
+        await client.query("COMMIT");
 
-        // 2. Execução (Fora da transação do claim para não segurar conexão)
         try {
-            await runJobLogic(jobId, job.cliente_id, job.payload);
+            const jobResult = await runJobLogic(jobId, job.cliente_id, payload);
 
-            // Sucesso total
-            await db.query(`
+            if (jobResult !== undefined) {
+                await db.query(`
         UPDATE calendar_generation_jobs
-        SET status = 'succeeded', progress = 100, current_step = 'Concluído', finished_at = NOW(), updated_at = NOW()
+        SET status = 'succeeded',
+            progress = 100,
+            current_step = 'Concluido',
+            finished_at = NOW(),
+            updated_at = NOW(),
+            payload = jsonb_set(COALESCE(payload, '{}'::jsonb), '{result}', $2::jsonb, true)
+        WHERE id = $1
+      `, [jobId, JSON.stringify(jobResult)]);
+            } else {
+                await db.query(`
+        UPDATE calendar_generation_jobs
+        SET status = 'succeeded', progress = 100, current_step = 'Concluido', finished_at = NOW(), updated_at = NOW()
         WHERE id = $1
       `, [jobId]);
+            }
 
-            console.log(`✅ [WORKER] Job ${jobId} concluído com sucesso.`);
-
+            console.log(`✅ [WORKER] Job ${jobId} concluido com sucesso.`);
         } catch (jobError: any) {
             if (jobError.message === 'JOB_CANCELED') {
                 console.log(`🛑 [WORKER] Job ${jobId} interrompido pois foi cancelado.`);
-                return; // Status já é 'canceled' no banco
+                return;
             }
 
             console.error(`❌ [WORKER] Falha no Job ${jobId}:`, jobError);
 
             let errorData: any = { message: jobError.message, stack: jobError.stack };
-
-            // PR5: Tratamento customizado e limpo para envio ao Frontend
             if (jobError.type === 'INVALID_CALENDAR_OUTPUT') {
                 errorData = {
                     error: jobError.type,
@@ -128,7 +145,59 @@ const processNextJob = async () => {
     }
 };
 
+const runPresentationJobLogic = async (jobId: string, clienteId: string, payload: any) => {
+    const operation = String(payload?.operation || 'render');
+    const checkCancellation = async () => {
+        const check = await db.query("SELECT status FROM calendar_generation_jobs WHERE id = $1", [jobId]);
+        if (check.rows[0]?.status === 'canceled') {
+            throw new Error('JOB_CANCELED');
+        }
+    };
+
+    const onProgress = async (progress: number, step: string) => {
+        await checkCancellation();
+        await updateJobProgress(jobId, progress, step);
+    };
+
+    await checkCancellation();
+
+    if (operation === 'content') {
+        const requestedMonths = Array.isArray(payload?.months)
+            ? payload.months.map((month: any) => String(month || '').trim()).filter(Boolean)
+            : [];
+        const result = await generatePresentationContentPipeline(clienteId, requestedMonths, onProgress);
+        return {
+            operation: 'content',
+            content: result.content,
+            strategyBrief: result.strategyBrief,
+            plannerLabel: result.plannerLabel,
+            roadmapMonths: result.roadmapMonths,
+        };
+    }
+
+    const input = payload?.input && typeof payload.input === 'object' ? payload.input : {};
+    const result = await renderPresentationDeck(
+        { ...input, clienteId: input?.clienteId || clienteId },
+        { renderKey: jobId, onProgress }
+    );
+    return {
+        operation: 'render',
+        content: result.content,
+        images: result.images,
+        tempFiles: result.tempFiles,
+        renderKey: result.renderKey,
+    };
+};
+
 const runJobLogic = async (jobId: string, clienteId: string, payload: any) => {
+    const jobType = String(payload?.jobType || 'calendar');
+    if (jobType === 'presentation') {
+        return runPresentationJobLogic(jobId, clienteId, payload);
+    }
+    return runCalendarJobLogic(jobId, clienteId, payload);
+};
+
+const runCalendarJobLogic = async (jobId: string, clienteId: string, payload: any) => {
     const {
         monthsToGenerate, briefing, monthReferences, formatInstructions, chainOutputFinal, generationPrompt, produtosFocoIds
     } = payload;
@@ -140,8 +209,8 @@ const runJobLogic = async (jobId: string, clienteId: string, payload: any) => {
     const periodo = payload.periodo || payload.period || 30;
 
     // Busca dados auxiliares do cliente para passar ao service
-    // Na verdade o service já faz algumas buscas de dados. Vamos otimizar.
-    // O Service pede alguns dados que o payload já tem.
+    // Na verdade o service jÃ¡ faz algumas buscas de dados. Vamos otimizar.
+    // O Service pede alguns dados que o payload jÃ¡ tem.
     // Faltam: rules, docsResumo, categoriasNicho. Vamos buscar aqui para passar limpo.
 
     // Buscar regras
@@ -152,14 +221,14 @@ const runJobLogic = async (jobId: string, clienteId: string, payload: any) => {
     const docsResult = await db.query("SELECT tipo, conteudo_texto FROM brand_docs WHERE cliente_id = $1", [clienteId]);
     const docsResumo = docsResult.rows.map((d: any) => `- (${d.tipo}) ${d.conteudo_texto}`).join("\n");
 
-    // Buscar categorias/Branding completo se precisarmos re-hidratar algo que não veio no payload
-    // O payload tem 'briefing', 'mix', etc. mas não o objeto branding completo com keywords, tom, etc.
-    // Se o payload não salvou o obojeto branding completo, precisamos buscar.
+    // Buscar categorias/Branding completo se precisarmos re-hidratar algo que nÃ£o veio no payload
+    // O payload tem 'briefing', 'mix', etc. mas nÃ£o o objeto branding completo com keywords, tom, etc.
+    // Se o payload nÃ£o salvou o obojeto branding completo, precisamos buscar.
     // O controller salvou: clienteId, briefing, periodo, mix, generationPrompt, chainId, formatInstructions...
-    // NÃO salvou o branding object. O service precisa dele.
+    // NÃƒO salvou o branding object. O service precisa dele.
 
     const brandingResult = await db.query("SELECT * FROM branding WHERE cliente_id = $1", [clienteId]);
-    let branding = brandingResult.rows[0] || { tone_of_voice: "Neutro", visual_style: "Padrão", audience: "Geral" };
+    let branding = brandingResult.rows[0] || { tone_of_voice: "Neutro", visual_style: "PadrÃ£o", audience: "Geral" };
 
     // Categorias nicho
     let categoriasNicho: string[] = [];
@@ -170,12 +239,12 @@ const runJobLogic = async (jobId: string, clienteId: string, payload: any) => {
         }
     } catch (_) { }
 
-    // Distribuição de Mix por mês
-    // Prioridade: monthlyMix (por mês) > distributeMixAcrossMonths (trimestral) > mix global
+    // DistribuiÃ§Ã£o de Mix por mÃªs
+    // Prioridade: monthlyMix (por mÃªs) > distributeMixAcrossMonths (trimestral) > mix global
     const monthlyMix = payload.monthlyMix || null;
     const isTrimestral = periodo === 90;
     const mixesByMonth: any[] = monthlyMix
-        ? monthsToGenerate.map((m: string) => monthlyMix[m] || mix) // usa mix specific do mês ou fallback global
+        ? monthsToGenerate.map((m: string) => monthlyMix[m] || mix) // usa mix specific do mÃªs ou fallback global
         : isTrimestral
             ? distributeMixAcrossMonths(mix, monthsToGenerate.length)
             : monthsToGenerate.map(() => mix);
@@ -194,7 +263,7 @@ const runJobLogic = async (jobId: string, clienteId: string, payload: any) => {
             throw new Error('JOB_CANCELED');
         }
 
-        // Progresso base para este mês (ex: 1/3 = 33%)
+        // Progresso base para este mÃªs (ex: 1/3 = 33%)
         const baseProgress = (i / totalSteps) * 100;
         const stepSize = 100 / totalSteps;
 
@@ -202,7 +271,7 @@ const runJobLogic = async (jobId: string, clienteId: string, payload: any) => {
       UPDATE calendar_generation_jobs 
       SET progress = $1, current_step = $2, updated_at = NOW()
       WHERE id = $3
-    `, [Math.round(baseProgress), `[Mês ${i + 1}/${totalSteps}] Iniciando geração para ${mes}...`, jobId]);
+    `, [Math.round(baseProgress), `[MÃªs ${i + 1}/${totalSteps}] Iniciando geraÃ§Ã£o para ${mes}...`, jobId]);
 
         // Gera
         const result = await generateCalendarForMonth({
@@ -229,7 +298,7 @@ const runJobLogic = async (jobId: string, clienteId: string, payload: any) => {
             },
             onProgress: async (relativePct: number, stepMsg: string) => {
                 const currentTotalProgress = Math.round(baseProgress + (stepSize * (relativePct / 100)));
-                const stepMessage = `[Mês ${i + 1}/${totalSteps}] ${stepMsg}`;
+                const stepMessage = `[MÃªs ${i + 1}/${totalSteps}] ${stepMsg}`;
                 await db.query(`
                   UPDATE calendar_generation_jobs 
                   SET progress = $1, current_step = $2, updated_at = NOW()
@@ -240,15 +309,15 @@ const runJobLogic = async (jobId: string, clienteId: string, payload: any) => {
 
         resultCalendarIds.push(result.calendarId);
 
-        // Atualiza contexto para próximo mês
+        // Atualiza contexto para prÃ³ximo mÃªs
         if (Array.isArray(result.calendarData)) {
             const temas = result.calendarData.slice(0, 5).map((p: any) => p.tema).join(", ");
             continuityContext += `\n[${mes}]: ${temas}...`;
         }
     }
 
-    // Finalização: Publicar calendários (Mudar de Draft -> Published)
-    // Isso garante atomicidade visual para o usuário
+    // FinalizaÃ§Ã£o: Publicar calendÃ¡rios (Mudar de Draft -> Published)
+    // Isso garante atomicidade visual para o usuÃ¡rio
     await db.query(`
     UPDATE calendarios 
     SET status = 'published' 
@@ -262,3 +331,5 @@ const runJobLogic = async (jobId: string, clienteId: string, payload: any) => {
     WHERE id = $2
   `, [resultCalendarIds, jobId]);
 };
+
+

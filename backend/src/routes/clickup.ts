@@ -17,6 +17,9 @@ export interface ClickUpExportPayload {
         objetivo: string;
         referencias?: string;
         palavras_chave?: string[];
+        legenda?: string;
+        texto_slides?: string;
+        copy_inicial?: string;
     };
 }
 
@@ -31,47 +34,41 @@ router.post("/export", async (req: AuthRequest, res: Response) => {
 
         const token = process.env.CLICKUP_API_TOKEN;
         if (!token) {
-            return res.status(500).json({ success: false, error: "CLICKUP_API_TOKEN não configurado no servidor." });
+            return res.status(500).json({ success: false, error: "CLICKUP_API_TOKEN nao configurado no servidor." });
         }
 
-        // Busca o List ID do cliente
         const clientResult = await db.query("SELECT clickup_list_id FROM clientes WHERE id = $1", [clienteId]);
         if (clientResult.rows.length === 0) {
-            return res.status(404).json({ success: false, error: "Cliente não encontrado." });
+            return res.status(404).json({ success: false, error: "Cliente nao encontrado." });
         }
 
         const listId = clientResult.rows[0].clickup_list_id;
         if (!listId) {
-            return res.status(400).json({ success: false, error: "Cliente não tem 'ID da Lista ClickUp' configurado." });
+            return res.status(400).json({ success: false, error: "Cliente nao tem 'ID da Lista ClickUp' configurado." });
         }
 
-        // Montar a descrição da tarefa em Markdown para o ClickUp
-        const description = `
-**Copy / Texto:**
-${post.copy_sugestao || '-'}
+        const legendaFinal = post.legenda || post.copy_sugestao || '-';
+        const textoSlides = post.texto_slides || post.copy_inicial || '';
+        const descriptionSections = [
+            `**Legenda:**\n${legendaFinal}`,
+            `**Instrucoes Visuais:**\n${post.ideia_visual || '-'}`,
+            post.formato?.toLowerCase().includes('carrossel') && textoSlides
+                ? `**Texto dos Slides:**\n${textoSlides}`
+                : null,
+            `**Objetivo:**\n${post.objetivo || '-'}`,
+            `**Referencias:**\n${post.referencias || '-'}`,
+            `**Data Sugerida:** ${post.data || '-'}`,
+        ].filter(Boolean);
 
-**Instruções Visuais:**
-${post.ideia_visual || '-'}
-
-**Objetivo:**
-${post.objetivo || '-'}
-
-**Referências:**
-${post.referencias || '-'}
-
-**Data Sugerida:** ${post.data || '-'}
-    `.trim();
-
+        const description = descriptionSections.join("\n\n");
         const taskName = `[${post.formato || 'Post'}] ${post.tema || 'Sem tema'}`;
 
-        // Chamada à API nativa do ClickUp V2
-        // POST https://api.clickup.com/api/v2/list/{list_id}/task
         const clickupResponse = await axios.post(
             `https://api.clickup.com/api/v2/list/${listId}/task`,
             {
                 name: taskName,
                 markdown_description: description,
-                status: "Open" // ou outro status padrao inicial
+                status: "Open"
             },
             {
                 headers: {
@@ -85,7 +82,7 @@ ${post.referencias || '-'}
     } catch (error: any) {
         console.error("Erro ao integrar com ClickUp:", error.response?.data || error.message);
         const apiError = error.response?.data?.err || error.message;
-        return res.status(500).json({ success: false, error: "Falha na exportação para ClickUp: " + apiError });
+        return res.status(500).json({ success: false, error: "Falha na exportacao para ClickUp: " + apiError });
     }
 });
 

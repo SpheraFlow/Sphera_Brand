@@ -27,11 +27,77 @@ interface Post {
   copy_sugestao: string;
   objetivo: string;
   image_generation_prompt?: string;
-  referencias?: string; // links, fotos, notas de referência
+  referencias?: string; // links, fotos, notas de referencia
+  legenda?: string;
+  texto_slides?: string;
+  copy_inicial?: string;
   status?: 'sugerido' | 'aprovado' | 'publicado' | 'needs_edit' | 'redo';
 }
 
-// Extrai o dia numérico de um post (suporta dia:number e data:"DD/MM")
+const toText = (value: any): string => {
+  if (value == null) return '';
+  if (typeof value === 'string') return value;
+  try { return JSON.stringify(value); } catch { return String(value); }
+};
+
+const isCarouselFormato = (formato: string): boolean => {
+  return (formato || '').toLowerCase().includes('carrossel');
+};
+
+const parseMonthLabelTokenToNumber = (label: string): number | null => {
+  const s = String(label || '').trim().toLowerCase();
+  if (!s) return null;
+  const token = s.split(/\s+/)[0] || '';
+  const map: Record<string, number> = {
+    janeiro: 1,
+    fevereiro: 2,
+    'março': 3,
+    marco: 3,
+    abril: 4,
+    maio: 5,
+    junho: 6,
+    julho: 7,
+    agosto: 8,
+    setembro: 9,
+    outubro: 10,
+    novembro: 11,
+    dezembro: 12,
+  };
+  return map[token] ?? null;
+};
+
+const normalizeCalendarPost = (post: any, mesNumFromLabel: number | null): Post => {
+  let data = toText(post.data);
+  if (!data && typeof post.dia === 'number' && post.dia >= 1 && post.dia <= 31) {
+    const diaStr = String(post.dia).padStart(2, '0');
+    const mesStr = mesNumFromLabel ? String(mesNumFromLabel).padStart(2, '0') : '01';
+    data = `${diaStr}/${mesStr}`;
+  }
+
+  const formato = toText(post.formato);
+  const isCarousel = isCarouselFormato(formato);
+  const legenda = toText(post.legenda) || toText(post.copy_sugestao) || (!isCarousel ? toText(post.copy_inicial) : '');
+  const textoSlides = isCarousel
+    ? (toText(post.texto_slides) || toText(post.copy_inicial) || (toText(post.legenda) ? toText(post.copy_sugestao) : ''))
+    : '';
+
+  return {
+    data,
+    tema: toText(post.tema),
+    formato,
+    ideia_visual: toText(post.ideia_visual) || toText(post.instrucoes_visuais),
+    copy_sugestao: legenda,
+    legenda,
+    texto_slides: textoSlides,
+    copy_inicial: toText(post.copy_inicial) || toText(post.texto_slides),
+    objetivo: toText(post.objetivo),
+    image_generation_prompt: toText(post.image_generation_prompt),
+    referencias: toText(post.referencias),
+    status: (post.status as Post['status']) || 'sugerido',
+  };
+};
+
+// Extrai o dia numerico de um post (suporta dia:number e data:"DD/MM")
 const getDiaFromPost = (post: Post): number => {
   if (typeof (post as any).dia === 'number') return (post as any).dia as number;
   const day = parseInt(String(post.data || '').split('/')[0] ?? '0', 10);
@@ -138,6 +204,7 @@ export default function CalendarPage() {
   // Estados para edição do post
   const [editTema, setEditTema] = useState('');
   const [editCopy, setEditCopy] = useState('');
+  const [editTextoSlides, setEditTextoSlides] = useState('');
   const [editData, setEditData] = useState('');
   const [editFormato, setEditFormato] = useState('');
   const [editIdeiaVisual, setEditIdeiaVisual] = useState('');
@@ -267,33 +334,7 @@ export default function CalendarPage() {
       })();
 
       calendarData.posts = (Array.isArray(rawPosts) ? rawPosts : []).map((post: any) => {
-        const n = (v: any): string => {
-          if (v == null) return '';
-          if (typeof v === 'string') return v;
-          try { return JSON.stringify(v); } catch { return String(v); }
-        };
-
-        // Suporte ao schema canônico (dia: number) e legado (data: "DD/MM")
-        let data = n(post.data);
-        if (!data && typeof post.dia === 'number' && post.dia >= 1 && post.dia <= 31) {
-          const diaStr = String(post.dia).padStart(2, '0');
-          const mesStr = mesNumFromLabel ? String(mesNumFromLabel).padStart(2, '0') : '01';
-          data = `${diaStr}/${mesStr}`;
-        }
-
-        return {
-          data,
-          tema: n(post.tema),
-          formato: n(post.formato),
-          // instrucoes_visuais (schema canônico) → ideia_visual (legado)
-          ideia_visual: n(post.ideia_visual) || n(post.instrucoes_visuais),
-          // copy_inicial (schema canônico) → copy_sugestao (legado)
-          copy_sugestao: n(post.copy_sugestao) || n(post.copy_inicial),
-          objetivo: n(post.objetivo),
-          image_generation_prompt: n(post.image_generation_prompt),
-          referencias: n(post.referencias),
-          status: (post.status as Post['status']) || 'sugerido',
-        };
+        return normalizeCalendarPost(post, mesNumFromLabel);
       });
       setCalendar(calendarData);
 
@@ -404,13 +445,14 @@ export default function CalendarPage() {
         customPrompt: regenPostPrompt,
       });
 
-      const newPost: Post = response.data.post;
+      const newPost: Post = normalizeCalendarPost(response.data.post, parseMonthLabelToNumber(calendar.mes));
       const updatedPosts = [...calendar.posts];
       updatedPosts[selectedPost.index] = newPost;
       setCalendar({ ...calendar, posts: updatedPosts });
 
       setEditTema(newPost.tema || '');
-      setEditCopy(newPost.copy_sugestao || '');
+      setEditCopy(newPost.legenda || newPost.copy_sugestao || '');
+      setEditTextoSlides(newPost.texto_slides || newPost.copy_inicial || '');
       setEditData(newPost.data || '');
       setEditFormato(newPost.formato || '');
       setEditIdeiaVisual(newPost.ideia_visual || '');
@@ -555,25 +597,7 @@ export default function CalendarPage() {
   };
 
   const parseMonthLabelToNumber = (label: string): number | null => {
-    const s = String(label || '').trim().toLowerCase();
-    if (!s) return null;
-    const token = s.split(/\s+/)[0] || '';
-    const map: Record<string, number> = {
-      janeiro: 1,
-      fevereiro: 2,
-      'março': 3,
-      marco: 3,
-      abril: 4,
-      maio: 5,
-      junho: 6,
-      julho: 7,
-      agosto: 8,
-      setembro: 9,
-      outubro: 10,
-      novembro: 11,
-      dezembro: 12,
-    };
-    return map[token] ?? null;
+    return parseMonthLabelTokenToNumber(label);
   };
 
   const openExportModal = () => {
@@ -615,7 +639,7 @@ export default function CalendarPage() {
         slideCount: regenSlideCount
       });
 
-      const newPost: Post = response.data.post;
+      const newPost: Post = normalizeCalendarPost(response.data.post, parseMonthLabelToNumber(calendar.mes));
 
       const updatedPosts = [...calendar.posts];
       updatedPosts[selectedPost.index] = newPost;
@@ -624,7 +648,8 @@ export default function CalendarPage() {
 
       // Atualizar campos do modal com a resposta da IA
       setEditTema(newPost.tema || '');
-      setEditCopy(newPost.copy_sugestao || '');
+      setEditCopy(newPost.legenda || newPost.copy_sugestao || '');
+      setEditTextoSlides(newPost.texto_slides || newPost.copy_inicial || '');
       setEditData(newPost.data || '');
       setEditFormato(newPost.formato || '');
       setEditIdeiaVisual(newPost.ideia_visual || '');
@@ -774,7 +799,8 @@ export default function CalendarPage() {
     console.log('📊 Index:', index);
     setSelectedPost({ post, index });
     setEditTema(post.tema || '');
-    setEditCopy(post.copy_sugestao || '');
+    setEditCopy(post.legenda || post.copy_sugestao || '');
+    setEditTextoSlides(post.texto_slides || post.copy_inicial || '');
     setEditData(post.data || '');
     setEditFormato(post.formato || '');
     setEditIdeiaVisual(post.ideia_visual || '');
@@ -808,6 +834,9 @@ export default function CalendarPage() {
       formato: editFormato,
       ideia_visual: editIdeiaVisual,
       copy_sugestao: editCopy,
+      legenda: editCopy,
+      texto_slides: isCarouselFormato(editFormato) ? editTextoSlides : '',
+      copy_inicial: isCarouselFormato(editFormato) ? editTextoSlides : '',
       objetivo: editObjetivo,
       image_generation_prompt: editImagePrompt,
       referencias: editReferencias,
@@ -853,6 +882,9 @@ export default function CalendarPage() {
       formato: editFormato,
       ideia_visual: editIdeiaVisual,
       copy_sugestao: editCopy,
+      legenda: editCopy,
+      texto_slides: isCarouselFormato(editFormato) ? editTextoSlides : '',
+      copy_inicial: isCarouselFormato(editFormato) ? editTextoSlides : '',
       objetivo: editObjetivo,
       image_generation_prompt: editImagePrompt,
       referencias: editReferencias,
@@ -1664,6 +1696,8 @@ export default function CalendarPage() {
             setEditTema={setEditTema}
             editCopy={editCopy}
             setEditCopy={setEditCopy}
+            editTextoSlides={editTextoSlides}
+            setEditTextoSlides={setEditTextoSlides}
             editData={editData}
             setEditData={setEditData}
             editFormato={editFormato}
@@ -1849,6 +1883,8 @@ interface EditModalProps {
   setEditTema: (v: string) => void;
   editCopy: string;
   setEditCopy: (v: string) => void;
+  editTextoSlides: string;
+  setEditTextoSlides: (v: string) => void;
   editData: string;
   setEditData: (v: string) => void;
   editFormato: string;
@@ -1880,6 +1916,7 @@ interface EditModalProps {
 function EditModal({
   editTema, setEditTema,
   editCopy, setEditCopy,
+  editTextoSlides, setEditTextoSlides,
   editData, setEditData,
   editFormato, setEditFormato,
   editIdeiaVisual, setEditIdeiaVisual,
@@ -1985,6 +2022,18 @@ function EditModal({
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 min-h-[110px]"
                 />
               </div>
+              {String(editFormato).toLowerCase() === 'carrossel' && (
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Texto dos slides</label>
+                  <textarea
+                    value={editTextoSlides}
+                    onChange={(e) => setEditTextoSlides(e.target.value)}
+                    placeholder="Estruture o texto do carrossel por slide: [Slide 1] ..., [Slide 2] ..."
+                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-blue-500 min-h-[140px]"
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1">A legenda fica separada acima. Aqui vai apenas o conteudo dos slides.</p>
+                </div>
+              )}
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Objetivo</label>
                 <input
@@ -2491,3 +2540,17 @@ function GenerateModal({
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+

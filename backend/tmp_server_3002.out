@@ -1,0 +1,107 @@
+[dotenv@17.2.3] injecting env (10) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+
+
+🔴 ============================================
+🔴 [STARTUP] INICIANDO SERVIDOR - ID: 1773323493234
+🔴 ============================================
+📂 [STARTUP] Diretório de execução: C:\repos\Sphera_Brand\backend
+📂 [STARTUP] Arquivo atual: C:\repos\Sphera_Brand\backend\dist\index.js
+📂 [STARTUP] Node version: v24.11.1
+📂 [STARTUP] Timestamp: 2026-03-12T13:51:33.244Z
+🔴 ============================================
+
+[dotenv@17.2.3] injecting env (0) from .env -- tip: 🔄 add secrets lifecycle management: https://dotenvx.com/ops
+📂 [MULTER] Pasta de uploads já existe: C:\repos\Sphera_Brand\backend\storage\branding
+🔒 [CORS] Origem(ns) permitida(s): http://localhost:3006
+
+🚀 ============================================
+🚀 Backend ONLINE na porta 3002
+🚀 Startup ID: 1773323493234
+📍 http://localhost:3002
+🚀 ============================================
+
+
+📋 ============================================
+📋 ROTAS REGISTRADAS:
+📋 ============================================
+  ⚠️ Não foi possível listar rotas (app._router não disponível)
+📋 ============================================
+
+👷 [WORKER] Iniciando Calendar Generation Worker...
+✅ Conectado ao banco de dados PostgreSQL
+✅ Conectado ao banco de dados PostgreSQL
+✅ DB conectado: Thu Mar 12 2026 10:51:34 GMT-0300 (Horário Padrão de Brasília)
+✅ GOOGLE_API_KEY carregada: AIza...c7T8
+📞 [GRAMPO] GET /health - Timestamp: 1773323515263
+🔔 [BACKEND RECEBEU] GET /health
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] POST /api/generate-calendar - Timestamp: 1773323538067
+🔔 [BACKEND RECEBEU] POST /api/generate-calendar
+📍 Origin: N/A
+📍 Content-Type: application/json
+📦 Body: {
+  clienteId: 'c7cf195d-7ed5-48b1-bee3-d673aff0428e',
+  briefing: 'Maio 2026 com foco em educar e captar consultas qualificadas para bioestimulador.',
+  mix: { reels: 1, photos: 0, stories: 0, static: 0, carousel: 0 },
+  mes: 'Maio 2026',
+  periodo: 30
+}
+
+🛑 [DEBUG] ROTA /generate-calendar ACIONADA (Async Job)
+✅ [DEBUG] Meses para geração: [ 'Maio 2026' ]
+🚀 [JOB] Criando job 9f0caa85-1459-4c2b-9332-1e37cf9d9a88 para cliente c7cf195d-7ed5-48b1-bee3-d673aff0428e
+👷 [WORKER] Processando Job 9f0caa85-1459-4c2b-9332-1e37cf9d9a88...
+✅ Conectado ao banco de dados PostgreSQL
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88 - Timestamp: 1773323543189
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88 - Timestamp: 1773323548212
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88
+📍 Origin: N/A
+📍 Content-Type: N/A
+✅ [TOKEN TRACKER] Cliente c7cf195d-7ed5-48b1-bee3-d673aff0428e: +2421 tokens (sys:0 input:901 out:787) Total: 16899
+ðŸ¤– [Worker] Tentando modelo gemini-3-flash-preview para Maio 2026...
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88 - Timestamp: 1773323553230
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88 - Timestamp: 1773323558243
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88 - Timestamp: 1773323563265
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88
+📍 Origin: N/A
+📍 Content-Type: N/A
+✅ [TOKEN TRACKER] Cliente c7cf195d-7ed5-48b1-bee3-d673aff0428e: +4003 tokens (sys:0 input:2456 out:552) Total: 20902
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88 - Timestamp: 1773323568277
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88 - Timestamp: 1773323573296
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88 - Timestamp: 1773323578307
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88 - Timestamp: 1773323583329
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88 - Timestamp: 1773323588350
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88
+📍 Origin: N/A
+📍 Content-Type: N/A
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88 - Timestamp: 1773323593372
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88
+📍 Origin: N/A
+📍 Content-Type: N/A
+✅ [TOKEN TRACKER] Cliente c7cf195d-7ed5-48b1-bee3-d673aff0428e: +6558 tokens (sys:0 input:1540 out:1435) Total: 27460
+📞 [GRAMPO] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88 - Timestamp: 1773323598392
+🔔 [BACKEND RECEBEU] GET /api/jobs/c7cf195d-7ed5-48b1-bee3-d673aff0428e/9f0caa85-1459-4c2b-9332-1e37cf9d9a88
+📍 Origin: N/A
+📍 Content-Type: N/A

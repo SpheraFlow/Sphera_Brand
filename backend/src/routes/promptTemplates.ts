@@ -108,8 +108,8 @@ function renderTemplate(
 // parâmetros dinâmicos (ex: /:clienteId). Caso contrário, o Express captura
 // "base", "detail", "preview" como valores de :clienteId.
 
-// GET /api/prompt-templates/base — Template global ativo (sem client_id)
-// DEVE ficar antes de /:clienteId para não ser capturado como clienteId.
+// GET /api/prompt-templates/base - Template global ativo (sem client_id)
+// DEVE ficar antes de /:clienteId para nao ser capturado como clienteId.
 router.get("/prompt-templates/base", async (_req: Request, res: Response) => {
   try {
     const result = await db.query(
@@ -119,11 +119,34 @@ router.get("/prompt-templates/base", async (_req: Request, res: Response) => {
        LIMIT 1`
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, message: "Template global não encontrado." });
+      return res.status(404).json({ success: false, message: "Template global nao encontrado." });
     }
     return res.json({ success: true, data: result.rows[0] });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: "Erro ao buscar template base.", error: error.message });
+  }
+});
+
+// GET /api/prompt-templates/base/:agentId - Template global/base por agente
+router.get("/prompt-templates/base/:agentId", async (req: Request, res: Response) => {
+  try {
+    const { agentId } = req.params;
+    const result = await db.query(
+      `SELECT id, version, label, body, is_active, created_at, updated_at, agent_id
+       FROM prompt_templates
+       WHERE cliente_id IS NULL AND agent_id = $1
+       ORDER BY is_active DESC, version DESC, updated_at DESC NULLS LAST
+       LIMIT 1`,
+      [agentId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Template base do agente nao encontrado." });
+    }
+
+    return res.json({ success: true, data: result.rows[0] });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: "Erro ao buscar template base do agente.", error: error.message });
   }
 });
 
@@ -241,13 +264,12 @@ router.post("/prompt-templates/predefined", async (req: Request, res: Response) 
     // 1. Desativar templates antigas deste agente no mesmo escopo (global ou cliente)
     if (clienteId) {
       await client.query(
-        "UPDATE prompt_templates SET is_active = false WHERE cliente_id = $1 AND agent_id = $2",
-        [clienteId, agentId]
+        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id = $1 AND is_active = true",
+        [clienteId]
       );
     } else {
       await client.query(
-        "UPDATE prompt_templates SET is_active = false WHERE cliente_id IS NULL AND agent_id = $1",
-        [agentId]
+        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id IS NULL AND is_active = true"
       );
     }
 
@@ -297,9 +319,7 @@ router.post("/prompt-templates/:id/activate", async (req: Request, res: Response
       client.release();
       return res.status(404).json({ success: false, message: "Template não encontrado." });
     }
-
     const template = templateResult.rows[0];
-    const templateAgentId = template.agent_id || 'estrategista';
 
     // ── Guardrails canônicos de ativação ───────────────────────────────
     const validationErrors = validateTemplateBody(template.body);
@@ -313,17 +333,16 @@ router.post("/prompt-templates/:id/activate", async (req: Request, res: Response
       });
     }
     // ───────────────────────────────────────────────────────────────────
-
-    // Desativa TODOS do mesmo escopo (cliente ou global) E MESMO AGENTE
+    // Desativa qualquer persona ativa no mesmo escopo para manter uma escolha unica por cliente/global
     if (template.cliente_id) {
       await client.query(
-        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id = $1 AND agent_id = $2 AND id <> $3",
-        [template.cliente_id, templateAgentId, id]
+        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id = $1 AND id <> $2",
+        [template.cliente_id, id]
       );
     } else {
       await client.query(
-        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id IS NULL AND agent_id = $1 AND id <> $2",
-        [templateAgentId, id]
+        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id IS NULL AND id <> $1",
+        [id]
       );
     }
 

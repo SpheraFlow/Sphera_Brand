@@ -1,14 +1,14 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api, { promptTemplateService } from '../services/api';
 
-// ── Tipos ─────────────────────────────────────────────────────────────────────
+// â”€â”€ Tipos â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 interface ChatMessage {
     role: 'user' | 'model';
     content: string;
 }
 
-// ── Componente Principal ───────────────────────────────────────────────────────
+// â”€â”€ Componente Principal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function PromptOnboardingPage() {
     const { clientId } = useParams<{ clientId: string }>();
     const navigate = useNavigate();
@@ -40,7 +40,7 @@ export default function PromptOnboardingPage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [clientId]);
 
-    // Rola para a última mensagem
+    // Rola para a Ãºltima mensagem
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, isLoading]);
@@ -53,7 +53,7 @@ export default function PromptOnboardingPage() {
         }
     }, [inputMessage]);
 
-    // ── Lógica de Chat ──────────────────────────────────────────────────────────
+    // â”€â”€ LÃ³gica de Chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     const startConversation = async () => {
         setIsInitializing(true);
@@ -86,14 +86,14 @@ export default function PromptOnboardingPage() {
             const novaMsg: ChatMessage = { role: 'model', content: res.reply };
             setMessages((prev) => [...prev, novaMsg]);
 
-            // Se a IA concluiu a extração (enviou [PROMPT_TEMPLATE_EXTRACTED] + JSON)
+            // Se a IA concluiu a extraÃ§Ã£o (enviou [PROMPT_TEMPLATE_EXTRACTED] + JSON)
             if (res.isComplete && res.extractedData?.body) {
                 await savePromptTemplate(res.extractedData.body, res.extractedData.label);
             }
         } catch (err: any) {
             console.error(err);
             setError('Erro ao enviar mensagem. Tente novamente.');
-            // Remove a última msg do user para ele tentar de novo
+            // Remove a Ãºltima msg do user para ele tentar de novo
             setMessages((prev) => prev.slice(0, -1));
             setInputMessage(text);
         } finally {
@@ -110,13 +110,13 @@ export default function PromptOnboardingPage() {
 
     const savePromptTemplate = async (body: string, label?: string) => {
         try {
-            // Cria a nova versão
+            // Cria a nova versÃ£o
             const created = await promptTemplateService.createVersion(clientId!, body, label || 'Gerado via Onboarding (IA)');
             // Tenta ativar automaticamente
             try {
                 await promptTemplateService.activate(created.id);
             } catch {
-                // Se a ativação falhar (guardrails), o usuário verá o template na página e pode ativar manualmente
+                // Se a ativaÃ§Ã£o falhar (guardrails), o usuÃ¡rio verÃ¡ o template na pÃ¡gina e pode ativar manualmente
             }
             navigate(`/client/${clientId}/prompt-template`);
         } catch (err: any) {
@@ -124,14 +124,14 @@ export default function PromptOnboardingPage() {
         }
     };
 
-    // ── Render ──────────────────────────────────────────────────────────────────
+    // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     if (isInitializing) {
         return (
             <div className="min-h-screen bg-[#06080e] flex items-center justify-center">
                 <div className="flex items-center gap-3 text-slate-500">
                     <span className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-                    <span className="text-sm font-mono tracking-wide">Iniciando conexão com Especialista Editorial...</span>
+                    <span className="text-sm font-mono tracking-wide">Iniciando conexao com Especialista Editorial...</span>
                 </div>
             </div>
         );
@@ -144,26 +144,26 @@ export default function PromptOnboardingPage() {
                 <div>
                     <div className="flex items-center gap-3 mb-1">
                         <span className="w-1.5 h-5 rounded-full bg-indigo-500 block shadow-[0_0_10px_rgba(99,102,241,0.5)]" />
-                        <h1 className="text-base font-semibold tracking-tight text-white">Criador de Calendário</h1>
-                        <span className="text-slate-600 text-base">／</span>
+                        <h1 className="text-base font-semibold tracking-tight text-white">Criador de Calendario</h1>
+                        <span className="text-slate-600 text-base">/</span>
                         <span className="text-sm text-slate-400 font-mono tracking-wide">{clientName}</span>
                     </div>
                     <p className="text-xs text-slate-500 pl-4 max-w-2xl mt-1 leading-relaxed">
                         Responda as perguntas da <strong>ARIA</strong> (nossa Especialista Editorial) para que ela crie o
-                        Prompt perfeito para geração de calendários automáticos desta marca.
+                        Prompt perfeito para geracao de calendarios automaticos desta marca.
                     </p>
                 </div>
                 <button
                     onClick={() => navigate(`/client/${clientId}/prompt-template`)}
                     className="text-xs font-mono text-slate-400 hover:text-white transition-colors flex items-center gap-2 border border-slate-700/50 hover:border-slate-500 bg-slate-800/20 px-4 py-2 rounded-lg"
                 >
-                    ✕ Cancelar Onboarding
+                    Cancelar Onboarding
                 </button>
             </header>
 
             {error && (
                 <div className="mx-8 mt-4 bg-red-950/30 border border-red-800/40 text-red-400 px-4 py-3 rounded-lg text-sm flex items-center gap-3">
-                    <span className="text-lg">⚠</span> {error}
+                    <span className="text-lg">Aviso</span> {error}
                 </div>
             )}
 
@@ -242,10 +242,11 @@ export default function PromptOnboardingPage() {
                     </button>
                 </div>
                 <p className="text-center mt-3 text-[10px] text-slate-600 font-mono tracking-wide">
-                    A IA pode cometer erros. Revise o Prompt gerado antes de ativá-lo como oficial.
+                    A IA pode cometer erros. Revise o Prompt gerado antes de ativa-lo como oficial.
                 </p>
             </div>
 
         </div>
     );
 }
+

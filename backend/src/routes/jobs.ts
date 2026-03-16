@@ -1,4 +1,4 @@
-import { Router, Request, Response } from "express";
+﻿import { Router, Request, Response } from "express";
 import db from "../config/database";
 
 const router = Router();
@@ -10,13 +10,16 @@ router.get("/:clientId/:jobId", async (req: Request, res: Response) => {
         const { includePayload } = req.query;
 
         if (!clientId || !jobId) {
-            return res.status(400).json({ success: false, error: "clientId e jobId são obrigatórios" });
+            return res.status(400).json({ success: false, error: "clientId e jobId sÃ£o obrigatÃ³rios" });
         }
 
-        // Query básica
+        // Query bÃ¡sica
         let selectFields = `
       id, cliente_id, status, progress, current_step, 
-      result_calendar_ids, error, created_at, started_at, finished_at, updated_at
+      result_calendar_ids, error, created_at, started_at, finished_at, updated_at,
+      payload->'result' AS result,
+      COALESCE(payload->>'jobType', 'calendar') AS job_type,
+      payload->>'operation' AS operation
     `;
 
         // Incluir payload se solicitado
@@ -30,17 +33,17 @@ router.get("/:clientId/:jobId", async (req: Request, res: Response) => {
         );
 
         if (result.rows.length === 0) {
-            return res.status(404).json({ success: false, error: "Job não encontrado" });
+            return res.status(404).json({ success: false, error: "Job nÃ£o encontrado" });
         }
 
         const job = result.rows[0];
         const serverTime = new Date();
-        // Fallback para created_at ou agora se não existir
+        // Fallback para created_at ou agora se nÃ£o existir
         const updatedAtDate = job.updated_at || job.created_at || serverTime;
         const updatedAt = new Date(updatedAtDate);
         const ageSeconds = Math.max(0, Math.floor((serverTime.getTime() - updatedAt.getTime()) / 1000));
 
-        // Se estiver "agarrado" há mais de 45s sem mudar updated_at, consideramos stale
+        // Se estiver "agarrado" hÃ¡ mais de 45s sem mudar updated_at, consideramos stale
         const isStale = ageSeconds > 45 && ['pending', 'running'].includes(job.status);
 
         // Log de debug apenas se ativado
@@ -55,10 +58,10 @@ router.get("/:clientId/:jobId", async (req: Request, res: Response) => {
             server_time: serverTime.toISOString(),
             age_seconds: ageSeconds,
             is_stale: isStale,
-            hint: isStale ? `Job sem atualização há ${ageSeconds}s. Worker pode estar travado ou offline.` : undefined
+            hint: isStale ? `Job sem atualizaÃ§Ã£o hÃ¡ ${ageSeconds}s. Worker pode estar travado ou offline.` : undefined
         });
     } catch (error: any) {
-        console.error("❌ Erro ao buscar job:", error);
+        console.error("âŒ Erro ao buscar job:", error);
         return res.status(500).json({ success: false, error: "Erro interno ao buscar job" });
     }
 });
@@ -69,7 +72,7 @@ router.post("/:clientId/:jobId/cancel", async (req: Request, res: Response) => {
         const { clientId, jobId } = req.params;
 
         if (!clientId || !jobId) {
-            return res.status(400).json({ success: false, error: "clientId e jobId são obrigatórios" });
+            return res.status(400).json({ success: false, error: "clientId e jobId sÃ£o obrigatÃ³rios" });
         }
 
         // Verifica status atual
@@ -79,18 +82,18 @@ router.post("/:clientId/:jobId/cancel", async (req: Request, res: Response) => {
         );
 
         if (currentCheck.rows.length === 0) {
-            return res.status(404).json({ success: false, error: "Job não encontrado" });
+            return res.status(404).json({ success: false, error: "Job nÃ£o encontrado" });
         }
 
         const currentStatus = currentCheck.rows[0].status;
 
-        // Idempotência: se o job já está num estado terminal, retornar 200 com o status atual.
+        // IdempotÃªncia: se o job jÃ¡ estÃ¡ num estado terminal, retornar 200 com o status atual.
         // Isso evita que o front quebre quando o job termina no exato momento do clique de cancelar.
         if (currentStatus === 'succeeded' || currentStatus === 'completed' ||
             currentStatus === 'failed' || currentStatus === 'canceled') {
             return res.json({
                 success: true,
-                message: `Job já estava em estado terminal: ${currentStatus}`,
+                message: `Job jÃ¡ estava em estado terminal: ${currentStatus}`,
                 status: currentStatus,
                 alreadyTerminal: true
             });
@@ -99,14 +102,14 @@ router.post("/:clientId/:jobId/cancel", async (req: Request, res: Response) => {
         // Atualiza para canceled
         await db.query(
             "UPDATE calendar_generation_jobs SET status = 'canceled', updated_at = NOW(), error = $2 WHERE id = $1",
-            [jobId, JSON.stringify({ message: 'Cancelado pelo usuário' })]
+            [jobId, JSON.stringify({ message: 'Cancelado pelo usuÃ¡rio' })]
         );
 
-        console.log(`🛑 Job ${jobId} cancelado pelo usuário.`);
+        console.log(`ðŸ›‘ Job ${jobId} cancelado pelo usuÃ¡rio.`);
 
-        return res.json({ success: true, message: "Solicitação de cancelamento enviada" });
+        return res.json({ success: true, message: "SolicitaÃ§Ã£o de cancelamento enviada" });
     } catch (error: any) {
-        console.error("❌ Erro ao cancelar job:", error);
+        console.error("âŒ Erro ao cancelar job:", error);
         return res.status(500).json({ success: false, error: "Erro interno ao cancelar job" });
     }
 });
@@ -117,7 +120,7 @@ router.post("/:clientId/:jobId/retry", async (req: Request, res: Response) => {
         const { clientId, jobId } = req.params;
 
         if (!clientId || !jobId) {
-            return res.status(400).json({ success: false, error: "clientId e jobId são obrigatórios" });
+            return res.status(400).json({ success: false, error: "clientId e jobId sÃ£o obrigatÃ³rios" });
         }
 
         const currentCheck = await db.query(
@@ -126,7 +129,7 @@ router.post("/:clientId/:jobId/retry", async (req: Request, res: Response) => {
         );
 
         if (currentCheck.rows.length === 0) {
-            return res.status(404).json({ success: false, error: "Job não encontrado" });
+            return res.status(404).json({ success: false, error: "Job nÃ£o encontrado" });
         }
 
         const currentStatus = currentCheck.rows[0].status;
@@ -134,7 +137,7 @@ router.post("/:clientId/:jobId/retry", async (req: Request, res: Response) => {
         if (currentStatus !== 'failed' && currentStatus !== 'canceled') {
             return res.status(409).json({
                 success: false,
-                error: `Só é possível fazer retry de jobs com status 'failed' ou 'canceled'. Status atual: ${currentStatus}`
+                error: `SÃ³ Ã© possÃ­vel fazer retry de jobs com status 'failed' ou 'canceled'. Status atual: ${currentStatus}`
             });
         }
 
@@ -146,11 +149,11 @@ router.post("/:clientId/:jobId/retry", async (req: Request, res: Response) => {
             [jobId]
         );
 
-        console.log(`🔄 Job ${jobId} colocado em retry pelo usuário.`);
+        console.log(`ðŸ”„ Job ${jobId} colocado em retry pelo usuÃ¡rio.`);
 
         return res.json({ success: true, message: "Job colocado na fila para nova tentativa", jobId });
     } catch (error: any) {
-        console.error("❌ Erro ao fazer retry do job:", error);
+        console.error("âŒ Erro ao fazer retry do job:", error);
         return res.status(500).json({ success: false, error: "Erro interno ao fazer retry do job" });
     }
 });
@@ -161,7 +164,7 @@ router.delete("/:clientId/:jobId", async (req: Request, res: Response) => {
         const { clientId, jobId } = req.params;
 
         if (!clientId || !jobId) {
-            return res.status(400).json({ success: false, error: "clientId e jobId são obrigatórios" });
+            return res.status(400).json({ success: false, error: "clientId e jobId sÃ£o obrigatÃ³rios" });
         }
 
         const currentCheck = await db.query(
@@ -170,7 +173,7 @@ router.delete("/:clientId/:jobId", async (req: Request, res: Response) => {
         );
 
         if (currentCheck.rows.length === 0) {
-            return res.status(404).json({ success: false, error: "Job não encontrado" });
+            return res.status(404).json({ success: false, error: "Job nÃ£o encontrado" });
         }
 
         const currentStatus = currentCheck.rows[0].status;
@@ -178,17 +181,17 @@ router.delete("/:clientId/:jobId", async (req: Request, res: Response) => {
         if (currentStatus === 'pending' || currentStatus === 'running') {
             return res.status(409).json({
                 success: false,
-                error: `Não é possível excluir um job em execução. Cancele primeiro. Status atual: ${currentStatus}`
+                error: `NÃ£o Ã© possÃ­vel excluir um job em execuÃ§Ã£o. Cancele primeiro. Status atual: ${currentStatus}`
             });
         }
 
         await db.query("DELETE FROM calendar_generation_jobs WHERE id = $1", [jobId]);
 
-        console.log(`🗑️ Job ${jobId} excluído pelo usuário.`);
+        console.log(`ðŸ—‘ï¸ Job ${jobId} excluÃ­do pelo usuÃ¡rio.`);
 
-        return res.json({ success: true, message: "Job excluído com sucesso" });
+        return res.json({ success: true, message: "Job excluÃ­do com sucesso" });
     } catch (error: any) {
-        console.error("❌ Erro ao excluir job:", error);
+        console.error("âŒ Erro ao excluir job:", error);
         return res.status(500).json({ success: false, error: "Erro interno ao excluir job" });
     }
 });
@@ -199,7 +202,7 @@ router.get("/:clientId", async (req: Request, res: Response) => {
         const { clientId } = req.params;
 
         if (!clientId) {
-            return res.status(400).json({ success: false, error: "clientId é obrigatório" });
+            return res.status(400).json({ success: false, error: "clientId Ã© obrigatÃ³rio" });
         }
 
         const result = await db.query(
@@ -214,7 +217,7 @@ router.get("/:clientId", async (req: Request, res: Response) => {
 
         return res.json({ success: true, jobs: result.rows });
     } catch (error: any) {
-        console.error("❌ Erro ao listar jobs:", error);
+        console.error("âŒ Erro ao listar jobs:", error);
         return res.status(500).json({ success: false, error: "Erro interno ao listar jobs" });
     }
 });

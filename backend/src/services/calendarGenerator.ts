@@ -2,7 +2,64 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import db from "../config/database";
 import { updateTokenUsage } from "../utils/tokenTracker";
 import { validateCalendarSchema, InvalidCalendarOutputError } from "../utils/calendarValidator";
+import { buildSlotBlueprintFromMix, critiqueCalendarDraft, planMonthlyCalendar } from "./calendarIntelligence";
+import { getGeminiModelCandidates } from "../utils/googleModels";
 
+const isCarouselFormato = (formato: any): boolean => {
+    return String(formato || "").toLowerCase().includes("carrossel") || String(formato || "").toLowerCase().includes("carousel");
+};
+
+const compactText = (value: any): string => {
+    return String(value || "")
+        .replace(/\[slide\s*\d+\]\s*/gi, "")
+        .replace(/\s+/g, " ")
+        .trim();
+};
+
+const buildFallbackLegenda = (post: any): string => {
+    const explicitCaption = [post?.legenda, post?.copy_sugestao]
+        .map((value) => String(value || "").trim())
+        .find((value) => value && !/\[slide\s*\d+\]/i.test(value));
+    if (explicitCaption) return explicitCaption;
+
+    const slideSections = String(post?.copy_inicial || "")
+        .split(/\[slide\s*\d+\]/gi)
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+    const captionCore = compactText(slideSections.slice(0, 2).join(" ") || post?.copy_inicial || "");
+    const parts = [String(post?.tema || "").trim(), captionCore].filter(Boolean);
+    let legenda = parts.join(". ").trim();
+
+    const cta = String(post?.cta || "").trim();
+    if (cta && !legenda.toLowerCase().includes(cta.toLowerCase())) {
+        legenda = legenda ? `${legenda}\n\n${cta}` : cta;
+    }
+
+    if (!legenda) {
+        legenda = String(post?.tema || cta || "Carrossel sem legenda gerada").trim();
+    }
+
+    if (legenda.length > 420) {
+        legenda = `${legenda.slice(0, 417).trimEnd()}...`;
+    }
+
+    return legenda;
+};
+
+const ensureCarouselLegendas = (calendarData: any): any => {
+    if (!Array.isArray(calendarData)) return calendarData;
+
+    for (const post of calendarData) {
+        if (!post || typeof post !== "object") continue;
+        if (!isCarouselFormato(post.formato)) continue;
+        if (typeof post.legenda === "string" && post.legenda.trim()) continue;
+
+        post.legenda = buildFallbackLegenda(post);
+    }
+
+    return calendarData;
+};
 const HARDCODED_TEMPLATE_FALLBACK = `Atue como o Estrategista Principal e Guardião Verbal da marca (Nicho: {{NICHO}}).
 Seu arquétipo é {{ARQUETIPO}}.
 Você NUNCA usa as palavras: {{ANTI_PALAVRAS}}.
@@ -39,7 +96,7 @@ INSTRUÇÕES POR FORMATO:
 {{INSTRUCOES_POR_FORMATO}}
 
 MUITO IMPORTANTE SOBRE CARROSSÉIS:
-Se o formato escolhido para o dia FOR "Carrossel", você DEVE, obrigatoriamente, descrever o "copy_inicial" e "instrucoes_visuais" divididos por slides (ex: [Slide 1] Título..., [Slide 2] Conteúdo...). Nunca retorne um carrossel sem a divisão explícita de slides.
+Se o formato escolhido para o dia FOR "Carrossel", voce DEVE, obrigatoriamente, descrever o "copy_inicial" e "instrucoes_visuais" divididos por slides (ex: [Slide 1] Titulo..., [Slide 2] Conteudo...). Alem disso, voce DEVE retornar o campo "legenda" com a legenda final do carrossel. A "legenda" nao pode vir dividida por slides. Nunca retorne um carrossel sem a divisao explicita de slides e sem a legenda final do post.
 
 Retorne APENAS um JSON ARRAY PURO (sem markdown, sem texto extra antes ou depois):
 [
@@ -49,6 +106,7 @@ Retorne APENAS um JSON ARRAY PURO (sem markdown, sem texto extra antes ou depois
     "formato": "Reels",
     "instrucoes_visuais": "...",
     "copy_inicial": "...",
+    "legenda": "...",
     "objetivo": "...",
     "cta": "...",
     "palavras_chave": ["...", "..."]
@@ -58,7 +116,8 @@ Retorne APENAS um JSON ARRAY PURO (sem markdown, sem texto extra antes ou depois
 REGRAS DO JSON:
 - "dia" deve ser um número inteiro (1 a 31), representando o dia sugerido do mês.
 - "formato" deve ser EXATAMENTE um de: Reels, Arte, Carrossel, Foto ou Story.
-- Se o formato for "Carrossel", você DEVE dividir "instrucoes_visuais" e "copy_inicial" em slides estruturados, usando EXATAMENTE a notação [Slide 1] ..., [Slide 2] ...
+- Se o formato for "Carrossel", voce DEVE dividir "instrucoes_visuais" e "copy_inicial" em slides estruturados, usando EXATAMENTE a notacao [Slide 1] ..., [Slide 2] ...
+- Se o formato for "Carrossel", voce DEVE retornar tambem o campo "legenda" com a legenda final do post, sem notacao de slides.
 - "palavras_chave" deve ser um array com 3 a 5 strings não vazias.
 - Todos os outros campos são strings obrigatórias e não podem ser vazias.
 - Não repita o mesmo número de "dia" em dois posts diferentes.`;
@@ -66,13 +125,12 @@ REGRAS DO JSON:
 
 
 
-const cleanAndParseJSON = (text: string) => {
+const tryParseJsonCandidates = (text: string) => {
     const sanitize = (rawText: string) => {
         const withoutFences = String(rawText || "")
-            .replace(/```json\s */gi, "")
+            .replace(/```json\s*/gi, "")
             .replace(/```/g, "")
             .trim();
-        // Remove caracteres de controle que quebram JSON
         return withoutFences.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
     };
 
@@ -94,29 +152,99 @@ const cleanAndParseJSON = (text: string) => {
     candidates.push(cleanedText);
 
     let lastParseError: any = null;
-    let failedCandidates: string[] = [];
+    const failedCandidates: string[] = [];
 
     for (const cand of candidates) {
         try {
-            return JSON.parse(cand);
+            return { parsed: JSON.parse(cand), failedCandidates };
         } catch (e: any) {
             lastParseError = e;
             failedCandidates.push(cand);
         }
     }
 
-    console.error("❌ [LLM JSON PARSE ERROR] Detalhes do erro de parsing:");
-    console.error("- Último erro de parse:", lastParseError?.message);
-    if (failedCandidates.length > 0) {
-        const longest = failedCandidates.reduce((a, b) => a.length > b.length ? a : b);
-        console.error(`- Tamanho da string: ${longest.length} chars`);
-        console.error(`- Snippet (início): ${longest.substring(0, 300)}`);
-        console.error(`- Snippet (fim): ...${longest.substring(longest.length - 300)}`);
-        // Opcional: imprimir a string toda se for pequeno o bastante
-        // console.error(`- String completa:`, longest);
+    const error = new Error(`N?o foi poss?vel interpretar JSON retornado pela IA. Erro final: ${lastParseError?.message}`) as Error & { failedCandidates?: string[]; parseMessage?: string };
+    error.failedCandidates = failedCandidates;
+    error.parseMessage = lastParseError?.message || "Erro desconhecido de parse";
+    throw error;
+};
+
+const attemptJsonRepair = async (rawText: string, apiKey: string, clienteId: string) => {
+    const modelsToTry = getGeminiModelCandidates("fast");
+    const genAI = new GoogleGenerativeAI(apiKey);
+
+    const repairPrompt = [
+        "Voc? ? um reparador de JSON estrito.",
+        "Corrija o JSON abaixo para que ele fique sintaticamente v?lido.",
+        "Preserve a estrutura, o idioma, a quantidade de itens e o conte?do sem?ntico.",
+        "N?o adicione coment?rios, markdown ou texto extra.",
+        "Retorne APENAS JSON v?lido.",
+        "",
+        "JSON com erro:",
+        rawText,
+    ].join("\n");
+
+    for (const modelName of modelsToTry) {
+        try {
+            const model = genAI.getGenerativeModel({
+                model: modelName,
+                generationConfig: { responseMimeType: "application/json" }
+            });
+
+            const result = await Promise.race([
+                model.generateContent(repairPrompt),
+                new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timeout no reparo JSON")), 25000))
+            ]);
+
+            const usageMetadata = result.response.usageMetadata;
+            if (usageMetadata) {
+                await updateTokenUsage(clienteId, usageMetadata, "calendar_json_repair", modelName);
+            }
+
+            const repaired = result.response.text();
+            if (repaired && repaired.trim()) {
+                return repaired;
+            }
+        } catch (_repairErr) {
+            // tenta o pr?ximo modelo
+        }
     }
 
-    throw new Error(`Não foi possível interpretar JSON retornado pela IA. Erro final: ${lastParseError?.message}`);
+    return null;
+};
+
+const cleanAndParseJSON = async (text: string, apiKey?: string, clienteId?: string) => {
+    try {
+        return tryParseJsonCandidates(text).parsed;
+    } catch (parseError: any) {
+        console.error("? [LLM JSON PARSE ERROR] Detalhes do erro de parsing:");
+        console.error("- ?ltimo erro de parse:", parseError?.parseMessage || parseError?.message);
+
+        const failedCandidates = Array.isArray(parseError?.failedCandidates) ? parseError.failedCandidates : [];
+        const longest = failedCandidates.length > 0
+            ? failedCandidates.reduce((a: string, b: string) => a.length > b.length ? a : b)
+            : String(text || "");
+
+        if (longest) {
+            console.error(`- Tamanho da string: ${longest.length} chars`);
+            console.error(`- Snippet (in?cio): ${longest.substring(0, 300)}`);
+            console.error(`- Snippet (fim): ...${longest.substring(Math.max(0, longest.length - 300))}`);
+        }
+
+        if (apiKey && clienteId && longest) {
+            console.warn("?? [LLM JSON PARSE ERROR] Tentando reparo autom?tico do JSON...");
+            const repaired = await attemptJsonRepair(longest, apiKey, clienteId);
+            if (repaired) {
+                try {
+                    return tryParseJsonCandidates(repaired).parsed;
+                } catch (repairParseError: any) {
+                    console.error("? [LLM JSON REPAIR ERROR] O reparo retornou JSON ainda inv?lido:", repairParseError?.parseMessage || repairParseError?.message);
+                }
+            }
+        }
+
+        throw parseError;
+    }
 };
 
 const distributeMixAcrossMonths = (baseMix: any, monthsCountToDistribute: number): any[] => {
@@ -206,9 +334,9 @@ const buildDatasResumoTextoForMes = async (mesLabel: string, briefing: string, b
             const anoNum = parseInt(possibleYear, 10);
             if (isNaN(anoNum)) return "";
 
-            const mesNome = parts.slice(0, -1).join(" ").toLowerCase();
+            const mesNome = parts.slice(0, -1).join(" ").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
             const mapaMeses: Record<string, number> = {
-                janeiro: 1, fevereiro: 2, marco: 3, março: 3, abril: 4, maio: 5, junho: 6,
+                janeiro: 1, fevereiro: 2, marco: 3, abril: 4, maio: 5, junho: 6,
                 julho: 7, agosto: 8, setembro: 9, outubro: 10, novembro: 11, dezembro: 12,
             };
             const mesNum = mapaMeses[mesNome];
@@ -246,7 +374,8 @@ const buildDatasResumoTextoForMes = async (mesLabel: string, briefing: string, b
                             const raw = String(d.data || "").slice(0, 10);
                             const partsDate = raw.split("-");
                             const dia = (partsDate[2] || "").padStart(2, "0");
-                            return `- ${dia}/${String(mesNum).padStart(2, "0")}/${anoNum}: ${d.titulo}`;
+                            const descricao = d.descricao ? ` | contexto: ${String(d.descricao).trim()}` : "";
+                            return `- ${dia}/${String(mesNum).padStart(2, "0")}/${anoNum}: ${d.titulo}${descricao}`;
                         }).join("\n");
                     }
                 } catch (_dbErr) {
@@ -346,6 +475,73 @@ export const generateCalendarForMonth = async (opts: GenerateMonthOptions) => {
         }
     }
 
+    const brandingSummary = [
+        `- Tom: ${toneText}`,
+        `- Visual: ${visualText}`,
+        `- Publico: ${audienceText}`,
+        `- Keywords: ${keywordsText}`,
+        `- Arquetipo: ${arquetipoText}`,
+        `- USP: ${uspText}`,
+        `- Anti-palavras: ${antiPalavrasText}`,
+    ].join("\n");
+
+    let plannerModelName: string | null = null;
+    let criticModelName: string | null = null;
+    let historyContext = "";
+    let groundedContext = "";
+    let monthlyPlan: any = null;
+
+    if (onProgress) await onProgress(28, "Planejando a estrategia mensal...");
+
+    try {
+        const planning = await planMonthlyCalendar({
+            clienteId,
+            apiKey: process.env.GOOGLE_API_KEY!,
+            mes: mesToGenerate,
+            mix: mixForThisMonth,
+            brandingSummary,
+            briefing,
+            rules,
+            docsResumo,
+            datasResumoTexto,
+            produtosFocoTexto,
+            monthReferences,
+            continuityContext,
+            effectiveGenerationPrompt,
+            categoriasNicho,
+        });
+
+        monthlyPlan = planning.plan;
+        plannerModelName = planning.model;
+        historyContext = planning.historyContext;
+        groundedContext = planning.groundedContext;
+    } catch (_planningError) {
+        console.warn(`[Worker] Planner mensal falhou para ${mesToGenerate}. Seguindo com fallback estruturado.`);
+        const fallbackSlots = buildSlotBlueprintFromMix(mixForThisMonth);
+        monthlyPlan = {
+            monthly_thesis: briefing || `Plano mensal para ${mesToGenerate}`,
+            hero_campaign: produtosFocoTexto ? "Campanha focada em produtos priorizados" : "Campanha editorial com foco em autoridade",
+            audience_tension: "Responder a dores e objecoes reais do publico da marca",
+            priority_pillars: ["Autoridade", "Prova", "Conversao"],
+            diversity_guardrails: ["Alternar formatos e intencoes de conteudo", "Evitar repetir o mesmo CTA em sequencia"],
+            anti_genericity_rules: ["Toda ideia precisa de um angulo especifico da marca", "Evitar dicas obvias que servem para qualquer nicho"],
+            must_reference_dates: [],
+            slot_plan: fallbackSlots.map((slot: any) => ({
+                ...slot,
+                pilar: "Autoridade",
+                angle: "Recorte especifico da marca",
+                objective: "Gerar demanda qualificada",
+                funnel_stage: "consideracao",
+                product_focus: "",
+                reason_why_now: "Conecta o timing do mes com uma necessidade real do publico",
+                cta_direction: "Abrir conversa qualificada",
+                proof_asset: "Usar repertorio, processo ou prova da marca",
+                hook: "Abertura especifica e concreta",
+            })),
+        };
+        historyContext = "Planner indisponivel; manter alta especificidade da marca e variedade de angulos.";
+    }
+
     if (onProgress) await onProgress(30, "Montando engenharia do prompt...");
 
     // Buscar template ativo do banco (com fallback seguro)
@@ -353,11 +549,12 @@ export const generateCalendarForMonth = async (opts: GenerateMonthOptions) => {
     let templateSource = "hardcoded_fallback";
     let promptTemplateId: string | null = null;
     let promptTemplateVersion: number | null = null;
+    let promptTemplateAgentId: string | null = null;
     try {
         const templateResult = await db.query(
-            `SELECT id, version, body, cliente_id FROM prompt_templates
+            `SELECT id, version, body, cliente_id, agent_id FROM prompt_templates
              WHERE (cliente_id = $1 OR cliente_id IS NULL) AND is_active = true
-             ORDER BY (cliente_id IS NOT NULL) DESC
+             ORDER BY (cliente_id IS NOT NULL) DESC, updated_at DESC NULLS LAST, created_at DESC
              LIMIT 1`,
             [clienteId]
         );
@@ -366,6 +563,7 @@ export const generateCalendarForMonth = async (opts: GenerateMonthOptions) => {
             promptBody = row.body;
             promptTemplateId = row.id;
             promptTemplateVersion = row.version;
+            promptTemplateAgentId = row.agent_id || null;
             templateSource = row.cliente_id ? "cliente" : "global";
         } else {
             promptBody = HARDCODED_TEMPLATE_FALLBACK;
@@ -412,10 +610,32 @@ export const generateCalendarForMonth = async (opts: GenerateMonthOptions) => {
         PRODUTOS_FOCO: produtosFocoTexto,
     };
 
-    const prompt = promptBody.replace(/\{\{([A-Z_]+)\}\}/g, (_, k) => tokenMap[k] ?? `{{${k}}}`);
+    const basePrompt = promptBody.replace(/\{\{([A-Z_]+)\}\}/g, (_, k) => tokenMap[k] ?? `{{${k}}}`);
+    const prompt = `${basePrompt}
+
+PLANO MENSAL ESTRUTURADO (siga estes slots ao compor os posts finais):
+${JSON.stringify(monthlyPlan, null, 2)}
+
+HISTORICO DE PERFORMANCE RELEVANTE:
+${historyContext || "Sem historico disponivel."}
+
+GANCHOS CONFIRMADOS VIA GOOGLE SEARCH GROUNDING:
+${groundedContext || "Nenhum adicional."}
+
+CONTRATO FINAL DE SAIDA (OBRIGATORIO, MESMO QUE O TEMPLATE ATIVO DIGA OUTRA COISA):
+- Cada item do array DEVE conter exatamente estes campos: "dia", "tema", "formato", "instrucoes_visuais", "copy_inicial", "legenda", "objetivo", "cta", "palavras_chave".
+- Para Carrossel, "copy_inicial" = texto dos slides, "instrucoes_visuais" = direcao visual por slide e "legenda" = legenda final do post.
+- A "legenda" do Carrossel e obrigatoria e nao pode repetir a notacao [Slide X].
+
+REGRAS FINAIS DE EXECUCAO:
+- Respeite o slot_plan e o suggested_day como prioridade.
+- Cada post precisa refletir um angulo especifico da marca.
+- Evite repetir CTA, promessa ou estrutura de abertura.
+- Para Carrossel, use "copy_inicial" como texto dos slides, "instrucoes_visuais" como direcao visual dos slides e "legenda" como a legenda final do post.
+- Em Carrossel, a "legenda" e obrigatoria e nao pode repetir a notacao [Slide X].`;
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
-    const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
+    const modelsToTry = getGeminiModelCandidates("fast");
 
     let responseText = "";
     let usedModelName: string | null = null;
@@ -464,7 +684,28 @@ export const generateCalendarForMonth = async (opts: GenerateMonthOptions) => {
         throw new Error(`Falha na geração IA: ${lastError?.message || 'Sem resposta'}`);
     }
 
-    let calendarData = cleanAndParseJSON(responseText);
+    let calendarData = await cleanAndParseJSON(responseText, process.env.GOOGLE_API_KEY, clienteId);
+    calendarData = ensureCarouselLegendas(calendarData);
+
+    if (Array.isArray(calendarData)) {
+        if (onProgress) await onProgress(73, "Refinando o calendario com critica anti-genericidade...");
+        try {
+            const critique = await critiqueCalendarDraft({
+                clienteId,
+                apiKey: process.env.GOOGLE_API_KEY!,
+                mes: mesToGenerate,
+                historyContext,
+                monthlyPlan,
+                calendarData,
+            });
+            if (Array.isArray(critique.calendar) && critique.calendar.length > 0) {
+                calendarData = ensureCarouselLegendas(critique.calendar);
+                criticModelName = critique.model;
+            }
+        } catch (_criticError) {
+            console.warn(`[Worker] Critic mensal falhou para ${mesToGenerate}. Mantendo draft original.`);
+        }
+    }
 
     // ── VALIDAÇÃO RUNTIME DO CONTRATO CANÔNICO ───────────────────────────────
     if (onProgress) await onProgress(75, "Validando formato do calendário gerado...");
@@ -505,9 +746,19 @@ export const generateCalendarForMonth = async (opts: GenerateMonthOptions) => {
         prompt_template_id: promptTemplateId,
         prompt_template_version: promptTemplateVersion,
         prompt_template_source: templateSource,
+        prompt_template_agent_id: promptTemplateAgentId,
         // Auditoria de valicação do schema (PR5)
         output_schema_version: "v1_canonic",
-        output_validation: { ok: true }
+        output_validation: { ok: true },
+        planner_model: plannerModelName,
+        critic_model: criticModelName,
+        strategy_brief: monthlyPlan ? {
+            monthly_thesis: monthlyPlan.monthly_thesis || null,
+            hero_campaign: monthlyPlan.hero_campaign || null,
+            priority_pillars: monthlyPlan.priority_pillars || [],
+            diversity_guardrails: monthlyPlan.diversity_guardrails || [],
+            anti_genericity_rules: monthlyPlan.anti_genericity_rules || [],
+        } : null
     };
 
     if (onProgress) await onProgress(85, "Salvando calendário e posts no banco de dados...");
@@ -551,10 +802,19 @@ export const generateCalendarForMonth = async (opts: GenerateMonthOptions) => {
     return {
         calendarId,
         mes: mesFinal,
-        model: usedModelName,
+        model: criticModelName || usedModelName || plannerModelName,
         postsCount: Array.isArray(calendarData) ? calendarData.length : 0,
         calendarData // return data to help context usage for next month
     };
 };
 
 export { distributeMixAcrossMonths };
+
+
+
+
+
+
+
+
+

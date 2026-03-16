@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { JobStatusResponse } from '../../services/api';
 
 interface JobProgressPanelProps {
@@ -6,9 +6,16 @@ interface JobProgressPanelProps {
     onCancel: () => void;
     onDismissPanel?: () => void;
     onRetry?: () => void;
+    title?: string;
 }
 
-export default function JobProgressPanel({ job, onCancel, onDismissPanel, onRetry }: JobProgressPanelProps) {
+export default function JobProgressPanel({
+    job,
+    onCancel,
+    onDismissPanel,
+    onRetry,
+    title = 'Progresso do Calendario'
+}: JobProgressPanelProps) {
     const [showJson, setShowJson] = useState(false);
 
     if (!job) return null;
@@ -20,31 +27,30 @@ export default function JobProgressPanel({ job, onCancel, onDismissPanel, onRetr
 
     return (
         <div className="bg-white/5 border border-white/10 rounded-xl p-5 mb-6 text-white text-sm font-sans shadow-lg relative">
-            {/* Botão de Fechar se estiver concluído ou falhado */}
             {(isSuccess || isFailed) && onDismissPanel && (
                 <button
                     onClick={onDismissPanel}
                     className="absolute top-4 right-4 text-white/50 hover:text-white"
                 >
-                    ✕
+                    x
                 </button>
             )}
 
             <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-4 gap-4">
                 <div>
                     <h3 className="text-lg font-semibold flex items-center gap-2">
-                        Progresso do Calendário
+                        {title}
                         {isActive && <span className="flex h-3 w-3 relative">
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
                         </span>}
                         {isStale && <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded uppercase font-bold tracking-wider animate-pulse">Travado</span>}
-                        {isSuccess && <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded uppercase font-bold tracking-wider">Concluído</span>}
+                        {isSuccess && <span className="bg-green-500 text-white text-xs px-2 py-0.5 rounded uppercase font-bold tracking-wider">Concluido</span>}
                     </h3>
                     <p className="text-white/60 text-xs mt-1">
                         Status: <strong className="uppercase">{job.status}</strong>
                         {job.age_seconds !== undefined && (
-                            <span className="ml-2">| Última atualização há {job.age_seconds}s</span>
+                            <span className="ml-2">| Ultima atualizacao ha {job.age_seconds}s</span>
                         )}
                     </p>
                 </div>
@@ -62,7 +68,7 @@ export default function JobProgressPanel({ job, onCancel, onDismissPanel, onRetr
                             onClick={onCancel}
                             className="px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 border border-red-500/20 rounded text-xs transition-colors"
                         >
-                            Cancelar Geração
+                            Cancelar Geracao
                         </button>
                     )}
                     {isFailed && onRetry && (
@@ -91,13 +97,13 @@ export default function JobProgressPanel({ job, onCancel, onDismissPanel, onRetr
 
             {isStale && job.hint && (
                 <div className="mt-3 p-3 bg-orange-500/10 border border-orange-500/20 rounded text-orange-200 text-xs">
-                    ⚠️ <strong>Alerta:</strong> {job.hint}
+                    <strong>Alerta:</strong> {job.hint}
                 </div>
             )}
 
             {isFailed && job.error && (
                 <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded text-red-200 text-xs font-mono whitespace-pre-wrap">
-                    {job.error}
+                    {typeof job.error === 'string' ? job.error : JSON.stringify(job.error, null, 2)}
                 </div>
             )}
 

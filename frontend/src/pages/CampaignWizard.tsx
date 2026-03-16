@@ -51,6 +51,7 @@ export default function CampaignWizard() {
     const [commemorativeDates, setCommemorativeDates] = useState<DataComemorativa[]>([]);
     const [clientNiche, setClientNiche] = useState<string | null>(null);
     const [showAllDates, setShowAllDates] = useState(false);
+    const [isLoadingDates, setIsLoadingDates] = useState(false);
 
     // Estado para saber se já tentamos carregar o nicho (evita dupla busca de datas)
     const [nicheLoaded, setNicheLoaded] = useState(false);
@@ -77,15 +78,18 @@ export default function CampaignWizard() {
     useEffect(() => {
         if (data.selectedMonths.length === 0) {
             setCommemorativeDates([]);
+            setIsLoadingDates(false);
             return;
         }
         // Busca imediatamente quando meses mudam, sem bloquear no nicho.
         // Se nicheLoaded=false, busca sem filtro (mostra tudo ao usuário).
         // Quando o nicho carregar (nicheLoaded=true), re-busca com filtro refinado.
         const nichoParaBusca = (nicheLoaded && !showAllDates && clientNiche) ? clientNiche : undefined;
+        setIsLoadingDates(true);
         datasComemorvativasService.getByMonths(data.selectedMonths, nichoParaBusca)
             .then(setCommemorativeDates)
-            .catch(console.error);
+            .catch(console.error)
+            .finally(() => setIsLoadingDates(false));
     }, [data.selectedMonths, clientNiche, showAllDates, nicheLoaded]);
 
     const handleFinish = async () => {
@@ -434,7 +438,7 @@ ${datasInstrucao}
                 />
             </div>
 
-            {commemorativeDates.length > 0 && (() => {
+            {(() => {
                 const getCategoryStyle = (cats: string[]) => {
                     const cat = (cats?.[0] || '').toLowerCase();
                     if (cat.includes('feriado nacional') || cat.includes('feriado')) {
@@ -454,54 +458,91 @@ ${datasInstrucao}
                     }
                     return { border: 'border-yellow-500/40', bg: 'bg-yellow-900/20', badge: 'bg-yellow-500/20 text-yellow-300', dot: 'bg-yellow-400', dayColor: 'text-yellow-300', ring: 'ring-yellow-500' };
                 };
+
+                const selectedCount = data.selectedDateIds?.length || 0;
+
                 return (
                     <div className="space-y-4 pt-2">
-                        <div className="flex items-center justify-between">
+                        <div className="bg-gray-900/70 border border-gray-700 rounded-xl p-4 space-y-3">
+                            <div className="flex items-start justify-between gap-3">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-1">Datas Relevantes</label>
+                                    <p className="text-xs text-gray-500">
+                                        Selecione datas do Calendário Geral para orientar a campanha. As datas escolhidas entram no briefing como prioridade editorial.
+                                    </p>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                    {selectedCount > 0 && (
+                                        <span className="text-[10px] uppercase font-bold px-2 py-1 rounded bg-green-500/20 text-green-300">
+                                            {selectedCount} selecionada{selectedCount > 1 ? 's' : ''}
+                                        </span>
+                                    )}
+                                    <button
+                                        onClick={() => setShowAllDates(!showAllDates)}
+                                        className={`text-[10px] uppercase font-bold px-2 py-1 rounded transition-all ${showAllDates ? 'bg-blue-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+                                    >
+                                        {showAllDates ? 'Ver Sugestões do Nicho' : 'Ver Todas as Datas'}
+                                    </button>
+                                </div>
+                            </div>
+
                             <p className="text-xs text-gray-500 flex items-center gap-1.5">
                                 <span>📅</span>
-                                <span>Datas {showAllDates ? 'de todos os nichos' : `da categoria ${clientNiche || 'foco'}`} selecionadas:</span>
+                                <span>
+                                    {showAllDates
+                                        ? 'Exibindo datas de todos os nichos'
+                                        : `Exibindo datas filtradas por ${clientNiche || 'nicho principal da marca'}`}
+                                </span>
                             </p>
-                            <button
-                                onClick={() => setShowAllDates(!showAllDates)}
-                                className={`text-[10px] uppercase font-bold px-2 py-1 rounded transition-all ${showAllDates ? 'bg-blue-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
-                            >
-                                {showAllDates ? 'Ver Sugestões do Nicho' : 'Ver Todas as Datas'}
-                            </button>
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
-                            {commemorativeDates.map(d => {
-                                const style = getCategoryStyle(d.categorias);
-                                const dateObj = new Date(d.data + 'T00:00:00');
-                                const day = dateObj.toLocaleDateString('pt-BR', { day: '2-digit' });
-                                const monthName = dateObj.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
-                                const isSelected = data.selectedDateIds?.includes(d.id);
-                                return (
-                                    <button
-                                        key={d.id}
-                                        onClick={() => {
-                                            const current = data.selectedDateIds || [];
-                                            if (isSelected) updateData({ selectedDateIds: current.filter(id => id !== d.id) });
-                                            else updateData({ selectedDateIds: [...current, d.id] });
-                                        }}
-                                        className={`rounded-xl border transition-all text-left flex flex-col gap-1.5 relative overflow-hidden ${style.bg} ${isSelected ? `ring-2 ${style.ring} ${style.border}` : `${style.border} opacity-50 grayscale-[0.5] hover:opacity-100 hover:grayscale-0`}`}
-                                    >
-                                        <div className={`absolute top-0 left-0 w-1 h-full ${style.dot}`} />
-                                        <div className={`text-lg font-black leading-none ${style.dayColor} pl-2 pt-3`}>
-                                            {day}
-                                            <span className="text-xs font-semibold ml-1 opacity-70 uppercase">{monthName}</span>
-                                        </div>
-                                        <p className="text-white text-xs font-medium leading-snug pl-2 line-clamp-2">{d.titulo}</p>
-                                        <div className="flex items-center justify-between pl-2 pr-2 pb-2">
-                                            {d.categorias?.length > 0 && (
-                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${style.badge}`}>
-                                                    {d.categorias[0]}
-                                                </span>
-                                            )}
-                                            {isSelected && <span className="text-white">✓</span>}
-                                        </div>
-                                    </button>
-                                );
-                            })}
+
+                            {isLoadingDates ? (
+                                <div className="rounded-lg border border-gray-700 bg-gray-800/60 px-4 py-6 text-center text-sm text-gray-400">
+                                    Carregando datas relevantes...
+                                </div>
+                            ) : commemorativeDates.length === 0 ? (
+                                <div className="rounded-lg border border-dashed border-gray-700 bg-gray-800/40 px-4 py-6 text-center space-y-2">
+                                    <p className="text-sm text-gray-300">Nenhuma data relevante encontrada para os meses selecionados.</p>
+                                    <p className="text-xs text-gray-500">
+                                        Você ainda pode usar o campo acima para escrever datas manuais, ou alternar para &quot;Ver Todas as Datas&quot;.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto pr-1">
+                                    {commemorativeDates.map(d => {
+                                        const style = getCategoryStyle(d.categorias);
+                                        const dateObj = new Date(d.data + 'T00:00:00');
+                                        const day = dateObj.toLocaleDateString('pt-BR', { day: '2-digit' });
+                                        const monthName = dateObj.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+                                        const isSelected = data.selectedDateIds?.includes(d.id);
+                                        return (
+                                            <button
+                                                key={d.id}
+                                                onClick={() => {
+                                                    const current = data.selectedDateIds || [];
+                                                    if (isSelected) updateData({ selectedDateIds: current.filter(id => id !== d.id) });
+                                                    else updateData({ selectedDateIds: [...current, d.id] });
+                                                }}
+                                                className={`rounded-xl border transition-all text-left flex flex-col gap-1.5 relative overflow-hidden ${style.bg} ${isSelected ? `ring-2 ${style.ring} ${style.border}` : `${style.border} opacity-50 grayscale-[0.5] hover:opacity-100 hover:grayscale-0`}`}
+                                            >
+                                                <div className={`absolute top-0 left-0 w-1 h-full ${style.dot}`} />
+                                                <div className={`text-lg font-black leading-none ${style.dayColor} pl-2 pt-3`}>
+                                                    {day}
+                                                    <span className="text-xs font-semibold ml-1 opacity-70 uppercase">{monthName}</span>
+                                                </div>
+                                                <p className="text-white text-xs font-medium leading-snug pl-2 line-clamp-2">{d.titulo}</p>
+                                                <div className="flex items-center justify-between pl-2 pr-2 pb-2">
+                                                    {d.categorias?.length > 0 && (
+                                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${style.badge}`}>
+                                                            {d.categorias[0]}
+                                                        </span>
+                                                    )}
+                                                    {isSelected && <span className="text-white">✓</span>}
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     </div>
                 );
@@ -763,3 +804,5 @@ ${datasInstrucao}
         </div>
     );
 }
+
+

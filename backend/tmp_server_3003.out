@@ -1,0 +1,45 @@
+[dotenv@17.2.3] injecting env (10) from .env -- tip: 🗂️ backup and recover secrets: https://dotenvx.com/ops
+
+
+🔴 ============================================
+🔴 [STARTUP] INICIANDO SERVIDOR - ID: 1773325503667
+🔴 ============================================
+📂 [STARTUP] Diretório de execução: C:\repos\Sphera_Brand\backend
+📂 [STARTUP] Arquivo atual: C:\repos\Sphera_Brand\backend\dist\index.js
+📂 [STARTUP] Node version: v24.11.1
+📂 [STARTUP] Timestamp: 2026-03-12T14:25:03.684Z
+🔴 ============================================
+
+[dotenv@17.2.3] injecting env (0) from .env -- tip: ⚙️  override existing env vars with { override: true }
+📂 [MULTER] Pasta de uploads já existe: C:\repos\Sphera_Brand\backend\storage\branding
+🔒 [CORS] Origem(ns) permitida(s): http://localhost:3006
+
+🚀 ============================================
+🚀 Backend ONLINE na porta 3003
+🚀 Startup ID: 1773325503667
+📍 http://localhost:3003
+🚀 ============================================
+
+
+📋 ============================================
+📋 ROTAS REGISTRADAS:
+📋 ============================================
+  ⚠️ Não foi possível listar rotas (app._router não disponível)
+📋 ============================================
+
+👷 [WORKER] Iniciando Calendar Generation Worker...
+✅ Conectado ao banco de dados PostgreSQL
+✅ Conectado ao banco de dados PostgreSQL
+✅ DB conectado: Thu Mar 12 2026 11:25:05 GMT-0300 (Horário Padrão de Brasília)
+✅ GOOGLE_API_KEY carregada: AIza...c7T8
+👷 [WORKER] Processando Job 63f6fdfd-e48f-4fb5-990b-775d21730578...
+✅ Conectado ao banco de dados PostgreSQL
+✅ Conectado ao banco de dados PostgreSQL
+✅ [TOKEN TRACKER] Cliente c3e5cae0-68ed-4d1a-9b7d-744937c63f1b: +3811 tokens (sys:0 input:1260 out:1868) Total: 132381
+ðŸ¤– [Worker] Tentando modelo gemini-3-flash-preview para Maio de 2026...
+✅ Conectado ao banco de dados PostgreSQL
+✅ [TOKEN TRACKER] Cliente c3e5cae0-68ed-4d1a-9b7d-744937c63f1b: +7028 tokens (sys:0 input:3880 out:2193) Total: 139409
+✅ Conectado ao banco de dados PostgreSQL
+✅ [TOKEN TRACKER] Cliente c3e5cae0-68ed-4d1a-9b7d-744937c63f1b: +7526 tokens (sys:0 input:4264 out:2272) Total: 146935
+âœ… [Worker] 6 calendar_items criados para calendÃ¡rio 8f8f1f0d-ff2a-4e6c-a163-9470ffc4717b
+✅ [WORKER] Job 63f6fdfd-e48f-4fb5-990b-775d21730578 concluído com sucesso.

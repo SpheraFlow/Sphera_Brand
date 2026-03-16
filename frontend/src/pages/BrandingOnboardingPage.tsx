@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { JUNG_ARCHETYPES } from '../utils/jungArchetypes';
 
-// ── Tipos ─────────────────────────────────────────────────────────────────────
+//  Tipos 
 
 interface ChatMessage {
   role: 'user' | 'model';
@@ -19,11 +19,12 @@ interface ExtractedBranding {
   usp: string;
   anti_keywords: string[];
   niche: string;
+  logo_url?: string;
 }
 
 type Phase = 'chat' | 'review' | 'saving' | 'done';
 
-// ── Helper: chip editável ──────────────────────────────────────────────────────
+//  Helper: chip editavel 
 
 function TagInput({
   label,
@@ -60,7 +61,7 @@ function TagInput({
               onClick={() => onChange(tags.filter((x) => x !== t))}
               className="text-gray-400 hover:text-red-400 ml-1 leading-none"
             >
-              ×
+              
             </button>
           </span>
         ))}
@@ -84,7 +85,7 @@ function TagInput({
   );
 }
 
-// ── Componente Principal ───────────────────────────────────────────────────────
+//  Componente Principal 
 
 export default function BrandingOnboardingPage() {
   const { clientId } = useParams<{ clientId: string }>();
@@ -94,7 +95,7 @@ export default function BrandingOnboardingPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -108,6 +109,7 @@ export default function BrandingOnboardingPage() {
     usp: '',
     anti_keywords: [],
     niche: '',
+    logo_url: '',
   });
 
   // Iniciar conversa automaticamente
@@ -131,7 +133,7 @@ export default function BrandingOnboardingPage() {
       const reply: string = res.data.reply;
       setMessages([{ role: 'model', content: reply }]);
     } catch {
-      setError('Não foi possível iniciar o onboarding. Verifique sua conexão.');
+      setError('Nao foi possivel iniciar o onboarding. Verifique sua conexao.');
     } finally {
       setIsTyping(false);
     }
@@ -149,7 +151,7 @@ export default function BrandingOnboardingPage() {
 
     try {
       const res = await api.post(`/onboarding/chat/${clientId}`, {
-        messages: newMessages.slice(0, -1), // histórico sem a última mensagem (já está no userMessage)
+        messages: newMessages.slice(0, -1), // historico sem a ultima mensagem (ja esta no userMessage)
         userMessage: text,
       });
 
@@ -160,7 +162,7 @@ export default function BrandingOnboardingPage() {
       setMessages([...newMessages, { role: 'model', content: reply }]);
 
       if (isComplete && extractedData) {
-        // Preencher o estado de review com os dados extraídos
+        // Preencher o estado de review com os dados extraidos
         setDna({
           visual_style: {
             colors: extractedData.visual_style?.colors ?? [],
@@ -180,14 +182,15 @@ export default function BrandingOnboardingPage() {
           usp: extractedData.usp ?? '',
           anti_keywords: extractedData.anti_keywords ?? [],
           niche: extractedData.niche ?? '',
+          logo_url: '',
         });
 
-        // Pequena pausa para o usuário ler a mensagem final antes de transitar
+        // Pequena pausa para o usuario ler a mensagem final antes de transitar
         setTimeout(() => setPhase('review'), 1800);
       }
     } catch {
       setError('Erro ao enviar mensagem. Tente novamente.');
-      setMessages(newMessages); // Manter apenas até a msg do user
+      setMessages(newMessages); // Manter apenas ate a msg do user
     } finally {
       setIsTyping(false);
       inputRef.current?.focus();
@@ -201,11 +204,13 @@ export default function BrandingOnboardingPage() {
     }
   };
 
+
   const saveDna = async () => {
     setPhase('saving');
     setError(null);
     try {
-      await api.put(`/branding/${clientId}`, dna);
+      await api.put('/branding/' + clientId, dna);
+      await api.put('/clients/' + clientId, { logo_url: dna.logo_url || null });
       setPhase('done');
     } catch {
       setError('Erro ao salvar DNA. Tente novamente.');
@@ -213,7 +218,7 @@ export default function BrandingOnboardingPage() {
     }
   };
 
-  // ── FASE: CHAT ──────────────────────────────────────────────────────────────
+  //  FASE: CHAT 
   if (phase === 'chat') {
     return (
       <div className="h-screen flex flex-col bg-gray-900 text-white">
@@ -224,7 +229,7 @@ export default function BrandingOnboardingPage() {
           </div>
           <div>
             <h1 className="font-bold text-white text-base leading-tight">ARIA</h1>
-            <p className="text-xs text-gray-400">Especialista em DNA de Marca · Sphera Brand</p>
+            <p className="text-xs text-gray-400">Especialista em DNA de Marca  Sphera Brand</p>
           </div>
           <div className="ml-auto flex items-center gap-2">
             <span className="flex h-2 w-2 rounded-full bg-green-500 animate-pulse" />
@@ -306,14 +311,14 @@ export default function BrandingOnboardingPage() {
             </button>
           </div>
           <p className="text-center text-xs text-gray-600 mt-2">
-            A ARIA irá extrair automaticamente o DNA da marca ao final da conversa
+            A ARIA ira extrair automaticamente o DNA da marca ao final da conversa
           </p>
         </div>
       </div>
     );
   }
 
-  // ── FASE: REVIEW ───────────────────────────────────────────────────────────
+  //  FASE: REVIEW 
   if (phase === 'review') {
     return (
       <div className="min-h-screen bg-gray-900 text-white">
@@ -321,10 +326,10 @@ export default function BrandingOnboardingPage() {
         <div className="border-b border-gray-700 px-6 py-4 bg-gray-800/60 flex items-center justify-between sticky top-0 z-10">
           <div>
             <h1 className="font-bold text-lg text-white flex items-center gap-2">
-              ✅ DNA Extraído — Revise e Edite
+              S& DNA Extraido  Revise e Edite
             </h1>
             <p className="text-xs text-gray-400 mt-0.5">
-              Confirme as informações antes de salvar. Você pode editar qualquer campo.
+              Confirme as informacoes antes de salvar. Voce pode editar qualquer campo.
             </p>
           </div>
           <div className="flex gap-3">
@@ -332,13 +337,13 @@ export default function BrandingOnboardingPage() {
               onClick={() => setPhase('chat')}
               className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-sm rounded-lg transition-colors"
             >
-              ← Voltar ao Chat
+                Voltar ao Chat
             </button>
             <button
               onClick={saveDna}
               className="px-5 py-2 bg-green-600 hover:bg-green-500 text-white text-sm font-bold rounded-lg transition-colors"
             >
-              ✓ Confirmar e Salvar DNA
+              S Confirmar e Salvar DNA
             </button>
           </div>
         </div>
@@ -351,10 +356,10 @@ export default function BrandingOnboardingPage() {
 
         <div className="max-w-5xl mx-auto p-6 space-y-8">
 
-          {/* 1. Estratégia */}
+          {/* 1. Estrategia */}
           <section className="bg-gray-800 rounded-xl border border-gray-700 p-6 space-y-5">
             <h2 className="text-base font-bold text-white flex items-center gap-2 border-b border-gray-700 pb-3">
-              🎯 Estratégia & Identidade
+              Estrategia & Identidade
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -366,23 +371,23 @@ export default function BrandingOnboardingPage() {
                   value={dna.niche}
                   onChange={(e) => setDna({ ...dna, niche: e.target.value })}
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
-                  placeholder="Ex: Estética feminina premium, B2B SaaS..."
+                  placeholder="Ex: Estetica feminina premium, B2B SaaS..."
                 />
               </div>
 
               <div>
                 <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">
-                  Arquétipo da Marca
+                  Arquetipo da Marca
                 </label>
                 <select
                   value={dna.archetype}
                   onChange={(e) => setDna({ ...dna, archetype: e.target.value })}
                   className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
                 >
-                  <option value="">Selecione um arquétipo...</option>
+                  <option value="">Selecione um arquetipo...</option>
                   {JUNG_ARCHETYPES.map((a) => (
                     <option key={a.key} value={a.key}>
-                      {a.emoji} {a.label} — {a.tone_hint}
+                      {a.emoji} {a.label}  {a.tone_hint}
                     </option>
                   ))}
                 </select>
@@ -391,41 +396,41 @@ export default function BrandingOnboardingPage() {
 
             <div>
               <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">
-                Proposta Única de Valor (USP)
+                Proposta Unica de Valor (USP)
               </label>
               <textarea
                 value={dna.usp}
                 onChange={(e) => setDna({ ...dna, usp: e.target.value })}
                 rows={2}
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 resize-none"
-                placeholder="O que torna esta marca única e por que o cliente deveria escolhê-la?"
+                placeholder="O que torna esta marca unica e por que o cliente deveria escolhe-la?"
               />
             </div>
 
             <TagInput
-              label="Palavras-chave Estratégicas"
+              label="Palavras-chave Estrategicas"
               tags={dna.keywords}
               onChange={(v) => setDna({ ...dna, keywords: v })}
-              placeholder="Ex: inovação, resultados, saúde..."
+              placeholder="Ex: inovacao, resultados, saude..."
             />
 
             <TagInput
               label="Palavras / Temas a Evitar (Anti-keywords)"
               tags={dna.anti_keywords}
               onChange={(v) => setDna({ ...dna, anti_keywords: v })}
-              placeholder="Ex: barato, mediocridade, genérico..."
+              placeholder="Ex: barato, mediocridade, generico..."
             />
           </section>
 
           {/* 2. Tom de Voz */}
           <section className="bg-gray-800 rounded-xl border border-gray-700 p-6 space-y-5">
             <h2 className="text-base font-bold text-white flex items-center gap-2 border-b border-gray-700 pb-3">
-              🗣️ Tom de Voz
+               Tom de Voz
             </h2>
 
             <div>
               <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">
-                Descrição do Tom
+                Descricao do Tom
               </label>
               <textarea
                 value={dna.tone_of_voice.description}
@@ -434,7 +439,7 @@ export default function BrandingOnboardingPage() {
                 }
                 rows={3}
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 resize-none"
-                placeholder="Como a marca se comunica? Formal ou informal? Séria ou descontraída?"
+                placeholder="Como a marca se comunica? Formal ou informal? Seria ou descontraida?"
               />
             </div>
 
@@ -448,10 +453,10 @@ export default function BrandingOnboardingPage() {
             />
           </section>
 
-          {/* 3. Público-alvo */}
+          {/* 3. Publico-alvo */}
           <section className="bg-gray-800 rounded-xl border border-gray-700 p-6 space-y-5">
             <h2 className="text-base font-bold text-white flex items-center gap-2 border-b border-gray-700 pb-3">
-              👥 Público-Alvo
+               Publico-Alvo
             </h2>
 
             <div>
@@ -465,13 +470,13 @@ export default function BrandingOnboardingPage() {
                 }
                 rows={3}
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 resize-none"
-                placeholder="Descreva quem é o cliente ideal: nome, profissão, dores, desejos, hábitos..."
+                placeholder="Descreva quem e o cliente ideal: nome, profissao, dores, desejos, habitos..."
               />
             </div>
 
             <div>
               <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider block mb-1">
-                Dados Demográficos
+                Dados Demograficos
               </label>
               <input
                 value={dna.audience.demographics}
@@ -479,7 +484,7 @@ export default function BrandingOnboardingPage() {
                   setDna({ ...dna, audience: { ...dna.audience, demographics: e.target.value } })
                 }
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
-                placeholder="Ex: Mulheres, 25-40 anos, classe B, São Paulo..."
+                placeholder="Ex: Mulheres, 25-40 anos, classe B, Sao Paulo..."
               />
             </div>
           </section>
@@ -487,7 +492,7 @@ export default function BrandingOnboardingPage() {
           {/* 4. Identidade Visual */}
           <section className="bg-gray-800 rounded-xl border border-gray-700 p-6 space-y-5">
             <h2 className="text-base font-bold text-white flex items-center gap-2 border-b border-gray-700 pb-3">
-              🎨 Identidade Visual
+              Identidade Visual
             </h2>
 
             <div>
@@ -500,7 +505,7 @@ export default function BrandingOnboardingPage() {
                   setDna({ ...dna, visual_style: { ...dna.visual_style, archeType: e.target.value } })
                 }
                 className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
-                placeholder="Ex: Minimalista premium, Vibrante e jovem, Sóbrio corporativo..."
+                placeholder="Ex: Minimalista premium, Vibrante e jovem, Sobrio corporativo..."
               />
             </div>
 
@@ -529,7 +534,7 @@ export default function BrandingOnboardingPage() {
                       }
                       className="text-gray-500 hover:text-red-400 ml-1"
                     >
-                      ×
+                      
                     </button>
                   </div>
                 ))}
@@ -578,19 +583,19 @@ export default function BrandingOnboardingPage() {
             />
           </section>
 
-          {/* Botões finais */}
+          {/* Botoes finais */}
           <div className="flex justify-between pb-8">
             <button
               onClick={() => setPhase('chat')}
               className="px-5 py-2.5 bg-gray-700 hover:bg-gray-600 text-sm rounded-lg transition-colors"
             >
-              ← Voltar ao Chat
+                Voltar ao Chat
             </button>
             <button
               onClick={saveDna}
               className="px-6 py-2.5 bg-green-600 hover:bg-green-500 text-white text-sm font-bold rounded-lg transition-colors"
             >
-              ✓ Confirmar e Salvar DNA
+              S Confirmar e Salvar DNA
             </button>
           </div>
         </div>
@@ -598,7 +603,7 @@ export default function BrandingOnboardingPage() {
     );
   }
 
-  // ── FASE: SAVING ───────────────────────────────────────────────────────────
+  //  FASE: SAVING 
   if (phase === 'saving') {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">
@@ -613,17 +618,17 @@ export default function BrandingOnboardingPage() {
     );
   }
 
-  // ── FASE: DONE ─────────────────────────────────────────────────────────────
+  //  FASE: DONE 
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">
       <div className="text-center space-y-5 max-w-md px-6">
         <div className="w-20 h-20 rounded-full bg-green-900/50 border-2 border-green-500 flex items-center justify-center text-4xl mx-auto">
-          ✅
+          S&
         </div>
         <h1 className="text-2xl font-bold">DNA da Marca Salvo!</h1>
         <p className="text-gray-400">
-          O DNA foi configurado com sucesso. Agora você pode gerar calendários editoriais
-          alinhados à identidade desta marca.
+          O DNA foi configurado com sucesso. Agora voce pode gerar calendarios editoriais
+          alinhados a identidade desta marca.
         </p>
         <div className="flex flex-col gap-3">
           <button
@@ -636,7 +641,7 @@ export default function BrandingOnboardingPage() {
             onClick={() => navigate(`/client/${clientId}`)}
             className="w-full py-3 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded-xl transition-colors"
           >
-            Voltar para Visão Geral
+            Voltar para Visao Geral
           </button>
         </div>
       </div>
@@ -644,7 +649,7 @@ export default function BrandingOnboardingPage() {
   );
 }
 
-// ── Helper: Input de cor hex ──────────────────────────────────────────────────
+//  Helper: Input de cor hex 
 
 function ColorHexInput({ onAdd }: { onAdd: (hex: string) => void }) {
   const [val, setVal] = useState('');
@@ -675,3 +680,8 @@ function ColorHexInput({ onAdd }: { onAdd: (hex: string) => void }) {
     </div>
   );
 }
+
+
+
+
+
