@@ -1,6 +1,9 @@
 import { Router, Request, Response } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { randomUUID } from "crypto";
+import { spawn } from "child_process";
+import fs from "fs";
+import path from "path";
 import db from "../config/database";
 import { updateTokenUsage } from "../utils/tokenTracker";
 import { getGeminiModelCandidates } from "../utils/googleModels";
@@ -847,24 +850,201 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
       return;
     }
 
-    const calResult = await db.query("SELECT cliente_id FROM calendarios WHERE id = $1", [calendarId]);
+    // 1. Buscar calendário
+    const calResult = await db.query(
+      "SELECT calendario_json, mes, cliente_id, periodo FROM calendarios WHERE id = $1",
+      [calendarId]
+    );
     if (calResult.rows.length === 0) {
       res.status(404).json({ error: "Calendário não encontrado" });
       return;
     }
-    const clienteId = calResult.rows[0].cliente_id;
+    const calendar = calResult.rows[0];
+    let posts = calendar.calendario_json;
+    const monthLabel: string = calendar.mes || "Janeiro";
+    const periodo = calendar.periodo;
+    const clienteId = String(calendar.cliente_id);
 
-    const newJobId = randomUUID();
-    const jobResult = await db.query(
-      `INSERT INTO calendar_generation_jobs (id, cliente_id, status, progress, payload, created_at)
-       VALUES ($1, $2, 'pending', 0, $3, NOW()) RETURNING id`,
-      [newJobId, clienteId, JSON.stringify({ jobType: 'excel', calendarId, clientName, monthsSelected })]
-    );
+    // 2. Resolver nome do cliente
+    let resolvedClientName = clientName || "Cliente";
+    try {
+      const cRes = await db.query("SELECT nome FROM clientes WHERE id = $1", [clienteId]);
+      if (cRes.rows[0]?.nome) resolvedClientName = cRes.rows[0].nome;
+    } catch (_) {}
 
-    res.status(202).json({ jobId: jobResult.rows[0].id });
+    // 3. Helpers de data/mês
+    const monthNames = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+    const monthNamePt = (m: number) => monthNames[m - 1] || `Mes${m}`;
+    const parseMonthLabelToNumber = (label: string): number | null => {
+      const token = String(label || "").trim().toLowerCase().split(/\s+/)[0] || "";
+      const map: Record<string, number> = { janeiro:1,fevereiro:2,"março":3,marco:3,abril:4,maio:5,junho:6,julho:7,agosto:8,setembro:9,outubro:10,novembro:11,dezembro:12 };
+      return map[token] ?? null;
+    };
+    const parseYearFromLabel = (label: string, fallback: number) => {
+      const m = String(label || "").match(/(\d{4})/);
+      const p = m?.[1] ? parseInt(m[1], 10) : NaN;
+      return Number.isNaN(p) ? fallback : p;
+    };
+    const sanitize = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9_-]+/g,"").trim();
+    const parsePostDate = (value: any): { day: number; month: number; year?: number } | null => {
+      const raw = String(value ?? "").trim();
+      if (!raw || ["undefined","null","none"].includes(raw.toLowerCase())) return null;
+      let m = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      if (m) return { day: parseInt(m[3]!,10), month: parseInt(m[2]!,10), year: parseInt(m[1]!,10) };
+      m = raw.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/);
+      if (!m) return null;
+      return { day: parseInt(m[1]!,10), month: parseInt(m[2]!,10), year: m[3] ? parseInt(m[3],10) : undefined };
+    };
+
+    const baseMonthNum = parseMonthLabelToNumber(monthLabel) || 1;
+    const baseYearNum = parseInt(String(parseYearFromLabel(monthLabel, new Date().getFullYear())), 10);
+
+    const normalizePosts = (calPosts: any[], srcLabel: string) => {
+      const fbMonth = parseMonthLabelToNumber(srcLabel) || baseMonthNum;
+      const fbYear = parseYearFromLabel(srcLabel, baseYearNum);
+      return (Array.isArray(calPosts) ? calPosts : []).map((post: any) => {
+        const pd = parsePostDate(post?.data);
+        const rawDay = post?.dia ?? post?.day;
+        const fbDay = parseInt(String(rawDay ?? ""), 10);
+        let normalizedDate = "";
+        if (pd?.day && pd?.month) {
+          normalizedDate = `${String(pd.day).padStart(2,"0")}/${String(pd.month).padStart(2,"0")}/${pd.year || fbYear}`;
+        } else if (!Number.isNaN(fbDay) && fbDay >= 1 && fbDay <= 31) {
+          normalizedDate = `${String(fbDay).padStart(2,"0")}/${String(fbMonth).padStart(2,"0")}/${fbYear}`;
+        } else if (typeof post?.data === "string") {
+          normalizedDate = post.data;
+        }
+        return { ...post, data: normalizedDate, _export_month: fbMonth, _export_year: fbYear };
+      });
+    };
+
+    const requestedMonths = Array.isArray(monthsSelected) && monthsSelected.length > 0
+      ? monthsSelected.map(m => parseInt(String(m),10)).filter(m => !Number.isNaN(m) && m >= 1 && m <= 12).sort((a,b) => a-b)
+      : [];
+
+    const detectMonths = (calPosts: any[]) => {
+      const months = new Set<number>();
+      for (const p of calPosts || []) {
+        const m = String((p as any)?.data || "").match(/\b(\d{1,2})\/(\d{1,2})\b/);
+        if (m) { const mn = parseInt(String(m[2]||""),10); if (mn >= 1 && mn <= 12) months.add(mn); }
+      }
+      return Array.from(months).sort((a,b) => a-b);
+    };
+
+    const monthsToExport = requestedMonths.length > 0 ? requestedMonths : detectMonths(posts);
+    let exportMonthLabel = monthLabel;
+    const mergedPosts: any[] = [];
+    const resolvedMonthLabels = new Map<number, string>();
+
+    const appendPosts = (calPosts: any[], srcLabel: string) => {
+      const normalized = normalizePosts(calPosts, srcLabel);
+      if (normalized.length > 0) mergedPosts.push(...normalized);
+      const n = parseMonthLabelToNumber(srcLabel);
+      if (n && !resolvedMonthLabels.has(n)) resolvedMonthLabels.set(n, srcLabel);
+    };
+
+    const shouldUseRequested = requestedMonths.length > 0;
+    const shouldIncludeBase = !shouldUseRequested || requestedMonths.includes(baseMonthNum);
+    if (shouldIncludeBase) appendPosts(Array.isArray(posts) ? posts : [], monthLabel);
+
+    if (shouldUseRequested) {
+      const monthSearchTokens = (n: number) => n === 3 ? ["março","marco"] : [monthNamePt(n).toLowerCase()];
+      for (const m of requestedMonths) {
+        if (m === baseMonthNum && shouldIncludeBase) continue;
+        const yNum = m < baseMonthNum && baseMonthNum >= 9 && m <= 4 ? baseYearNum + 1 : baseYearNum;
+        const label = `${monthNamePt(m)} ${yNum}`;
+        let other = await db.query(
+          "SELECT calendario_json, mes FROM calendarios WHERE cliente_id = $1 AND lower(mes) = lower($2) ORDER BY updated_at DESC NULLS LAST, criado_em DESC NULLS LAST LIMIT 1",
+          [clienteId, label]
+        );
+        if (!other.rows?.length) {
+          for (const token of monthSearchTokens(m)) {
+            other = await db.query(
+              "SELECT calendario_json, mes FROM calendarios WHERE cliente_id = $1 AND lower(mes) LIKE $2 AND lower(mes) LIKE $3 ORDER BY updated_at DESC NULLS LAST, criado_em DESC NULLS LAST LIMIT 1",
+              [clienteId, `%${token}%`, `%${String(yNum)}%`]
+            );
+            if (other.rows?.length) break;
+          }
+        }
+        if (!other.rows?.length) continue;
+        const otherPosts = other.rows[0]?.calendario_json;
+        const srcLabel = String(other.rows[0]?.mes || label);
+        if (Array.isArray(otherPosts) && otherPosts.length > 0) appendPosts(otherPosts, srcLabel);
+      }
+    }
+
+    if (mergedPosts.length > 0) posts = mergedPosts;
+    else posts = normalizePosts(Array.isArray(posts) ? posts : [], monthLabel);
+
+    if (requestedMonths.length > 0) {
+      const first = requestedMonths[0] ?? baseMonthNum;
+      exportMonthLabel = resolvedMonthLabels.get(first) || `${monthNamePt(first)} ${baseYearNum}`;
+    }
+
+    // 4. Montar paths
+    const backendDir = process.cwd();
+    const projectDir = path.resolve(backendDir, "..");
+    const pythonScript = path.resolve(backendDir, "python_gen", "calendar_to_excel.py");
+    const templatePreferred = path.resolve(projectDir, "calendario", "modelo final.xlsx");
+    const templateFallback = path.resolve(projectDir, "calendario", "CoreSport_Tri_2026.xlsx");
+    const templatePath = fs.existsSync(templatePreferred) ? templatePreferred : templateFallback;
+
+    const outputDir = path.resolve(projectDir, "calendario", "output");
+    if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
+
+    const safeClient = sanitize(resolvedClientName) || "Cliente";
+    const safeMonth = (() => {
+      const nm = monthsToExport.filter(m => m >= 1 && m <= 12).sort((a,b) => a-b);
+      if (nm.length >= 2) return sanitize(`${monthNamePt(nm[0])}-${monthNamePt(nm[nm.length-1])}_${baseYearNum}`);
+      return sanitize(String(monthLabel).replace(/\s+/g,"_")) || "Mes";
+    })();
+
+    const outputFileName = `${safeClient}_${safeMonth}.xlsx`;
+    const outputPath = path.join(outputDir, outputFileName);
+
+    // 5. Rodar Python
+    const pythonBin = process.env.PYTHON_BIN || "python3";
+    await new Promise<void>((resolve, reject) => {
+      const proc = spawn(pythonBin, [
+        pythonScript, "--stdin", templatePath, outputPath,
+        resolvedClientName, String(exportMonthLabel), String(baseYearNum),
+        String(periodo || ""), JSON.stringify(monthsToExport),
+      ], { stdio: ["pipe","pipe","pipe"] });
+
+      let pythonError = "";
+      let startFailed = false;
+      proc.on("error", (err: any) => { startFailed = true; reject(new Error(`Falha ao iniciar Python: ${err.message}`)); });
+      proc.stderr.on("data", (d: any) => { pythonError += d.toString(); });
+      proc.stdin?.end(JSON.stringify(posts));
+      proc.on("close", (code: number) => {
+        if (startFailed) return;
+        if (code === 0 && fs.existsSync(outputPath)) resolve();
+        else reject(new Error(`Python falhou (code=${code}): ${pythonError}`));
+      });
+    });
+
+    // 6. Salvar no histórico (não-bloqueante)
+    const deliveryTimestamp = Date.now();
+    const deliveriesDir = path.resolve(backendDir, "..", "storage", "deliveries", "excel", clienteId, String(deliveryTimestamp));
+    if (!fs.existsSync(deliveriesDir)) fs.mkdirSync(deliveriesDir, { recursive: true });
+    const permanentPath = path.join(deliveriesDir, outputFileName);
+    fs.copyFileSync(outputPath, permanentPath);
+
+    const downloadUrl = `/api/storage/deliveries/excel/${clienteId}/${deliveryTimestamp}/${outputFileName}`;
+    db.query(
+      `INSERT INTO presentations (cliente_id, titulo, arquivos, dados_json, tipo, metadata) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [clienteId, `Excel: ${outputFileName}`, JSON.stringify([downloadUrl]), JSON.stringify(posts), 'excel',
+       JSON.stringify({ months: monthsToExport, year: baseYearNum, generatedAt: new Date().toISOString() })]
+    ).catch((e: any) => console.warn("⚠️ Falha ao registrar entrega no histórico:", e.message));
+
+    // 7. Enviar arquivo diretamente
+    res.download(outputPath, outputFileName, (err) => {
+      if (err) console.error("[Excel] Erro ao enviar arquivo:", err.message);
+    });
+
   } catch (error: any) {
-    console.error(" [ERRO] Erro ao criar job de Excel:", error);
-    res.status(500).json({ error: "Falha ao criar job de exportação.", details: error?.message });
+    console.error("[ERRO] Erro ao gerar Excel:", error);
+    res.status(500).json({ error: "Falha ao gerar Excel.", details: error?.message });
   }
 });
 
