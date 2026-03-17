@@ -1,13 +1,13 @@
 ﻿import axios from 'axios';
 
-const _rawBaseURL = (import.meta as any).env?.VITE_API_BASE_URL;
+const _rawBaseURL = import.meta.env.VITE_API_BASE_URL as string | undefined;
 
 // Falha barulhenta se a variável não estiver configurada
 // Sem ela, o fallback '/api' aponta para o próprio Vite (porta 3006) → 404 mudo em todas as chamadas
 if (!_rawBaseURL) {
   const msg = '❌ VITE_API_BASE_URL não está definida!\nCrie frontend/.env.local com:\nVITE_API_BASE_URL=http://localhost:3001/api';
   console.error(msg);
-  if ((import.meta as any).env?.DEV) {
+  if (import.meta.env.DEV) {
     // Em dev lançamos erro para aparecer no overlay do Vite
     throw new Error(msg);
   }
