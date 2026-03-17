@@ -1,6 +1,5 @@
 import { Router, Request, Response } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { randomUUID } from "crypto";
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
@@ -995,7 +994,7 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     const safeClient = sanitize(resolvedClientName) || "Cliente";
     const safeMonth = (() => {
       const nm = monthsToExport.filter(m => m >= 1 && m <= 12).sort((a,b) => a-b);
-      if (nm.length >= 2) return sanitize(`${monthNamePt(nm[0])}-${monthNamePt(nm[nm.length-1])}_${baseYearNum}`);
+      if (nm.length >= 2) return sanitize(`${monthNamePt(nm[0]!)}-${monthNamePt(nm[nm.length-1]!)}_${baseYearNum}`);
       return sanitize(String(monthLabel).replace(/\s+/g,"_")) || "Mes";
     })();
 
