@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import db from "../config/database";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getGeminiModelCandidates } from "../utils/googleModels";
+import { updateTokenUsage } from "../utils/tokenTracker";
 
 const router = Router();
 
@@ -214,6 +215,9 @@ router.post("/chat", async (req: Request, res: Response) => {
           result = await model.generateContent({ contents });
         }
         reply = result.response.text();
+        if (result.response.usageMetadata) {
+          await updateTokenUsage(clientId, result.response.usageMetadata, 'briefing_agent_chat', modelName);
+        }
         break;
       } catch (err: any) {
         if (modelName === modelsToTry[modelsToTry.length - 1]) {

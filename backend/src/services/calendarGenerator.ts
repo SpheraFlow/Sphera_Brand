@@ -10,7 +10,7 @@ const CALENDAR_RESPONSE_SCHEMA = {
     type: SchemaType.ARRAY,
     items: {
         type: SchemaType.OBJECT,
-        required: ["dia", "tema", "formato", "instrucoes_visuais", "copy_inicial", "objetivo", "cta", "palavras_chave"],
+        required: ["dia", "tema", "formato", "instrucoes_visuais", "copy_inicial", "legenda", "objetivo", "cta", "palavras_chave"],
         properties: {
             dia:                 { type: SchemaType.INTEGER },
             tema:                { type: SchemaType.STRING },

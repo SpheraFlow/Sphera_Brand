@@ -91,6 +91,18 @@ export function repairCalendarSchema(data: any[]): { repaired: any[]; warnings: 
             p.palavras_chave = fallback;
         }
 
+        // Repara legenda ausente em Carrossel
+        if (isCarouselFormato(p.formato)) {
+            if (typeof p.legenda !== "string" || !p.legenda.trim()) {
+                const fallback = String(p.copy_inicial || p.tema || "")
+                    .replace(/\[slide\s*\d+\][^[[\]]*(?=\[|$)/gi, " ")
+                    .replace(/\s+/g, " ")
+                    .trim();
+                warnings.push(`[Post #${idx + 1}] legenda ausente em Carrossel → usando fallback`);
+                p.legenda = fallback || String(p.tema || "Carrossel").trim();
+            }
+        }
+
         return p;
     });
 
