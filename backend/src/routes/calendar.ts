@@ -854,8 +854,8 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     const clienteId = calResult.rows[0].cliente_id;
 
     const jobResult = await db.query(
-      `INSERT INTO calendar_generation_jobs (cliente_id, status, payload)
-       VALUES ($1, 'pending', $2) RETURNING id`,
+      `INSERT INTO calendar_generation_jobs (id, cliente_id, status, progress, payload, created_at)
+       VALUES (gen_random_uuid(), $1, 'pending', 0, $2, NOW()) RETURNING id`,
       [clienteId, JSON.stringify({ jobType: 'excel', calendarId, clientName, monthsSelected })]
     );
 
