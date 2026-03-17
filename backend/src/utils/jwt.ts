@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'sphera_brand_dev_secret_key_123';
-const JWT_EXPIRES_IN = '8h';
+const JWT_EXPIRES_IN = '30d';
 
 export interface TokenPayload {
     id: string;
