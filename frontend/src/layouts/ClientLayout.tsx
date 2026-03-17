@@ -18,7 +18,7 @@ export default function ClientLayout() {
   const navigate = useNavigate();
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [loading, setLoading] = useState(true);
-  const { hasPermission } = useAuth();
+  const { hasPermission, logout } = useAuth();
 
   useEffect(() => {
     if (clientId) {
@@ -212,7 +212,14 @@ export default function ClientLayout() {
         </nav>
 
         {/* Footer da Sidebar */}
-        <div className="p-4 border-t border-gray-700 bg-gray-800">
+        <div className="p-4 border-t border-gray-700 bg-gray-800 space-y-3">
+          <button
+            onClick={logout}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-gray-400 hover:bg-red-900/30 hover:text-red-400 transition-all"
+          >
+            <span>🚪</span>
+            <span>Sair</span>
+          </button>
           <div className="text-xs text-center text-gray-600">
             Sphere Brand © 2026
           </div>

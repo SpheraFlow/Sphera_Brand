@@ -46,7 +46,7 @@ export default function AgencyHome() {
     const [lastClient, setLastClient] = useState<LastClientData | null>(null);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
-    const { hasPermission } = useAuth();
+    const { hasPermission, logout } = useAuth();
     const [accessModal, setAccessModal] = useState({ isOpen: false, clientId: '', clientName: '' });
 
     useEffect(() => {
@@ -178,6 +178,12 @@ export default function AgencyHome() {
                         <p className="text-gray-400">Central de Operações e Estratégia</p>
                     </div>
                     <div className="flex gap-3">
+                        <button
+                            onClick={logout}
+                            className="bg-gray-800 hover:bg-red-900/30 text-gray-400 hover:text-red-400 px-4 py-2.5 rounded-lg font-medium transition-all flex items-center gap-2 border border-gray-700"
+                        >
+                            🚪 Sair
+                        </button>
                         {hasPermission('team_manage') && (
                             <button
                                 onClick={() => navigate('/team')}
