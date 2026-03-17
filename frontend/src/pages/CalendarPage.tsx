@@ -5,7 +5,7 @@ import ContentMixSelector from '../components/ContentMixSelector';
 import PhotoIdeasModal from '../components/PhotoIdeasModal';
 import JobProgressPanel from '../components/Jobs/JobProgressPanel';
 
-import api, { jobsService, calendarItemsService, apiOrigin, CalendarItem, CalendarItemStatus } from '../services/api';
+import api, { jobsService, calendarItemsService, CalendarItem, CalendarItemStatus } from '../services/api';
 import { useJobPolling } from '../hooks/useJobPolling';
 import {
   format,
@@ -406,15 +406,23 @@ export default function CalendarPage() {
     clientId: clientId || '',
     jobId: pendingExcelJobId,
     enabled: !!pendingExcelJobId && !!clientId,
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       if (result?.downloadUrl) {
-        const apiBase = apiOrigin;
-        const link = document.createElement('a');
-        link.href = `${apiBase}${result.downloadUrl}`;
-        link.setAttribute('download', result.fileName || 'calendario.xlsx');
-        document.body.appendChild(link);
-        link.click();
-        link.remove();
+        try {
+          const response = await import('../services/api').then(m =>
+            m.default.get(result.downloadUrl, { responseType: 'blob' })
+          );
+          const url = window.URL.createObjectURL(new Blob([response.data]));
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', result.fileName || 'calendario.xlsx');
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.URL.revokeObjectURL(url);
+        } catch {
+          alert('Erro ao baixar o arquivo Excel.');
+        }
       }
     },
   });

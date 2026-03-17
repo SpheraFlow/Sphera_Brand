@@ -10,7 +10,7 @@ import {
     Plus,
     Loader2
 } from 'lucide-react';
-import api, { presentationService, calendarService, apiOrigin } from '../services/api';
+import api, { presentationService, calendarService } from '../services/api';
 import PresentationGenerator from '../components/PresentationGenerator';
 import { useJobPolling } from '../hooks/useJobPolling';
 import toast from 'react-hot-toast';
@@ -35,18 +35,25 @@ export default function DeliveriesPage() {
         clientId: clientId || '',
         jobId: pendingExcelJobId,
         enabled: !!pendingExcelJobId && !!clientId,
-        onSuccess: (result) => {
+        onSuccess: async (result) => {
             setGeneratingExcel(false);
             setPendingExcelJobId(null);
             if (result?.downloadUrl) {
-                const link = document.createElement('a');
-                link.href = `${apiOrigin}${result.downloadUrl}`;
-                link.setAttribute('download', result.fileName || 'calendario.xlsx');
-                document.body.appendChild(link);
-                link.click();
-                link.remove();
-                toast.success('Excel baixado com sucesso!');
-                setShowExportModal(false);
+                try {
+                    const response = await api.get(result.downloadUrl, { responseType: 'blob' });
+                    const url = window.URL.createObjectURL(new Blob([response.data]));
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.setAttribute('download', result.fileName || 'calendario.xlsx');
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                    window.URL.revokeObjectURL(url);
+                    toast.success('Excel baixado com sucesso!');
+                    setShowExportModal(false);
+                } catch {
+                    toast.error('Erro ao baixar o arquivo Excel.');
+                }
             }
         },
         onError: () => {
