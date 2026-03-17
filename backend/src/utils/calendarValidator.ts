@@ -57,6 +57,46 @@ function isCarouselFormato(raw: any): boolean {
     return normalizeFormato(raw) === "Carrossel";
 }
 
+/**
+ * Auto-repairs common LLM output issues before strict validation.
+ * Safety net para modelos que ignoram responseSchema constraints.
+ * Nunca lança exceção — retorna { repaired, warnings }.
+ */
+export function repairCalendarSchema(data: any[]): { repaired: any[]; warnings: string[] } {
+    const warnings: string[] = [];
+
+    const repaired = data.map((post: any, idx: number) => {
+        if (!post || typeof post !== "object") return post;
+        const p = { ...post };
+
+        // Repara formato ausente/inválido: tenta inferir do texto, fallback "Arte"
+        if (!normalizeFormato(p.formato)) {
+            const textHint = [p.instrucoes_visuais, p.tema, p.copy_inicial]
+                .filter(Boolean)
+                .map(String)
+                .join(" ");
+            const inferred = normalizeFormato(textHint);
+            const fallback = inferred ?? "Arte";
+            warnings.push(
+                `[Post #${idx + 1}] formato "${p.formato}" inválido → auto-corrigido para "${fallback}"`
+            );
+            p.formato = fallback;
+        }
+
+        // Repara palavras_chave ausente: fallback [tema]
+        if (!Array.isArray(p.palavras_chave) || p.palavras_chave.length === 0) {
+            const fallback =
+                typeof p.tema === "string" && p.tema.trim() ? [p.tema.trim()] : ["conteúdo"];
+            warnings.push(`[Post #${idx + 1}] palavras_chave ausente → usando fallback`);
+            p.palavras_chave = fallback;
+        }
+
+        return p;
+    });
+
+    return { repaired, warnings };
+}
+
 export interface ValidationResult {
     isValid: boolean;
     errors: string[];

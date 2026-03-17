@@ -608,24 +608,46 @@ const loadPresentationGenerationContext = async (
     };
 };
 
-const buildPresentationStrategyPrompt = (context: PresentationGenerationContext) => `Voce e um estrategista senior de campanhas. Analise o calendario abaixo e extraia a estrategia central da apresentacao.
+const distillBrandingContext = (branding: Record<string, any>): string => {
+    const toneObj = branding.tone_of_voice;
+    const toneStr = typeof toneObj === 'string' ? toneObj : (toneObj?.description || '');
+    const audienceObj = branding.audience;
+    const audienceStr = typeof audienceObj === 'string' ? audienceObj : (audienceObj?.persona || '');
+    const keywords = Array.isArray(branding.keywords) ? branding.keywords.join(', ') : (branding.keywords || '');
+    const lines = [
+        branding.niche && `NICHO: ${branding.niche}`,
+        toneStr && `TOM DE VOZ: ${toneStr}`,
+        audienceStr && `PUBLICO-ALVO: ${audienceStr}`,
+        branding.usp && `USP: ${branding.usp}`,
+        keywords && `PALAVRAS-CHAVE: ${keywords}`,
+    ].filter(Boolean);
+    return lines.length > 0 ? lines.join('\n') : JSON.stringify(branding, null, 2);
+};
+
+const buildPresentationStrategyPrompt = (context: PresentationGenerationContext): string => {
+    const pilaresSlots = context.deckMonths
+        .map(mes => `    { "mes": "${mes}", "foco": "", "campanha": "", "apoio_tatico": "" }`)
+        .join(',\n');
+
+    return `Voce e um estrategista senior de campanhas criando o brief de uma apresentacao executiva de agencia para o cliente.
 
 CLIENTE: ${context.clientName || 'Cliente'}
 PERIODO: ${context.monthLabel}
-MESES DA APRESENTACAO: ${context.plannerLabel}
+MESES SELECIONADOS: ${context.plannerLabel}
 
-BRANDING:
-${JSON.stringify(context.branding, null, 2)}
+BRANDING DO CLIENTE:
+${distillBrandingContext(context.branding)}
 
 CALENDARIO:
 ${JSON.stringify(context.calendar, null, 2)}
 
 REGRAS:
 - Pense como planejamento de campanha, nao como cronograma bruto.
-- Identifique as tensoes reais do cliente e do publico.
+- Identifique tensoes reais e especificas do cliente — nao tensoes genericas de marketing.
 - Encontre uma grande ideia que conecte diagnostico, metas, slogan, defesa e roadmap.
 - Se houver muitos temas, sintetize em uma narrativa unica e clara.
-- pilar_mensal.campanha deve ser o nome da ideia do mes, sem prefixo "Campanha".
+- pilares_mensais.campanha: nome criativo da ideia do mes, sem prefixo "Campanha".
+- Gere APENAS ${context.deckMonths.length} entrada(s) em pilares_mensais — uma por mes selecionado.
 - Responda APENAS JSON valido.
 
 JSON:
@@ -638,45 +660,82 @@ JSON:
   "tensoes_do_publico": ["", "", ""],
   "oportunidades": ["", "", ""],
   "pilares_mensais": [
-    { "mes": "${context.deckMonths[0] || ''}", "foco": "", "campanha": "", "apoio_tatico": "" },
-    { "mes": "${context.deckMonths[1] || ''}", "foco": "", "campanha": "", "apoio_tatico": "" },
-    { "mes": "${context.deckMonths[2] || ''}", "foco": "", "campanha": "", "apoio_tatico": "" }
+${pilaresSlots}
   ]
 }`;
+};
 
-const buildPresentationSlidesPrompt = (context: PresentationGenerationContext, strategyBrief: any) => `Voce e um diretor de criacao e redator senior. A partir do brief estrategico abaixo, escreva os textos das laminas da apresentacao.
+const buildPresentationSlidesPrompt = (context: PresentationGenerationContext, strategyBrief: any): string => {
+    const nMonths = context.deckMonths.length;
+    const roadmapCardSlots = context.deckMonths
+        .map(mes => `      { "mes": "${mes}", "titulo": "", "detalhe": "", "descricao": "", "sugestao": "" }`)
+        .join(',\n');
+
+    return `Voce e um diretor de criacao e redator senior. Escreva os textos das laminas de uma apresentacao executiva de agencia para o cliente.
 
 CLIENTE: ${context.clientName || 'Cliente'}
 PERIODO: ${context.monthLabel}
-MESES DA APRESENTACAO: ${context.plannerLabel}
+MESES SELECIONADOS: ${context.plannerLabel}
 
-BRIEF ESTRATEGICO:
+BRIEF ESTRATEGICO (use como fonte da verdade):
 ${JSON.stringify(strategyBrief, null, 2)}
 
 CALENDARIO DE APOIO:
 ${JSON.stringify(context.calendar, null, 2)}
 
-REGRAS DE COMPOSICAO DAS LAMINAS:
-- planner.mes: use exatamente estes meses, nessa ordem: ${context.plannerLabel}.
-- use apenas o nome do mes, sem ano, tanto em planner.mes quanto em roadmap.cards[i].mes.
-- diagnostico.texto_longo: maximo 900 caracteres, em 3 paragrafos mais cheios, coerentes, com frases completas e leitura consultiva.
-- cada paragrafo de diagnostico.texto_longo: idealmente entre 180 e 300 caracteres.
-- diagnostico deve explicar cenario, tensao e oportunidade, sem soar generico.
-- desafios.itens: exatamente 9 itens.
-- cada item em desafios.itens: ate 5 palavras e ate 42 caracteres, sem ponto final, com frase completa, sem acabar em "de", "para" ou termos pendurados, forte, especifico e pensado para caber em 2 ou 3 linhas no maximo.
-- grid.texto_longo: maximo 980 caracteres, em 2 ou 3 paragrafos, com densidade editorial maior, falando da campanha no geral, sem citar meses especificos e sem virar lista mensal.
-- grid.mes: repita exatamente ${context.plannerLabel}.
-- slogan.frase: maximo 42 caracteres, frase completa, memoravel, coerente com a promessa central e podendo quebrar em ate 2 linhas.
-- defesa.subtitulo: maximo 42 caracteres, coerente com o slogan, sem cortes.
-- defesa.texto_longo: maximo 1280 caracteres, em 3 ou 4 paragrafos mais robustos, com leitura clara e consultiva, defendendo por que a campanha funciona.
-- roadmap.cards: exatamente 3 cards, um por mes do periodo.
-- roadmap.cards[i].titulo: maximo 24 caracteres e deve ser apenas o nome da campanha/ideia do mes, sem prefixo "Campanha".
-- roadmap.cards[i].detalhe: deixe vazio ("") porque este campo nao sera exibido.
-- roadmap.cards[i].descricao: maximo 58 caracteres e deve explicar a ideia da campanha daquele mes com frase completa.
-- roadmap.cards[i].sugestao: maximo 28 caracteres e deve aparecer por ultimo.
+═══════════════════════════════════════════════════════
+FUNCAO DE CADA LAMINA — leia antes de escrever qualquer campo
+═══════════════════════════════════════════════════════
+
+LAMINA: DIAGNOSTICO (diagnostico.texto_longo)
+Diagnostico consultivo do cenario competitivo da marca.
+Estrutura obrigatoria — 3 paragrafos separados por linha dupla (\\n\\n):
+  - Paragrafo 1: cenario atual do mercado e da marca (onde estao hoje)
+  - Paragrafo 2: a tensao central — o problema ou ameaca que impede o crescimento
+  - Paragrafo 3: a oportunidade — por que agora e o momento certo
+Tom: consultivo, direto, sem jargao vazio. Especifico ao nicho do cliente.
+LIMITES: minimo 520 chars, maximo 900 chars, maximo 290 chars por paragrafo.
+
+LAMINA: DESAFIOS (desafios.itens)
+Grid visual com 9 frases que o cliente deve reconhecer imediatamente em si mesmo.
+Seja especifico ao nicho — nao use desafios genericos como "melhorar vendas" ou "aumentar presenca".
+Cada item deve ser forte e especifico, como "Custo de aquisicao alto" ou "Marca sem autoridade local".
+LIMITES: exatamente 9 itens, maximo 5 palavras e 42 chars por item, sem ponto final.
+
+LAMINA: METAS DA CAMPANHA (grid.texto_longo)
+Visao estrategica do que a campanha intende alcançar no periodo como um todo.
+NAO cite meses especificos. NAO organize o texto por mes. Escreva sobre a campanha de forma unificada.
+Tom: estrategico, propositivo, com densidade editorial.
+LIMITES: minimo 420 chars, maximo 980 chars, maximo 320 chars por paragrafo.
+
+LAMINA: SLOGAN (slogan.frase)
+A tagline central da campanha. Frase completa, memoravel, pode quebrar em 2 linhas.
+Derive da "grande_ideia" do brief estrategico.
+LIMITE ABSOLUTO: maximo 42 caracteres — sera cortado se ultrapassar.
+
+LAMINA: DEFESA DA CAMPANHA (defesa.subtitulo + defesa.texto_longo)
+Por que esta campanha funciona. Tom consultivo, persuasivo, sem inventar dados.
+  - subtitulo: variacao ou complemento do slogan. Maximo 42 chars.
+  - texto_longo: argumentacao em 3-4 paragrafos separados por linha dupla (\\n\\n).
+    Estrutura sugerida: premissa -> evidencia concreta -> por que agora -> convite a acao.
+LIMITES: minimo 560 chars, maximo 1280 chars, maximo 330 chars por paragrafo.
+
+LAMINA: ROADMAP / PLANNER (roadmap.cards)
+${nMonths} card(s) — exatamente um por mes selecionado.
+  - titulo: nome criativo da campanha do mes. Maximo 24 chars, sem prefixo "Campanha".
+  - detalhe: SEMPRE vazio ("") — nao e exibido no layout.
+  - descricao: o que a campanha vai entregar/fazer. Frase completa. Maximo 58 chars.
+  - sugestao: sugestao tatica complementar (ex: "Impulsionar 3 posts-chave"). Maximo 28 chars.
+ATENCAO: gere exatamente ${nMonths} card(s) para os meses: ${context.deckMonths.join(', ')}.
+Nao invente meses adicionais.
+
+═══════════════════════════════════════════════════════
+REGRAS GERAIS
+- Paragrafos DEVEM ser separados por linha dupla (\\n\\n) — nunca por linha simples.
+- Cada lamina serve uma funcao diferente — nao repita informacoes entre elas.
+- Nao invente datas, numeros ou promessas sem base no calendario ou branding.
 - Nao use bullets numerados dentro de textos corridos.
-- Nao invente um quarto mes.
-- Priorize clareza, ritmo visual, acentuacao correta e pouco texto por bloco.
+- Priorize clareza, ritmo visual, acentuacao correta e especificidade ao nicho.
 - Use o brief estrategico como fonte da verdade; o calendario serve como apoio e prova.
 
 Retorne APENAS este JSON preenchido:
@@ -704,36 +763,20 @@ Retorne APENAS este JSON preenchido:
   },
   "roadmap": {
     "cards": [
-      {
-        "mes": "${context.deckMonths[0] || ''}",
-        "titulo": "",
-        "detalhe": "",
-        "descricao": "",
-        "sugestao": ""
-      },
-      {
-        "mes": "${context.deckMonths[1] || ''}",
-        "titulo": "",
-        "detalhe": "",
-        "descricao": "",
-        "sugestao": ""
-      },
-      {
-        "mes": "${context.deckMonths[2] || ''}",
-        "titulo": "",
-        "detalhe": "",
-        "descricao": "",
-        "sugestao": ""
-      }
+${roadmapCardSlots}
     ]
   }
 }`;
+};
 
-const buildPresentationReviewPrompt = (context: PresentationGenerationContext, strategyBrief: any, draftContent: any) => `Voce e um revisor editorial de apresentacoes. Revise o JSON abaixo e devolva uma versao final mais coerente, mais enxuta e mais alinhada ao layout.
+const buildPresentationReviewPrompt = (context: PresentationGenerationContext, strategyBrief: any, draftContent: any): string => {
+    const nMonths = context.deckMonths.length;
+
+    return `Voce e um revisor editorial de apresentacoes executivas de agencia. Revise o rascunho e devolva uma versao final mais coerente, mais enxuta e mais alinhada ao layout de cada lamina.
 
 CLIENTE: ${context.clientName || 'Cliente'}
 PERIODO: ${context.monthLabel}
-MESES DA APRESENTACAO: ${context.plannerLabel}
+MESES SELECIONADOS: ${context.plannerLabel}
 
 BRIEF ESTRATEGICO:
 ${JSON.stringify(strategyBrief, null, 2)}
@@ -741,18 +784,45 @@ ${JSON.stringify(strategyBrief, null, 2)}
 RASCUNHO DAS LAMINAS:
 ${JSON.stringify(draftContent, null, 2)}
 
-CHECKLIST OBRIGATORIO:
-- diagnostico: 3 paragrafos mais cheios, coerentes e sem repeticao.
-- desafios: 9 itens curtos, especificos e sem ponto final.
-- grid: foco na campanha como um todo, sem organizar por mes.
-- slogan: frase completa, memoravel e sem truncamento.
-- defesa: subtitulo coerente com o slogan e texto consultivo em paragrafos curtos.
-- roadmap: 3 cards, meses corretos, cada um com campanha, descricao e sugestao curtos.
-- remova cortes estranhos, palavras penduradas e frases sem fechamento.
-- preserve o sentido estrategico do brief.
-- responda APENAS JSON valido no mesmo schema do rascunho.
+CHECKLIST OBRIGATORIO — verifique campo por campo:
+
+diagnostico.texto_longo:
+- Estrutura: 3 paragrafos separados por \\n\\n (cenario -> tensao -> oportunidade).
+- Minimo 520 chars, maximo 900 chars, maximo 290 chars por paragrafo.
+- Tom consultivo e especifico ao nicho — sem generalidades de marketing.
+
+desafios.itens:
+- Exatamente 9 itens. Maximo 5 palavras e 42 chars por item. Sem ponto final.
+- Especificos ao nicho — nao use "melhorar vendas" ou similares genericos.
+
+grid.texto_longo:
+- Visao da campanha como um todo — sem citar meses especificos.
+- Paragrafos separados por \\n\\n. Minimo 420 chars, maximo 980 chars, maximo 320 chars/par.
+
+slogan.frase:
+- Frase completa, memoravel. LIMITE ABSOLUTO: 42 chars.
+
+defesa.subtitulo:
+- Coerente com o slogan. LIMITE ABSOLUTO: 42 chars.
+
+defesa.texto_longo:
+- Argumentacao consultiva em 3-4 paragrafos separados por \\n\\n.
+- Minimo 560 chars, maximo 1280 chars, maximo 330 chars por paragrafo.
+
+roadmap.cards:
+- Exatamente ${nMonths} card(s) para os meses: ${context.deckMonths.join(', ')}.
+- titulo: maximo 24 chars. descricao: maximo 58 chars. sugestao: maximo 28 chars.
+- detalhe: SEMPRE vazio ("").
+- Nao invente meses adicionais.
+
+REGRAS FINAIS:
+- Paragrafos de texto longo DEVEM usar \\n\\n como separador — nunca \\n simples.
+- Remova cortes estranhos, palavras penduradas e frases sem fechamento.
+- Preserve o sentido estrategico do brief.
+- Responda APENAS o JSON final no mesmo schema do rascunho.
 
 Retorne somente o JSON final.`;
+};
 
 const sanitizePresentationRenderKey = (value?: string) => {
     const raw = String(value || randomUUID()).trim();
@@ -894,7 +964,7 @@ export const renderPresentationDeck = async (
 
     await reportPresentationProgress(options.onProgress, 38, 'Renderizando as laminas no motor grafico...');
 
-    const pythonBin = process.env.PYTHON_BIN || 'python3';
+    const pythonBin = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3');
     if (!fs.existsSync(SCRIPT_FILE)) {
         throw new Error(`Script Python nao encontrado: ${SCRIPT_FILE}`);
     }
@@ -1156,6 +1226,162 @@ router.get('/history/:clienteId', async (req: Request, res: Response) => {
         res.json({ success: true, history });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ── PRESENTATION CHAT AGENT ─────────────────────────────────────────────────
+
+const buildPresentationChatAgentPrompt = (context: PresentationGenerationContext): string =>
+    `Voce e um estrategista senior conduzindo uma entrevista rapida para enriquecer uma apresentacao executiva de agencia para o cliente.
+
+VOCE JA TEM ACESSO AO CALENDARIO E BRANDING DO CLIENTE — NAO PERGUNTE SOBRE ESTES ITENS:
+CLIENTE: ${context.clientName || 'Cliente'}
+MESES: ${context.plannerLabel}
+BRANDING:
+${distillBrandingContext(context.branding)}
+
+## Sua missao
+Fazer 4-5 perguntas DIRETAS para coletar o que o calendario e branding nao tem:
+- Posicionamento competitivo especifico deste periodo
+- Grande mensagem central da campanha
+- Prova/argumento concreto para a lamina de defesa
+- Tom emocional desejado
+- Restricoes e evitacoes
+
+## Regras
+1. NUNCA mais de uma pergunta por mensagem.
+2. Comece pela pergunta de maior impacto: o diferencial competitivo.
+3. Apos cada resposta, aprofunde OU avance para a proxima dimensao.
+4. Apos 4-5 trocas, sintetize e encerre com o marcador abaixo.
+
+## Formato de encerramento (use EXATAMENTE quando tiver informacao suficiente)
+
+[PRESENTATION_CONTEXT_READY]
+POSICIONAMENTO: {diferencial competitivo da marca neste periodo}
+MENSAGEM_CENTRAL: {a grande ideia ou o que o cliente deve lembrar}
+PROVA_DEFESA: {argumentos, dados ou depoimentos para a defesa}
+TOM_EMOCIONAL: {como o cliente deve se sentir ao ver a apresentacao}
+RESTRICOES: {temas, tons ou abordagens a evitar}
+[/PRESENTATION_CONTEXT_READY]`;
+
+const buildPresentationSlidesPromptWithChat = (
+    context: PresentationGenerationContext,
+    strategyBrief: any,
+    chatContext: string
+): string => {
+    const base = buildPresentationSlidesPrompt(context, strategyBrief);
+    const injection = `CONTEXTO ADICIONAL DO USUARIO (prioridade maxima para diagnostico, slogan e defesa):\n${chatContext}\n\n`;
+    return base.replace(
+        '═══════════════════════════════════════════════════════\nFUNCAO DE CADA LAMINA',
+        injection + '═══════════════════════════════════════════════════════\nFUNCAO DE CADA LAMINA'
+    );
+};
+
+const generatePresentationContentWithChatContext = async (
+    clienteId: string,
+    months: string[],
+    chatContext: string
+): Promise<any> => {
+    const context = await loadPresentationGenerationContext(clienteId, months);
+
+    const strategyResponse = await runGeminiJsonPrompt(
+        clienteId,
+        buildPresentationStrategyPrompt(context),
+        'presentation_strategy_chat',
+        'quality'
+    );
+
+    const slidesDraftResponse = await runGeminiJsonPrompt(
+        clienteId,
+        buildPresentationSlidesPromptWithChat(context, strategyResponse.parsed, chatContext),
+        'presentation_slides_chat',
+        'quality'
+    );
+
+    let reviewedContent = slidesDraftResponse.parsed;
+    try {
+        const reviewResponse = await runGeminiJsonPrompt(
+            clienteId,
+            buildPresentationReviewPrompt(context, strategyResponse.parsed, slidesDraftResponse.parsed),
+            'presentation_review_chat',
+            'fast'
+        );
+        reviewedContent = reviewResponse.parsed;
+    } catch {
+        // segue com rascunho normalizado
+    }
+
+    return normalizeGeneratedContent(reviewedContent, {
+        plannerLabel: context.plannerLabel,
+        roadmapMonths: context.deckMonths,
+        clientName: context.clientName,
+        logoPath: context.logoPath,
+    });
+};
+
+router.post('/chat-agent', async (req: Request, res: Response) => {
+    try {
+        const { clientId, messages, months } = req.body as {
+            clientId: string;
+            messages: Array<{ role: 'user' | 'model'; content: string }>;
+            months?: string[];
+        };
+
+        if (!clientId) {
+            return res.status(400).json({ error: 'clientId obrigatorio.' });
+        }
+
+        const safeMonths = Array.isArray(months) ? months : [];
+        const context = await loadPresentationGenerationContext(clientId, safeMonths);
+        const systemPrompt = buildPresentationChatAgentPrompt(context);
+
+        const safeMsgs = Array.isArray(messages) ? messages : [];
+        const userTurnCount = safeMsgs.filter(m => m.role === 'user').length;
+        const historyToSend = [...safeMsgs];
+        if (userTurnCount >= 5) {
+            historyToSend.push({
+                role: 'user',
+                content: '[SISTEMA]: Limite de trocas atingido. Sintetize agora e emita o marcador [PRESENTATION_CONTEXT_READY] com tudo que foi coletado.'
+            });
+        }
+
+        const apiKey = process.env.GOOGLE_API_KEY;
+        if (!apiKey) return res.status(500).json({ error: 'GOOGLE_API_KEY nao configurada.' });
+
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const modelsToTry = getGeminiModelCandidates('fast');
+        let reply = '';
+
+        for (const modelName of modelsToTry) {
+            try {
+                const model = genAI.getGenerativeModel({ model: modelName, systemInstruction: systemPrompt });
+                const result = historyToSend.length === 0
+                    ? await model.generateContent('Inicie a conversa com sua primeira pergunta estrategica.')
+                    : await model.generateContent({
+                        contents: historyToSend.map(m => ({ role: m.role, parts: [{ text: m.content }] }))
+                    });
+                reply = result.response.text();
+                if (result.response.usageMetadata) {
+                    await updateTokenUsage(clientId, result.response.usageMetadata, 'presentation_chat_agent', modelName);
+                }
+                break;
+            } catch (err: any) {
+                if (modelName === modelsToTry[modelsToTry.length - 1]) throw err;
+            }
+        }
+
+        const readyMatch = reply.match(/\[PRESENTATION_CONTEXT_READY\]([\s\S]*?)\[\/PRESENTATION_CONTEXT_READY\]/);
+        if (readyMatch && readyMatch[1]) {
+            const chatContext = readyMatch[1].trim();
+            const content = await generatePresentationContentWithChatContext(clientId, safeMonths, chatContext);
+            return res.json({ reply, done: true, content });
+        }
+
+        return res.json({ reply, done: false });
+
+    } catch (error: any) {
+        console.error('[PresentationChatAgent] Erro:', error);
+        return res.status(500).json({ error: error.message || 'Erro interno.' });
     }
 });
 

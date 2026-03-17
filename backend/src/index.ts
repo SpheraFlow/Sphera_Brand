@@ -40,6 +40,7 @@ import clickupRouter from "./routes/clickup";
 import authRouter from "./routes/auth";
 import usersRouter from "./routes/users";
 import produtosRouter from "./routes/produtos";
+import briefingAgentRouter from "./routes/briefingAgent";
 import { requireAuth } from "./middlewares/requireAuth";
 import db from "./config/database";
 import http from "http";
@@ -201,6 +202,7 @@ app.use("/api", onboardingRouter);
 app.use("/api", calendarItemsRouter);
 app.use("/api/clickup", clickupRouter);
 app.use("/api", produtosRouter);
+app.use("/api/briefing-agent", briefingAgentRouter);
 
 // Servir arquivos gerados pelo Python (Temporários)
 const presentationOutputPath = path.resolve(__dirname, "../python_gen/output");
@@ -227,6 +229,13 @@ app.use(
 const deliveriesStoragePath = path.resolve(__dirname, "../storage/deliveries");
 app.use(
   "/storage/deliveries",
+  express.static(deliveriesStoragePath, {
+    setHeaders: (res) => setNoCacheHeaders(res as unknown as Response)
+  })
+);
+// Alias com prefixo /api para compatibilidade com Nginx (que só faz proxy de /api/*)
+app.use(
+  "/api/storage/deliveries",
   express.static(deliveriesStoragePath, {
     setHeaders: (res) => setNoCacheHeaders(res as unknown as Response)
   })

@@ -115,7 +115,7 @@ router.post("/prompt-templates/onboarding/chat/:clientId", async (req: Request, 
 
         const history = rawHistory;
         const inputMessage = userMessage?.trim() || INIT_TRIGGER;
-        const modelsToTry = ["gemini-2.5-flash", "gemini-1.5-flash"];
+        const modelsToTry = ["gemini-3-flash-preview", "gemini-2.5-flash"];
         let responseText = "";
 
         for (const modelName of modelsToTry) {

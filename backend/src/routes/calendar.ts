@@ -2,9 +2,6 @@ import { Router, Request, Response } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import db from "../config/database";
 import { updateTokenUsage } from "../utils/tokenTracker";
-import { spawn } from "child_process";
-import path from "path";
-import fs from "fs";
 import { getGeminiModelCandidates } from "../utils/googleModels";
 
 const router = Router();
@@ -139,6 +136,25 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
 
     console.log(`�S& [DEBUG] Meses para geração:`, monthsToGenerate);
 
+    // GUARDRAIL: Validar limites de geração massiva
+    const MAX_POSTS_PER_MONTH = 25;
+    const MAX_MONTHS = 6;
+    const mixTotal = mix
+      ? (Number(mix.reels) || 0) + (Number(mix.static) || 0) + (Number(mix.carousel) || 0) + (Number(mix.stories) || 0) + (Number(mix.photos) || 0)
+      : 35;
+    if (mixTotal > MAX_POSTS_PER_MONTH) {
+      return res.status(400).json({
+        success: false,
+        error: `Limite excedido: máximo ${MAX_POSTS_PER_MONTH} posts por mês. Mix solicitado: ${mixTotal} posts. Reduza a quantidade de posts e tente novamente.`,
+      });
+    }
+    if (monthsToGenerate.length > MAX_MONTHS) {
+      return res.status(400).json({
+        success: false,
+        error: `Limite excedido: máximo ${MAX_MONTHS} meses por geração. Solicitado: ${monthsToGenerate.length} meses.`,
+      });
+    }
+
     // CRIA�!ÒO DO JOB
     const { randomUUID } = await import('crypto');
     const jobId = randomUUID();
@@ -148,7 +164,8 @@ router.post("/generate-calendar", async (req: Request, res: Response) => {
       briefing,
       periodo: periodoFinal,
       mix,
-      monthlyMix: req.body.monthlyMix || null,  // mix por mês (opcional)
+      monthlyMix: req.body.monthlyMix || null,
+      monthlyBriefings: req.body.monthlyBriefings || null,
       generationPrompt,
       chainId,
       formatInstructions,
@@ -817,18 +834,7 @@ router.put("/calendars/:calendarId/metadata", async (req: Request, res: Response
 });
 
 router.post("/calendars/export-excel", async (req: Request, res: Response): Promise<void> => {
-  console.log("\n [DEBUG] ROTA /export-excel ACIONADA");
-  console.log(" [DEBUG] Payload:", JSON.stringify(req.body, null, 2));
-
   try {
-    if (!req.is("application/json") || !req.body) {
-      res.status(400).json({
-        error: "Body JSON é obrigatório.",
-        details: "Envie Content-Type: application/json e um JSON com { calendarId }",
-      });
-      return;
-    }
-
     const { calendarId, clientName, monthsSelected } = (req.body ?? {}) as {
       calendarId?: string;
       clientName?: string;
@@ -840,493 +846,26 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
       return;
     }
 
-    console.log(` Buscando calendário ID: ${calendarId}`);
-    const result = await db.query(
-      "SELECT calendario_json, mes, cliente_id, periodo FROM calendarios WHERE id = $1",
-      [calendarId]
-    );
-
-    if (result.rows.length === 0) {
+    const calResult = await db.query("SELECT cliente_id FROM calendarios WHERE id = $1", [calendarId]);
+    if (calResult.rows.length === 0) {
       res.status(404).json({ error: "Calendário não encontrado" });
       return;
     }
+    const clienteId = calResult.rows[0].cliente_id;
 
-    const calendar = result.rows[0];
-    let posts = calendar.calendario_json;
-    const monthLabel = calendar.mes || "Janeiro";
-    const periodo = calendar.periodo;
-
-    let resolvedClientName = (clientName as string) || "Cliente";
-    try {
-      if (calendar.cliente_id) {
-        const clientResult = await db.query("SELECT nome FROM clientes WHERE id = $1", [calendar.cliente_id]);
-        const dbName = clientResult.rows?.[0]?.nome;
-        if (dbName) {
-          resolvedClientName = dbName;
-        }
-      }
-    } catch (e: any) {
-      console.log(` [ERROR] Falha no merge multi-mês: ${e?.message || String(e)}`);
-    }
-
-    const yearMatch = String(monthLabel).match(/(\d{4})/);
-    const year = yearMatch?.[1] || String(new Date().getFullYear());
-
-    const monthNamePt = (m?: number): string => {
-      const names = [
-        "Janeiro",
-        "Fevereiro",
-        "Março",
-        "Abril",
-        "Maio",
-        "Junho",
-        "Julho",
-        "Agosto",
-        "Setembro",
-        "Outubro",
-        "Novembro",
-        "Dezembro",
-      ];
-      if (!m) return "Mes";
-      return names[m - 1] || `Mes${m}`;
-    };
-
-    const parseMonthLabelToNumber = (label: string): number | null => {
-      const s = String(label || "").trim().toLowerCase();
-      if (!s) return null;
-      const token = s.split(/\s+/)[0] || "";
-      const map: Record<string, number> = {
-        janeiro: 1,
-        fevereiro: 2,
-        "março": 3,
-        marco: 3,
-        abril: 4,
-        maio: 5,
-        junho: 6,
-        julho: 7,
-        agosto: 8,
-        setembro: 9,
-        outubro: 10,
-        novembro: 11,
-        dezembro: 12,
-      };
-      return map[token] ?? null;
-    };
-
-    const parseYearFromMonthLabel = (label: string, fallbackYear: number): number => {
-      const match = String(label || "").match(/(\d{4})/);
-      const parsed = match?.[1] ? parseInt(match[1], 10) : NaN;
-      return Number.isNaN(parsed) ? fallbackYear : parsed;
-    };
-
-    const sanitizeFilePart = (value: string): string => {
-      return value
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-zA-Z0-9_-]+/g, "")
-        .trim();
-    };
-
-    const detectMonths = (calendarPosts: any[]): number[] => {
-      const months = new Set<number>();
-      for (const p of calendarPosts || []) {
-        const dateStr = String((p as any)?.data || "");
-        const m = dateStr.match(/\b(\d{1,2})\/(\d{1,2})\b/);
-        if (!m) continue;
-        const monthNum = parseInt(String(m?.[2] || ""), 10);
-        if (!isNaN(monthNum) && monthNum >= 1 && monthNum <= 12) {
-          months.add(monthNum);
-        }
-      }
-      return Array.from(months).sort((a, b) => a - b);
-    };
-
-    const parsePostDate = (value: any): { day: number; month: number; year?: number } | null => {
-      const raw = String(value ?? "").trim();
-      if (!raw || ["undefined", "null", "none"].includes(raw.toLowerCase())) {
-        return null;
-      }
-
-      let match = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
-      if (match) {
-        return {
-          day: parseInt(match[3] || "", 10),
-          month: parseInt(match[2] || "", 10),
-          year: parseInt(match[1] || "", 10),
-        };
-      }
-
-      match = raw.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/);
-      if (!match) {
-        return null;
-      }
-
-      const day = parseInt(match[1] || "", 10);
-      const month = parseInt(match[2] || "", 10);
-      const yearValue = match[3] ? parseInt(match[3], 10) : undefined;
-      if (Number.isNaN(day) || Number.isNaN(month)) {
-        return null;
-      }
-
-      return { day, month, year: yearValue };
-    };
-
-    const buildExportDate = (day: number, monthNum: number, yearNum: number): string => {
-      return `${String(day).padStart(2, "0")}/${String(monthNum).padStart(2, "0")}/${yearNum}`;
-    };
-
-    const normalizePostsForExcelExport = (calendarPosts: any[], sourceMonthLabel: string): any[] => {
-      const fallbackMonthNum = parseMonthLabelToNumber(sourceMonthLabel) || parseMonthLabelToNumber(String(monthLabel)) || 1;
-      const fallbackYearNum = parseYearFromMonthLabel(
-        sourceMonthLabel,
-        parseInt(String(year), 10) || new Date().getFullYear()
-      );
-
-      return (Array.isArray(calendarPosts) ? calendarPosts : []).map((post: any) => {
-        const parsedDate = parsePostDate(post?.data);
-        const rawDay = post?.dia ?? post?.day;
-        const fallbackDay = parseInt(String(rawDay ?? ""), 10);
-
-        let normalizedDate = "";
-        if (parsedDate?.day && parsedDate?.month) {
-          normalizedDate = buildExportDate(
-            parsedDate.day,
-            parsedDate.month,
-            parsedDate.year || fallbackYearNum
-          );
-        } else if (!Number.isNaN(fallbackDay) && fallbackDay >= 1 && fallbackDay <= 31) {
-          normalizedDate = buildExportDate(fallbackDay, fallbackMonthNum, fallbackYearNum);
-        } else if (typeof post?.data === "string") {
-          normalizedDate = post.data;
-        }
-
-        return {
-          ...post,
-          data: normalizedDate,
-          _export_month: fallbackMonthNum,
-          _export_year: fallbackYearNum,
-        };
-      });
-    };
-
-    const baseMonthNum = parseMonthLabelToNumber(String(monthLabel)) || 1;
-    const baseYearNum = parseInt(String(year), 10) || new Date().getFullYear();
-    const requestedMonths = Array.isArray(monthsSelected) && monthsSelected.length > 0
-      ? monthsSelected
-        .map((mm) => parseInt(String(mm), 10))
-        .filter((mm) => !Number.isNaN(mm) && mm >= 1 && mm <= 12)
-        .sort((a, b) => a - b)
-      : [];
-    const monthsDetected = detectMonths(posts);
-    const monthsToExport = requestedMonths.length > 0 ? requestedMonths : monthsDetected;
-    let exportMonthLabel = String(monthLabel);
-
-    try {
-      const baseCount = Array.isArray(posts) ? posts.length : 0;
-      console.log(` [DEBUG] Export meses solicitados: ${JSON.stringify(monthsToExport)} | posts base=${baseCount}`);
-    } catch (_e) {
-      // ignore
-    }
-
-    // Merge posts dos outros meses selecionados (tolerante ao formato do campo mes no banco)
-    try {
-      const normalizedMonths = Array.isArray(monthsToExport)
-        ? monthsToExport
-          .map((mm) => parseInt(String(mm), 10))
-          .filter((mm) => !isNaN(mm) && mm >= 1 && mm <= 12)
-        : [];
-
-      console.log(` [DEBUG] Merge check: normalizedMonths=${JSON.stringify(normalizedMonths)}, cliente_id=${calendar.cliente_id || "NULL"}`);
-
-      const resolvedMonthLabels = new Map<number, string>();
-      const mergedPosts: any[] = [];
-
-      const appendExportPosts = (calendarPosts: any[], sourceMonthLabel: string) => {
-        const normalized = normalizePostsForExcelExport(calendarPosts, sourceMonthLabel);
-        if (normalized.length > 0) {
-          mergedPosts.push(...normalized);
-        }
-
-        const sourceMonthNum = parseMonthLabelToNumber(sourceMonthLabel);
-        if (sourceMonthNum && !resolvedMonthLabels.has(sourceMonthNum)) {
-          resolvedMonthLabels.set(sourceMonthNum, sourceMonthLabel);
-        }
-      };
-
-      const shouldUseRequestedMonths = normalizedMonths.length > 0;
-      const shouldIncludeBase = !shouldUseRequestedMonths || normalizedMonths.includes(baseMonthNum);
-
-      if (shouldIncludeBase) {
-        appendExportPosts(Array.isArray(posts) ? posts : [], String(monthLabel));
-      }
-
-      if (shouldUseRequestedMonths && calendar.cliente_id) {
-        console.log(` [DEBUG] Iniciando merge de ${normalizedMonths.length} meses para cliente_id=${calendar.cliente_id}`);
-
-        const monthSearchTokens = (monthNum: number): string[] => {
-          const n = Number(monthNum);
-          if (n == 3) return ["março", "marco"];
-          return [monthNamePt(n).toLowerCase()];
-        };
-
-        for (const m of normalizedMonths) {
-          if (m === baseMonthNum && shouldIncludeBase) continue;
-          const yNum = m < baseMonthNum && baseMonthNum >= 9 && m <= 4 ? baseYearNum + 1 : baseYearNum;
-          const label = `${monthNamePt(m)} ${yNum}`;
-
-          let other = await db.query(
-            "SELECT calendario_json, mes FROM calendarios WHERE cliente_id = $1 AND lower(mes) = lower($2) ORDER BY updated_at DESC NULLS LAST, criado_em DESC NULLS LAST LIMIT 1",
-            [calendar.cliente_id, label]
-          );
-
-          if (!other.rows?.length) {
-            const yearToken = String(yNum);
-            for (const token of monthSearchTokens(m)) {
-              other = await db.query(
-                "SELECT calendario_json, mes FROM calendarios WHERE cliente_id = $1 AND lower(mes) LIKE $2 AND lower(mes) LIKE $3 ORDER BY updated_at DESC NULLS LAST, criado_em DESC NULLS LAST LIMIT 1",
-                [calendar.cliente_id, `%${token}%`, `%${yearToken}%`]
-              );
-              if (other.rows?.length) break;
-            }
-          }
-
-          if (!other.rows?.length) {
-            for (const token of monthSearchTokens(m)) {
-              other = await db.query(
-                "SELECT calendario_json, mes FROM calendarios WHERE cliente_id = $1 AND lower(mes) LIKE $2 ORDER BY updated_at DESC NULLS LAST, criado_em DESC NULLS LAST LIMIT 1",
-                [calendar.cliente_id, `%${token}%`]
-              );
-              if (other.rows?.length) break;
-            }
-          }
-
-          if (!other.rows?.length) {
-            console.log(
-              ` [WARN] Não encontrei calendário para merge do cliente_id=${calendar.cliente_id} mes=${label} (tentativas: exact + like month/year + like month)`
-            );
-            continue;
-          }
-
-          console.log(
-            ` [DEBUG] Merge mês ${label}: encontrado mes='${String(other.rows?.[0]?.mes || "") }'`
-          );
-
-          const otherPosts = other.rows?.[0]?.calendario_json;
-          const sourceMonthLabel = String(other.rows?.[0]?.mes || label);
-          if (Array.isArray(otherPosts) && otherPosts.length > 0) {
-            console.log(
-              ` [DEBUG] Merge mês ${label}: adicionando ${otherPosts.length} posts (cliente_id=${calendar.cliente_id})`
-            );
-            appendExportPosts(otherPosts, sourceMonthLabel);
-          } else {
-            console.log(
-              ` [WARN] Merge mês ${label}: calendário encontrado mas sem posts (cliente_id=${calendar.cliente_id})`
-            );
-          }
-        }
-      }
-
-      if (mergedPosts.length > 0) {
-        posts = mergedPosts;
-      } else {
-        posts = normalizePostsForExcelExport(Array.isArray(posts) ? posts : [], String(monthLabel));
-      }
-
-      if (normalizedMonths.length > 0) {
-        const firstRequestedMonth = normalizedMonths[0] ?? baseMonthNum;
-        exportMonthLabel =
-          resolvedMonthLabels.get(firstRequestedMonth) ||
-          `${monthNamePt(firstRequestedMonth)} ${baseYearNum}`;
-      }
-
-      try {
-        const mergedCount = Array.isArray(posts) ? posts.length : 0;
-        console.log(` [DEBUG] Export merge finalizado: posts total=${mergedCount}`);
-      } catch (_e) {
-        // ignore
-      }
-    } catch (_e) {
-      // fallback
-    }
-
-    const safeClient = sanitizeFilePart(resolvedClientName || "Cliente") || "Cliente";
-    const safeMonth = (() => {
-      const normalized = Array.isArray(monthsToExport)
-        ? monthsToExport
-          .map((m) => parseInt(String(m), 10))
-          .filter((m) => !isNaN(m) && m >= 1 && m <= 12)
-          .sort((a, b) => a - b)
-        : [];
-
-      if (normalized.length >= 2) {
-        const startNum = normalized[0]!;
-        const endNum = normalized[normalized.length - 1]!;
-        const start = monthNamePt(startNum);
-        const end = monthNamePt(endNum);
-        return sanitizeFilePart(`${start}-${end}_${year}`);
-      }
-
-      return sanitizeFilePart(String(monthLabel).replace(/\s+/g, "_")) || "Mes";
-    })();
-
-    const backendDir = process.cwd();
-    const projectDir = path.resolve(backendDir, "..");
-    const pythonScript = path.resolve(backendDir, "python_gen", "calendar_to_excel.py");
-    const templatePreferred = path.resolve(projectDir, "calendario", "modelo final.xlsx");
-    const templateFallback = path.resolve(projectDir, "calendario", "CoreSport_Tri_2026.xlsx");
-    const templatePath = fs.existsSync(templatePreferred) ? templatePreferred : templateFallback;
-    console.log(` Template escolhido: ${templatePath}`);
-
-    const outputDir = path.resolve(projectDir, "calendario", "output");
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
-      console.log(` Diretório criado: ${outputDir}`);
-    }
-
-    const outputFileName = `${safeClient}_${safeMonth}.xlsx`;
-    const outputPath = path.join(outputDir, outputFileName);
-
-    console.log(` Executando Python script...`);
-    console.log(`  Script: ${pythonScript}`);
-    console.log(`  Template: ${templatePath}`);
-    console.log(`  Output: ${outputPath}`);
-
-    const pythonBin = process.env.PYTHON_BIN || "python3";
-    const postsPayload = JSON.stringify(posts);
-    const pythonProcess = spawn(
-      pythonBin,
-      [
-        pythonScript,
-        "--stdin",
-        templatePath,
-        outputPath,
-        resolvedClientName,
-        String(exportMonthLabel),
-        String(year),
-        String(periodo || ""),
-        JSON.stringify(monthsToExport),
-      ],
-      {
-        stdio: ["pipe", "pipe", "pipe"],
-      }
+    const jobResult = await db.query(
+      `INSERT INTO calendar_generation_jobs (cliente_id, status, payload)
+       VALUES ($1, 'pending', $2) RETURNING id`,
+      [clienteId, JSON.stringify({ jobType: 'excel', calendarId, clientName, monthsSelected })]
     );
 
-    let pythonOutput = "";
-    let pythonError = "";
-    let pythonStartFailed = false;
-
-    pythonProcess.on("error", (processError: any) => {
-      pythonStartFailed = true;
-      const details = processError?.message || String(processError);
-      console.error(` [ERROR] Falha ao iniciar processo Python: ${details}`);
-
-      if (!res.headersSent) {
-        res.status(500).json({
-          error: "Erro ao iniciar geracao do Excel",
-          details,
-        });
-      }
-    });
-
-    pythonProcess.stdout.on("data", (data: any) => {
-      const output = data.toString();
-      pythonOutput += output;
-      console.log(`[PYTHON] ${output.trim()}`);
-    });
-
-    pythonProcess.stderr.on("data", (data: any) => {
-      const error = data.toString();
-      pythonError += error;
-      console.error(`[PYTHON ERROR] ${error.trim()}`);
-    });
-
-    pythonProcess.stdin?.on("error", (stdinError: any) => {
-      const details = stdinError?.message || String(stdinError);
-      pythonError += `${details}\n`;
-      console.error(` [ERROR] Falha ao enviar payload para o Python: ${details}`);
-    });
-
-    pythonProcess.stdin?.end(postsPayload);
-
-    pythonProcess.on("close", async (code: any) => {
-      if (pythonStartFailed || res.headersSent) {
-        return;
-      }
-
-      if (code === 0) {
-        console.log(` [SUCCESS] Python script executado com sucesso`);
-        if (fs.existsSync(outputPath)) {
-          console.log(` Arquivo Excel criado: ${outputPath}`);
-
-          // --- NOVO: Gravar no histórico de entregas ---
-          try {
-            const clienteId = result.rows[0].cliente_id;
-            if (clienteId) {
-              const deliveryTimestamp = Date.now();
-              // Pasta permanente: storage/deliveries/excel/CLIENT_ID/TIMESTAMP/filename
-              const deliveriesDir = path.resolve(backendDir, "..", "storage", "deliveries", "excel", String(clienteId), String(deliveryTimestamp));
-
-              if (!fs.existsSync(deliveriesDir)) {
-                fs.mkdirSync(deliveriesDir, { recursive: true });
-              }
-
-              const permanentPath = path.join(deliveriesDir, outputFileName);
-              fs.copyFileSync(outputPath, permanentPath);
-
-              const savedUrl = `/storage/deliveries/excel/${clienteId}/${deliveryTimestamp}/${outputFileName}`;
-
-              await db.query(
-                `INSERT INTO presentations (cliente_id, titulo, arquivos, dados_json, tipo, metadata)
-                 VALUES ($1, $2, $3, $4, $5, $6)`,
-                [
-                  clienteId,
-                  `Excel: ${outputFileName}`,
-                  JSON.stringify([savedUrl]),
-                  JSON.stringify(posts),
-                  'excel',
-                  JSON.stringify({
-                    months: monthsToExport,
-                    year,
-                    generatedAt: new Date().toISOString()
-                  })
-                ]
-              );
-              console.log(` [SUCCESS] Entrega Excel registrada no banco para cliente ${clienteId}`);
-            }
-          } catch (historyErr) {
-            console.error(` [ERROR] Falha ao registrar entrega no histórico:`, historyErr);
-          }
-          // --------------------------------------------
-
-          res.download(outputPath, outputFileName, (err: any) => {
-            if (err) {
-              console.error(` [ERROR] Erro ao enviar arquivo: ${err}`);
-              if (!res.headersSent) {
-                res.status(500).json({ error: "Erro ao enviar arquivo" });
-              }
-            } else {
-              console.log(` [SUCCESS] Arquivo enviado para download`);
-            }
-          });
-        } else {
-          console.error(` [ERROR] Arquivo não foi criado: ${outputPath}`);
-          res.status(500).json({ error: "Arquivo Excel não foi gerado", details: pythonOutput });
-        }
-      } else {
-        console.error(` [ERROR] Python script falhou com código: ${code}`);
-        res.status(500).json({ error: "Erro ao gerar Excel", details: pythonError || pythonOutput });
-      }
-    });
-
-    return;
+    res.status(202).json({ jobId: jobResult.rows[0].id });
   } catch (error: any) {
-    console.error(" [ERRO FATAL] Erro ao exportar Excel:", error);
-    res.status(500).json({
-      error: "Falha interna ao exportar Excel.",
-      details: error?.message || String(error),
-    });
-    return;
+    console.error(" [ERRO] Erro ao criar job de Excel:", error);
+    res.status(500).json({ error: "Falha ao criar job de exportação.", details: error?.message });
   }
 });
+
+
 
 export default router;

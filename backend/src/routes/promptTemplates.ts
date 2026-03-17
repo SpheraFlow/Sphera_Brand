@@ -238,9 +238,9 @@ router.post("/prompt-templates", async (req: Request, res: Response) => {
     const isGlobal = clienteId === null;
     const versionResult = await db.query(
       isGlobal
-        ? "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id IS NULL"
-        : "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id = $1",
-      isGlobal ? [] : [clienteId]
+        ? "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id IS NULL AND agent_id = $1"
+        : "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id = $1 AND agent_id = $2",
+      isGlobal ? [agentId] : [clienteId, agentId]
     );
     const nextVersion = versionResult.rows[0].next_version;
     const autoLabel = label || `v${nextVersion} - ${isGlobal ? "Global" : "Customizado"}`;
@@ -274,21 +274,22 @@ router.post("/prompt-templates/predefined", async (req: Request, res: Response) 
     // 1. Desativar templates antigas deste agente no mesmo escopo (global ou cliente)
     if (clienteId) {
       await client.query(
-        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id = $1 AND is_active = true",
-        [clienteId]
+        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id = $1 AND agent_id = $2 AND is_active = true",
+        [clienteId, agentId]
       );
     } else {
       await client.query(
-        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id IS NULL AND is_active = true"
+        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id IS NULL AND agent_id = $1 AND is_active = true",
+        [agentId]
       );
     }
 
     // 2. Determinar a próxima versão no mesmo escopo
     const versionResult = await client.query(
       clienteId
-        ? "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id = $1"
-        : "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id IS NULL",
-      clienteId ? [clienteId] : []
+        ? "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id = $1 AND agent_id = $2"
+        : "SELECT COALESCE(MAX(version), 0) + 1 AS next_version FROM prompt_templates WHERE cliente_id IS NULL AND agent_id = $1",
+      clienteId ? [clienteId, agentId] : [agentId]
     );
     const nextVersion = versionResult.rows[0].next_version;
 
@@ -344,15 +345,16 @@ router.post("/prompt-templates/:id/activate", async (req: Request, res: Response
     }
     // ───────────────────────────────────────────────────────────────────
     // Desativa qualquer persona ativa no mesmo escopo para manter uma escolha unica por cliente/global
+    const scopeAgentId = template.agent_id || "estrategista";
     if (template.cliente_id) {
       await client.query(
-        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id = $1 AND id <> $2",
-        [template.cliente_id, id]
+        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id = $1 AND agent_id = $2 AND id <> $3",
+        [template.cliente_id, scopeAgentId, id]
       );
     } else {
       await client.query(
-        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id IS NULL AND id <> $1",
-        [id]
+        "UPDATE prompt_templates SET is_active = false, updated_at = NOW() WHERE cliente_id IS NULL AND agent_id = $1 AND id <> $2",
+        [scopeAgentId, id]
       );
     }
 

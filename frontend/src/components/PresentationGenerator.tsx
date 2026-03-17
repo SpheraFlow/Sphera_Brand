@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useState } from 'react';
 import api, { jobsService, presentationService } from '../services/api';
+import PresentationChatAgent from './PresentationChatAgent';
 import { useParams } from 'react-router-dom';
 import VisualSlideEditor from './VisualSlideEditor';
 import SlideEditorModal from './SlideEditorModal';
@@ -126,6 +127,9 @@ export default function PresentationGenerator() {
   const [history, setHistory] = useState<any[]>([]);
   const [presentationJobId, setPresentationJobId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [isPdfGenerating, setIsPdfGenerating] = useState(false);
+  const [pdfProgress, setPdfProgress] = useState(0);
+  const [showChatAgent, setShowChatAgent] = useState(false);
 
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [selectedMonths, setSelectedMonths] = useState<string[]>([]);
@@ -536,6 +540,8 @@ export default function PresentationGenerator() {
 
   const handlePdfDownload = async () => {
     if (!generatedImages.length) return;
+    setIsPdfGenerating(true);
+    setPdfProgress(0);
     try {
       const { jsPDF } = await import('jspdf');
       const firstRes = await fetch(resolveAssetUrl(generatedImages[0]));
@@ -563,11 +569,15 @@ export default function PresentationGenerator() {
         if (isLinkSlide && linkCta.url?.trim()) {
           pdf.link(0, 0, imgW, imgH, { url: linkCta.url.trim() });
         }
+        setPdfProgress(Math.round(((index + 1) / generatedImages.length) * 100));
       }
       pdf.save(`laminas_${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (error) {
       console.error(error);
       alert('Erro ao gerar PDF. Tente novamente.');
+    } finally {
+      setIsPdfGenerating(false);
+      setPdfProgress(0);
     }
   };
 
@@ -740,6 +750,14 @@ export default function PresentationGenerator() {
             className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-bold transition-colors disabled:opacity-50 text-sm"
           >
             {aiLoading ? 'Iniciando...' : 'Preencher com IA'}
+          </button>
+          <button
+            onClick={() => setShowChatAgent(true)}
+            disabled={visualMode || isPresentationJobActive}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold transition-colors disabled:opacity-50 text-sm"
+            title="A IA faz perguntas e preenche as lâminas com base nas suas respostas"
+          >
+            💬 Guiar com Chat
           </button>
           <button
             onClick={handleGenerate}
@@ -1017,9 +1035,10 @@ export default function PresentationGenerator() {
                 <div className="flex gap-2">
                   <button
                     onClick={handlePdfDownload}
-                    className="bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded-lg font-bold transition-colors text-xs"
+                    disabled={isPdfGenerating}
+                    className="bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded-lg font-bold transition-colors text-xs disabled:opacity-60 disabled:cursor-not-allowed"
                   >
-                    Baixar PDF
+                    {isPdfGenerating ? `⏳ PDF ${pdfProgress}%` : 'Baixar PDF'}
                   </button>
                   <button
                     onClick={handleBatchDownload}
@@ -1094,6 +1113,22 @@ export default function PresentationGenerator() {
           slideData={editingSlide.data}
           onSave={handleSaveSlideEdit}
         />
+      )}
+
+      {showChatAgent && (
+        <div className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-800 border border-gray-700 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: '90vh' }}>
+            <PresentationChatAgent
+              clientId={clientId!}
+              months={selectedMonths}
+              onContentReady={(content) => {
+                applyGeneratedContent(content);
+                setShowChatAgent(false);
+              }}
+              onClose={() => setShowChatAgent(false)}
+            />
+          </div>
+        </div>
       )}
 
     </div>

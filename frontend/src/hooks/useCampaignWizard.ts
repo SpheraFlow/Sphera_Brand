@@ -29,6 +29,7 @@ export interface CampaignWizardState {
     selectedDateIds: string[];
     produtosFocoIds: string[];
     carouselSlideCount: string; // "auto" or numeric string (e.g. "5")
+    monthlyBriefings: Record<string, { briefing: string; monthReferences: string }>;
 }
 
 const INITIAL_STATE: CampaignWizardState = {
@@ -41,7 +42,8 @@ const INITIAL_STATE: CampaignWizardState = {
     importantDates: '',
     selectedDateIds: [],
     produtosFocoIds: [],
-    carouselSlideCount: 'auto'
+    carouselSlideCount: 'auto',
+    monthlyBriefings: {}
 };
 
 export function useCampaignWizard() {
@@ -129,6 +131,17 @@ export function useCampaignWizard() {
         setData(prev => ({ ...prev, monthlyMix: null }));
     };
 
+    /** Atualiza o briefing de um mês específico */
+    const updateMonthlyBriefing = (month: string, field: 'briefing' | 'monthReferences', value: string) => {
+        setData(prev => ({
+            ...prev,
+            monthlyBriefings: {
+                ...prev.monthlyBriefings,
+                [month]: { ...(prev.monthlyBriefings[month] || { briefing: '', monthReferences: '' }), [field]: value }
+            }
+        }));
+    };
+
     /** Retorna o mix efetivo para um mês (respeitando modo global ou por mês) */
     const getMixForMonth = (month: string): ContentMix => {
         if (data.monthlyMix && data.monthlyMix[month]) {
@@ -137,23 +150,14 @@ export function useCampaignWizard() {
         return data.mix;
     };
 
-    const nextStep = () => setCurrentStep(p => Math.min(4, p + 1));
+    const nextStep = () => setCurrentStep(p => Math.min(3, p + 1));
     const prevStep = () => setCurrentStep(p => Math.max(1, p - 1));
 
     const validateStep = (step: number): boolean => {
         switch (step) {
             case 1:
-                return !!data.goal && data.selectedMonths.length > 0;
+                return data.selectedMonths.length > 0 && Object.values(data.mix).some(v => v > 0);
             case 2:
-                if (data.monthlyMix) {
-                    // Todos os meses devem ter pelo menos 1 post
-                    return data.selectedMonths.every(m => {
-                        const mix = data.monthlyMix![m] || data.mix;
-                        return Object.values(mix).some(v => v > 0);
-                    });
-                }
-                return Object.values(data.mix).some(v => v > 0);
-            case 3:
                 return !!data.briefing && data.briefing.length > 10;
             default:
                 return true;
@@ -177,6 +181,7 @@ export function useCampaignWizard() {
         enableMonthlyMode,
         disableMonthlyMode,
         getMixForMonth,
+        updateMonthlyBriefing,
         nextStep,
         prevStep,
         validateStep,

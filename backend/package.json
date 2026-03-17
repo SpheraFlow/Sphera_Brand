@@ -19,7 +19,8 @@
     "migrate:calendar-items": "ts-node db/migrate_calendar_items.ts",
     "migrate:prompt-agent": "ts-node db/migrate_prompt_agent.ts",
     "migrate:prompt-indices": "ts-node db/migrate_prompt_indices.ts",
-    "migrate:all": "npm run migrate:branding && npm run migrate:calendarios && npm run migrate:contexto && npm run migrate:jobs && npm run migrate:prompt-templates && npm run migrate:prompt-templates-v2 && npm run migrate:calendar-items && npm run migrate:prompt-agent && npm run migrate:prompt-indices",
+    "migrate:clientes-agent": "ts-node db/migrate_clientes_agent_id.ts",
+    "migrate:all": "npm run migrate:branding && npm run migrate:calendarios && npm run migrate:contexto && npm run migrate:jobs && npm run migrate:prompt-templates && npm run migrate:prompt-templates-v2 && npm run migrate:calendar-items && npm run migrate:prompt-agent && npm run migrate:prompt-indices && npm run migrate:clientes-agent",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

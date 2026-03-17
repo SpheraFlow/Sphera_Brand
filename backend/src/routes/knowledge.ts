@@ -388,7 +388,7 @@ router.post("/branding/extract", (req: Request, res: Response, next: NextFunctio
     let result;
     let responseText = "";
 
-    const modelsToTry = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"];
+    const modelsToTry = ["gemini-3-flash-preview", "gemini-2.5-flash"];
 
     const prompt = `Analise estas imagens visualmente. Aja como um especialista de branding e retorne APENAS um JSON válido (sem markdown) com esta estrutura exata:
 
@@ -485,7 +485,7 @@ router.post("/test-ai", async (_req: Request, res: Response): Promise<void> => {
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     const prompt = `Analise estas imagens visualmente. Aja como um especialista de branding.
 

@@ -14,6 +14,7 @@ if (!_rawBaseURL) {
 }
 
 const baseURL = _rawBaseURL || 'http://localhost:3001/api';
+export const apiOrigin = baseURL.replace(/\/api$/, '');
 
 console.log('🔧 API Base URL configurada:', baseURL);
 
@@ -187,7 +188,8 @@ export const calendarService = {
     produtosFocoIds?: string[],
     monthsToGenerate?: string[],
     monthlyMix?: Record<string, { reels: number; static: number; carousel: number; stories: number; photos?: number }>,
-    formatInstructions?: Record<string, string>
+    formatInstructions?: Record<string, string>,
+    monthlyBriefings?: Record<string, { briefing: string; monthReferences: string }>
   ): Promise<GenerateCalendarResponse> {
     const response = await api.post('/generate-calendar', {
       clienteId,
@@ -198,7 +200,8 @@ export const calendarService = {
       produtosFocoIds,
       monthsToGenerate,
       monthlyMix,
-      formatInstructions
+      formatInstructions,
+      monthlyBriefings: monthlyBriefings && Object.keys(monthlyBriefings).length > 0 ? monthlyBriefings : undefined
     }, {
       timeout: 120000
     });
@@ -661,6 +664,60 @@ export const datasComemorvativasService = {
       return Number(b.relevancia || 0) - Number(a.relevancia || 0);
     });
   }
+};
+
+export interface BriefingChatMessage {
+  role: 'user' | 'model';
+  content: string;
+}
+
+export interface BriefingChatResponse {
+  reply: string;
+  done: boolean;
+  briefing?: string;
+}
+
+export interface PresentationChatMessage {
+  role: 'user' | 'model';
+  content: string;
+}
+
+export interface PresentationChatResponse {
+  reply: string;
+  done: boolean;
+  content?: any;
+}
+
+export const presentationChatAgentService = {
+  async chat(
+    clientId: string,
+    messages: PresentationChatMessage[],
+    months: string[]
+  ): Promise<PresentationChatResponse> {
+    const response = await api.post('/presentation/chat-agent', { clientId, messages, months });
+    return response.data;
+  },
+};
+
+export const briefingAgentService = {
+  async chat(
+    clientId: string,
+    messages: BriefingChatMessage[],
+    campaignContext: {
+      goal: string;
+      selectedMonths: string[];
+      contentMix?: string;
+      commemorativeDates?: string;
+      restrictions?: string;
+    }
+  ): Promise<BriefingChatResponse> {
+    const response = await api.post('/briefing-agent/chat', {
+      clientId,
+      messages,
+      campaignContext,
+    });
+    return response.data;
+  },
 };
 
 export default api;

@@ -83,7 +83,7 @@ export async function groundedSuggestDatas(params: {
   const model = vertexAI.preview.getGenerativeModel({
     // Nomes de modelo no Vertex diferem do SDK "@google/generative-ai".
     // Este é amplamente disponível e rápido.
-    model: process.env.VERTEX_GEMINI_MODEL || "gemini-1.5-flash-002",
+    model: process.env.VERTEX_GEMINI_MODEL || "gemini-2.5-flash",
     generationConfig: {
       maxOutputTokens: 1024,
       temperature: 0.4,

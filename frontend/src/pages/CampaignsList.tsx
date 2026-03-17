@@ -31,6 +31,7 @@ export default function CampaignsList() {
     const [loading, setLoading] = useState(true);
     const [calendars, setCalendars] = useState<CalendarSummary[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
+    const [showCreateModal, setShowCreateModal] = useState(false);
 
     useEffect(() => {
         if (clientId) {
@@ -91,7 +92,7 @@ export default function CampaignsList() {
                     <p className="text-gray-400">Histórico de calendários editoriais criados pela IA</p>
                 </div>
                 <button
-                    onClick={() => navigate(`/client/${clientId}/campaigns/new`)}
+                    onClick={() => setShowCreateModal(true)}
                     className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all flex items-center gap-2 shadow-lg shadow-blue-900/20"
                 >
                     <Plus className="w-4 h-4" />
@@ -178,11 +179,59 @@ export default function CampaignsList() {
                         Crie sua primeira campanha editorial com IA e os calendários aparecerão aqui.
                     </p>
                     <button
-                        onClick={() => navigate(`/client/${clientId}/campaigns/new`)}
+                        onClick={() => setShowCreateModal(true)}
                         className="bg-blue-600 hover:bg-blue-500 text-white px-8 py-3 rounded-xl font-bold transition-all shadow-lg hover:shadow-blue-500/20"
                     >
-                        Criar Campanha Inteligente
+                        Criar Campanha
                     </button>
+                </div>
+            )}
+
+            {/* Modal de seleção de modo */}
+            {showCreateModal && (
+                <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+                    <div className="bg-gray-800 border border-gray-700 rounded-2xl p-8 w-full max-w-lg shadow-2xl">
+                        <h2 className="text-2xl font-bold text-white mb-2">Nova Campanha</h2>
+                        <p className="text-gray-400 text-sm mb-8">Como você prefere criar o briefing desta campanha?</p>
+
+                        <div className="grid grid-cols-1 gap-4">
+                            {/* Card IA */}
+                            <button
+                                onClick={() => navigate(`/client/${clientId}/campaigns/new?mode=ai`)}
+                                className="group flex items-start gap-4 bg-blue-600/10 hover:bg-blue-600/20 border border-blue-500/30 hover:border-blue-500/60 rounded-xl p-5 text-left transition-all"
+                            >
+                                <div className="w-12 h-12 bg-blue-600/20 rounded-xl flex items-center justify-center shrink-0 text-2xl group-hover:scale-110 transition-transform">
+                                    🤖
+                                </div>
+                                <div>
+                                    <div className="font-bold text-white mb-1">Criar com IA</div>
+                                    <div className="text-sm text-gray-400">O agente conduz uma entrevista estratégica e monta o briefing automaticamente para você</div>
+                                    <div className="mt-2 text-xs text-blue-400 font-medium">Recomendado ✦</div>
+                                </div>
+                            </button>
+
+                            {/* Card Manual */}
+                            <button
+                                onClick={() => navigate(`/client/${clientId}/campaigns/new?mode=manual`)}
+                                className="group flex items-start gap-4 bg-gray-700/30 hover:bg-gray-700/50 border border-gray-600/50 hover:border-gray-500 rounded-xl p-5 text-left transition-all"
+                            >
+                                <div className="w-12 h-12 bg-gray-700/50 rounded-xl flex items-center justify-center shrink-0 text-2xl group-hover:scale-110 transition-transform">
+                                    ✏️
+                                </div>
+                                <div>
+                                    <div className="font-bold text-white mb-1">Escrever manualmente</div>
+                                    <div className="text-sm text-gray-400">Preencha o briefing você mesmo com controle total sobre cada campo</div>
+                                </div>
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={() => setShowCreateModal(false)}
+                            className="mt-6 w-full text-sm text-gray-500 hover:text-gray-300 transition-colors"
+                        >
+                            Cancelar
+                        </button>
+                    </div>
                 </div>
             )}
 

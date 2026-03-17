@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useJobsList } from '../hooks/useJobsList';
 import JobProgressModal from '../components/Jobs/JobProgressModal';
-import { jobsService } from '../services/api';
+import { jobsService, apiOrigin } from '../services/api';
 
 interface Job {
     id: string;
@@ -73,6 +73,16 @@ export default function JobsPage() {
             case 'processing': return <Loader2 className="w-5 h-5 text-blue-400 animate-spin" />;
             default: return <Clock className="w-5 h-5 text-gray-500" />;
         }
+    };
+
+    const getJobTypeLabel = (job: Job) => {
+        const type = job.payload?.jobType || 'calendar';
+        const map: Record<string, string> = {
+            calendar: '📅 Calendário',
+            presentation: '🎞️ Lâminas',
+            excel: '📊 Excel',
+        };
+        return map[type] || '⚙️ Tarefa';
     };
 
     const getStatusLabel = (status: string) => {
@@ -140,7 +150,7 @@ export default function JobsPage() {
                                 <tr key={job.id} className="hover:bg-gray-700/30 transition-colors">
                                     <td className="p-4">
                                         <div className="font-mono text-xs text-gray-400 mb-1">{job.id.substring(0, 8)}...</div>
-                                        <div className="font-medium text-white">Geração de Calendário</div>
+                                        <div className="font-medium text-white">{getJobTypeLabel(job)}</div>
                                     </td>
                                     <td className="p-4 text-gray-300">
                                         {new Date(job.created_at).toLocaleString()}
@@ -169,6 +179,18 @@ export default function JobsPage() {
                                     </td>
                                     <td className="p-4 text-right">
                                         <div className="flex items-center justify-end gap-2">
+                                            {(job.status === 'succeeded' || job.status === 'completed') &&
+                                              job.payload?.jobType === 'excel' &&
+                                              job.payload?.result?.downloadUrl && (
+                                                <a
+                                                    href={`${apiOrigin}${job.payload.result.downloadUrl}`}
+                                                    download={job.payload?.result?.fileName || 'calendario.xlsx'}
+                                                    className="p-1.5 rounded bg-green-500/10 hover:bg-green-500/20 text-green-400 hover:text-green-300 transition-colors text-xs font-medium"
+                                                    title="Baixar Excel"
+                                                >
+                                                    📥
+                                                </a>
+                                            )}
                                             <button
                                                 className="text-blue-400 hover:text-blue-300 font-medium text-xs hover:underline"
                                                 onClick={() => setSelectedJobId(job.id)}

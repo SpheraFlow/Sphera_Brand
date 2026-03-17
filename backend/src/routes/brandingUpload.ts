@@ -212,7 +212,7 @@ Retorne APENAS um JSON válido (sem markdown, sem explicações extras):
       
       // Tentar primeiro com 2.0-flash-exp, depois fallback para 1.5-flash
       let model;
-      let modelName = "gemini-1.5-flash"; // Usando o mais estável
+      let modelName = "gemini-3-flash-preview";
       
       try {
         model = genAI.getGenerativeModel({ model: modelName });

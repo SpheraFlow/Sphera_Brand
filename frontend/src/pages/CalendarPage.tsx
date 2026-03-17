@@ -5,7 +5,7 @@ import ContentMixSelector from '../components/ContentMixSelector';
 import PhotoIdeasModal from '../components/PhotoIdeasModal';
 import JobProgressPanel from '../components/Jobs/JobProgressPanel';
 
-import api, { jobsService, calendarItemsService, CalendarItem, CalendarItemStatus } from '../services/api';
+import api, { jobsService, calendarItemsService, apiOrigin, CalendarItem, CalendarItemStatus } from '../services/api';
 import { useJobPolling } from '../hooks/useJobPolling';
 import {
   format,
@@ -186,6 +186,7 @@ export default function CalendarPage() {
 
   // Estado do Job (Async Generation)
   const [pendingJobId, setPendingJobId] = useState<string | null>(null);
+  const [pendingExcelJobId, setPendingExcelJobId] = useState<string | null>(null);
   // Controla o polling (painel renderizado sempre que há job ativo ou recém-finalizado)
 
   // Estados para geração
@@ -229,6 +230,7 @@ export default function CalendarPage() {
   const [monthReferences, setMonthReferences] = useState('');
   const [monthImages, setMonthImages] = useState<string[]>([]); // URLs das imagens
   const [showMonthReferencesModal, setShowMonthReferencesModal] = useState(false);
+  const [monthlyBriefings, setMonthlyBriefings] = useState<Record<string, { briefing: string; monthReferences: string }>>({});
 
   useEffect(() => {
     if (clientId) {
@@ -400,6 +402,31 @@ export default function CalendarPage() {
     onCancel: handleJobCancelCallback,
   });
 
+  const { job: excelJob } = useJobPolling({
+    clientId: clientId || '',
+    jobId: pendingExcelJobId,
+    enabled: !!pendingExcelJobId && !!clientId,
+    onSuccess: (result) => {
+      if (result?.downloadUrl) {
+        const apiBase = apiOrigin;
+        const link = document.createElement('a');
+        link.href = `${apiBase}${result.downloadUrl}`;
+        link.setAttribute('download', result.fileName || 'calendario.xlsx');
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+    },
+  });
+
+  const handleExcelJobCancelBtn = async () => {
+    if (!pendingExcelJobId || !clientId) return;
+    try {
+      await jobsService.cancelJob(clientId, pendingExcelJobId);
+    } catch (_) {}
+    setPendingExcelJobId(null);
+  };
+
   const handleJobRetryBtn = async () => {
     if (!pendingJobId || !clientId) return;
     try {
@@ -489,35 +516,18 @@ export default function CalendarPage() {
       setIsGenerating(true);
 
       const downloadClientName = clientName || 'Cliente';
-      const suffix = getExcelFilenameSuffix(exportMonthsSelected);
-      const safeMonth = String(suffix || String(calendar.mes || 'mes')).replace(/\s+/g, '_');
+      const response = await api.post('/calendars/export-excel', {
+        calendarId: calendar.id,
+        clientName: downloadClientName,
+        monthsSelected: exportMonthsSelected,
+      });
 
-      const response = await api.post(
-        '/calendars/export-excel',
-        {
-          calendarId: calendar.id,
-          clientName: downloadClientName,
-          monthsSelected: exportMonthsSelected
-        },
-        {
-          responseType: 'blob'
-        }
-      );
-
-      // Download do arquivo Excel
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `${downloadClientName}_${safeMonth}.xlsx`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-
-      alert('✅ Calendário Excel gerado com sucesso!');
+      const { jobId } = response.data;
+      setPendingExcelJobId(jobId);
+      setShowExportModal(false);
     } catch (err: any) {
-      console.error('Erro ao gerar Excel:', err);
-      alert('Erro ao gerar Excel: ' + (err.response?.data?.error || err.message));
+      console.error('Erro ao iniciar exportação Excel:', err);
+      alert('Erro ao iniciar exportação: ' + (err.response?.data?.error || err.message));
     } finally {
       setIsGenerating(false);
       setShowExportModal(false);
@@ -573,28 +583,6 @@ export default function CalendarPage() {
     return monthNames[monthNum - 1] || `Mês ${monthNum}`;
   };
 
-  const getExcelFilenameSuffix = (monthsSelected: number[]) => {
-    const normalized = (Array.isArray(monthsSelected) ? monthsSelected : [])
-      .map((m) => parseInt(String(m), 10))
-      .filter((m) => !isNaN(m) && m >= 1 && m <= 12)
-      .sort((a, b) => a - b);
-
-    const yearMatch = String(calendar?.mes || '').match(/(\d{4})/);
-    const yearStr = yearMatch?.[1] || '';
-
-    if (normalized.length >= 2) {
-      const start = getMonthName(normalized[0]);
-      const end = getMonthName(normalized[normalized.length - 1]);
-      return `${start}-${end}${yearStr ? `_${yearStr}` : ''}`;
-    }
-
-    if (normalized.length === 1) {
-      return `${getMonthName(normalized[0])}${yearStr ? `_${yearStr}` : ''}`;
-    }
-
-    const safeMonth = String(calendar?.mes || 'mes').replace(/\s+/g, '_');
-    return safeMonth;
-  };
 
   const parseMonthLabelToNumber = (label: string): number | null => {
     return parseMonthLabelTokenToNumber(label);
@@ -719,6 +707,7 @@ export default function CalendarPage() {
         chainId: selectedChainId || undefined,
         formatInstructions,
         monthReferences,
+        monthlyBriefings: Object.keys(monthlyBriefings).length > 0 ? monthlyBriefings : undefined,
       });
 
       const { jobId } = response.data;
@@ -735,6 +724,7 @@ export default function CalendarPage() {
       setBriefing('');
       setGenerationPrompt('');
       setSpecificMonths([]);
+      setMonthlyBriefings({});
       setMix({
         reels: 0,
         static: 0,
@@ -1196,6 +1186,8 @@ export default function CalendarPage() {
             promptChains={promptChains}
             selectedChainId={selectedChainId}
             setSelectedChainId={setSelectedChainId}
+            monthlyBriefings={monthlyBriefings}
+            setMonthlyBriefings={setMonthlyBriefings}
             isGenerating={isGenerating}
             onGenerate={generateCalendar}
             onClose={() => setShowGenerateModal(false)}
@@ -1210,6 +1202,18 @@ export default function CalendarPage() {
               onCancel={handleJobCancelBtn}
               onRetry={handleJobRetryBtn}
               onDismissPanel={() => setPendingJobId(null)}
+            />
+          </div>
+        )}
+
+        {/* Painel de Progresso do Excel */}
+        {pendingExcelJobId && clientId && excelJob && (
+          <div className="w-full max-w-4xl mt-6">
+            <JobProgressPanel
+              job={excelJob}
+              title="📊 Exportando Excel..."
+              onCancel={handleExcelJobCancelBtn}
+              onDismissPanel={() => setPendingExcelJobId(null)}
             />
           </div>
         )}
@@ -1236,6 +1240,18 @@ export default function CalendarPage() {
             onCancel={handleJobCancelBtn}
             onDismissPanel={() => setPendingJobId(null)}
           />
+        )}
+
+        {/* Painel de Progresso do Excel — branch com calendário */}
+        {pendingExcelJobId && clientId && excelJob && (
+          <div className="mb-4">
+            <JobProgressPanel
+              job={excelJob}
+              title="📊 Exportando Excel..."
+              onCancel={handleExcelJobCancelBtn}
+              onDismissPanel={() => setPendingExcelJobId(null)}
+            />
+          </div>
         )}
 
         {/* Header */}
@@ -1542,6 +1558,8 @@ export default function CalendarPage() {
             promptChains={promptChains}
             selectedChainId={selectedChainId}
             setSelectedChainId={setSelectedChainId}
+            monthlyBriefings={monthlyBriefings}
+            setMonthlyBriefings={setMonthlyBriefings}
             isGenerating={isGenerating}
             onGenerate={generateCalendar}
             onClose={() => setShowGenerateModal(false)}
@@ -1746,6 +1764,8 @@ export default function CalendarPage() {
             promptChains={promptChains}
             selectedChainId={selectedChainId}
             setSelectedChainId={setSelectedChainId}
+            monthlyBriefings={monthlyBriefings}
+            setMonthlyBriefings={setMonthlyBriefings}
             isGenerating={isGenerating}
             onGenerate={generateCalendar}
             onClose={() => setShowGenerateModal(false)}
@@ -2222,6 +2242,8 @@ interface GenerateModalProps {
   promptChains: any[];
   selectedChainId: string;
   setSelectedChainId: (v: string) => void;
+  monthlyBriefings: Record<string, { briefing: string; monthReferences: string }>;
+  setMonthlyBriefings: (v: Record<string, { briefing: string; monthReferences: string }>) => void;
   isGenerating: boolean;
   onGenerate: () => void;
   onClose: () => void;
@@ -2238,11 +2260,14 @@ function GenerateModal({
   promptChains,
   selectedChainId,
   setSelectedChainId,
+  monthlyBriefings, setMonthlyBriefings,
   isGenerating,
   onGenerate, onClose
 }: GenerateModalProps) {
   const [showAdvancedPrompt, setShowAdvancedPrompt] = useState(false);
   const [showFormatInstructions, setShowFormatInstructions] = useState(false);
+  const [showMonthlyBriefings, setShowMonthlyBriefings] = useState(false);
+  const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
 
   const monthsOptions = Array.from({ length: 12 }).map((_, i) => {
     const date = addMonths(baseMonthDate, i);
@@ -2331,6 +2356,75 @@ function GenerateModal({
               className="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 min-h-[120px]"
             />
           </div>
+
+          {/* Briefing por Mês — só aparece quando 2+ meses selecionados */}
+          {specificMonths.length > 1 && (
+            <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-4 space-y-3">
+              <button
+                type="button"
+                onClick={() => setShowMonthlyBriefings(!showMonthlyBriefings)}
+                className="w-full flex items-center justify-between text-left"
+              >
+                <span className="text-sm font-semibold text-gray-200 flex items-center gap-2">
+                  📅 Briefing por Mês
+                  <span className="text-[11px] text-gray-500 font-normal">(opcional)</span>
+                </span>
+                <span className="text-xs text-gray-400">
+                  {showMonthlyBriefings ? 'Esconder' : 'Mostrar'}
+                </span>
+              </button>
+
+              {showMonthlyBriefings && (
+                <div className="space-y-2 pt-1">
+                  <p className="text-[11px] text-gray-500">
+                    Adicione instruções específicas para cada mês. Serão combinadas ao briefing global acima.
+                  </p>
+                  {specificMonths.map((mes) => {
+                    const isExpanded = expandedMonths[mes] ?? false;
+                    const mb = monthlyBriefings[mes] || { briefing: '', monthReferences: '' };
+                    const hasContent = mb.briefing.trim() || mb.monthReferences.trim();
+                    return (
+                      <div key={mes} className="border border-gray-700 rounded-lg overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedMonths(prev => ({ ...prev, [mes]: !isExpanded }))}
+                          className="w-full flex items-center justify-between px-4 py-3 text-left bg-gray-700/40 hover:bg-gray-700/60 transition-colors"
+                        >
+                          <span className="text-sm font-medium text-gray-200 capitalize flex items-center gap-2">
+                            {mes}
+                            {hasContent && <span className="text-[10px] text-blue-400 font-normal">● configurado</span>}
+                          </span>
+                          <span className="text-xs text-gray-500">{isExpanded ? '▲' : '▼'}</span>
+                        </button>
+                        {isExpanded && (
+                          <div className="px-4 py-3 space-y-3 bg-gray-800/40">
+                            <div>
+                              <label className="block text-[11px] text-gray-400 mb-1">Briefing específico</label>
+                              <textarea
+                                value={mb.briefing}
+                                onChange={(e) => setMonthlyBriefings({ ...monthlyBriefings, [mes]: { ...mb, briefing: e.target.value } })}
+                                placeholder={`Temas, campanhas ou focos específicos para ${mes}...`}
+                                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-500 min-h-[80px] text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] text-gray-400 mb-1">Referências / Links</label>
+                              <textarea
+                                value={mb.monthReferences}
+                                onChange={(e) => setMonthlyBriefings({ ...monthlyBriefings, [mes]: { ...mb, monthReferences: e.target.value } })}
+                                placeholder="Links, datas comemorativas, referências visuais..."
+                                className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2.5 focus:outline-none focus:border-blue-500 min-h-[60px] text-sm"
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Instruções por formato */}
           <div className="bg-gray-800/60 border border-gray-700 rounded-lg p-4 space-y-3">

@@ -423,11 +423,16 @@ ${historyContext}
 
 Retorne APENAS um JSON ARRAY com o calendario final revisado.
 
+REGRA ABSOLUTA DE ESTRUTURA (nao negocie):
+- Cada post deve conter TODOS os seguintes campos: dia, tema, formato, instrucoes_visuais, copy_inicial, objetivo, cta, palavras_chave.
+- O campo "formato" e OBRIGATORIO e deve ser exatamente um de: "Reels", "Arte", "Carrossel", "Foto", "Story".
+- NUNCA remova ou omita o campo "formato". Se nao souber qual formato usar, mantenha o do rascunho original.
+- Mantenha o mesmo "dia" e "formato" de cada post — altere apenas o conteudo dos campos de texto.
+
 O que revisar:
 - Elimine temas vagos, repetitivos ou que poderiam servir para qualquer marca.
 - Se houver CTA muito repetido, varie.
 - Reforce o vinculo de cada post com um pilar, angulo e razao do momento.
-- Preserve a quantidade de posts, os formatos e a ideia central de cada slot.
 - Nao invente promessas ou dados factuais sem base.
 - Garanta que carrosseis continuem estruturados por slides.
 `;

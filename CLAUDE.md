@@ -13,7 +13,7 @@ A geração de calendários via LLM segue rigorosamente este schema de array (8 
 {
   "dia": number, // Dia numérico do post (ex: 5)
   "tema": string, // Tema/Assunto principal
-  "formato": "Reels" | "Static" | "Carousel" | "Stories", // Um dos valores exatos
+  "formato": "Reels" | "Arte" | "Carrossel" | "Foto" | "Story", // Um dos valores exatos (português)
   "instrucoes_visuais": string, // Dicas de como fazer a arte/vídeo
   "copy_inicial": string, // Esboço do texto ou legenda
   "objetivo": string, // Ex: Engajamento, Vendas, Educação

@@ -1,9 +1,29 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import db from "../config/database";
 import { updateTokenUsage } from "../utils/tokenTracker";
-import { validateCalendarSchema, InvalidCalendarOutputError } from "../utils/calendarValidator";
+import { validateCalendarSchema, repairCalendarSchema, InvalidCalendarOutputError } from "../utils/calendarValidator";
 import { buildSlotBlueprintFromMix, critiqueCalendarDraft, planMonthlyCalendar } from "./calendarIntelligence";
 import { getGeminiModelCandidates } from "../utils/googleModels";
+
+// Camada 1: força o modelo a sempre retornar formato válido via API constraint
+const CALENDAR_RESPONSE_SCHEMA = {
+    type: SchemaType.ARRAY,
+    items: {
+        type: SchemaType.OBJECT,
+        required: ["dia", "tema", "formato", "instrucoes_visuais", "copy_inicial", "objetivo", "cta", "palavras_chave"],
+        properties: {
+            dia:                 { type: SchemaType.INTEGER },
+            tema:                { type: SchemaType.STRING },
+            formato:             { type: SchemaType.STRING, enum: ["Reels", "Arte", "Carrossel", "Foto", "Story"], format: "enum" },
+            instrucoes_visuais:  { type: SchemaType.STRING },
+            copy_inicial:        { type: SchemaType.STRING },
+            legenda:             { type: SchemaType.STRING },
+            objetivo:            { type: SchemaType.STRING },
+            cta:                 { type: SchemaType.STRING },
+            palavras_chave:      { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+        },
+    },
+} as const;
 
 const isCarouselFormato = (formato: any): boolean => {
     return String(formato || "").toLowerCase().includes("carrossel") || String(formato || "").toLowerCase().includes("carousel");
@@ -27,7 +47,7 @@ const buildFallbackLegenda = (post: any): string => {
         .map((part) => part.trim())
         .filter(Boolean);
 
-    const captionCore = compactText(slideSections.slice(0, 2).join(" ") || post?.copy_inicial || "");
+    const captionCore = compactText(slideSections.join(" ") || post?.copy_inicial || "");
     const parts = [String(post?.tema || "").trim(), captionCore].filter(Boolean);
     let legenda = parts.join(". ").trim();
 
@@ -38,10 +58,6 @@ const buildFallbackLegenda = (post: any): string => {
 
     if (!legenda) {
         legenda = String(post?.tema || cta || "Carrossel sem legenda gerada").trim();
-    }
-
-    if (legenda.length > 420) {
-        legenda = `${legenda.slice(0, 417).trimEnd()}...`;
     }
 
     return legenda;
@@ -643,15 +659,16 @@ ${groundedContext || "Nenhum adicional."}
 
 CONTRATO FINAL DE SAIDA (OBRIGATORIO, MESMO QUE O TEMPLATE ATIVO DIGA OUTRA COISA):
 - Cada item do array DEVE conter exatamente estes campos: "dia", "tema", "formato", "instrucoes_visuais", "copy_inicial", "legenda", "objetivo", "cta", "palavras_chave".
-- Para Carrossel, "copy_inicial" = texto dos slides, "instrucoes_visuais" = direcao visual por slide e "legenda" = legenda final do post.
-- A "legenda" do Carrossel e obrigatoria e nao pode repetir a notacao [Slide X].
+- Para Carrossel, "copy_inicial" DEVE conter o texto de TODOS os slides usando OBRIGATORIAMENTE a notacao exata: [Slide 1] texto..., [Slide 2] texto..., [Slide 3] texto..., etc. NAO retorne apenas o primeiro slide — todos os slides devem estar presentes em "copy_inicial".
+- Para Carrossel, "instrucoes_visuais" DEVE descrever a direcao visual de cada slide usando a mesma notacao [Slide 1] ..., [Slide 2] ..., etc.
+- A "legenda" do Carrossel e obrigatoria, NAO pode repetir a notacao [Slide X] e deve ser o texto final do post para publicacao.
 
 REGRAS FINAIS DE EXECUCAO:
 - Respeite o slot_plan e o suggested_day como prioridade.
 - Cada post precisa refletir um angulo especifico da marca.
 - Evite repetir CTA, promessa ou estrutura de abertura.
-- Para Carrossel, use "copy_inicial" como texto dos slides, "instrucoes_visuais" como direcao visual dos slides e "legenda" como a legenda final do post.
-- Em Carrossel, a "legenda" e obrigatoria e nao pode repetir a notacao [Slide X].`;
+- Para Carrossel: "copy_inicial" = TODOS os slides com [Slide N] notation, "instrucoes_visuais" = visual de cada slide com [Slide N] notation, "legenda" = caption final sem notacao de slides.
+- Em Carrossel, NUNCA coloque apenas o texto do primeiro slide em "copy_inicial" — inclua todos os slides numerados.`;
 
     const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
     const modelsToTry = getGeminiModelCandidates("fast");
@@ -668,7 +685,10 @@ REGRAS FINAIS DE EXECUCAO:
             console.log(`🤖 [Worker] Tentando modelo ${modelName} para ${mesToGenerate}...`);
             const model = genAI.getGenerativeModel({
                 model: modelName,
-                generationConfig: { responseMimeType: "application/json" }
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: CALENDAR_RESPONSE_SCHEMA as any,
+                },
             });
             // Timeout de 60s para cada chamada
             const timeoutMs = 60000;
@@ -729,7 +749,16 @@ REGRAS FINAIS DE EXECUCAO:
     // ── VALIDAÇÃO RUNTIME DO CONTRATO CANÔNICO ───────────────────────────────
     if (onProgress) await onProgress(75, "Validando formato do calendário gerado...");
 
-    // Passa o JSON parseado pelo validador rigoroso
+    // Camada 2: auto-repair de campos fixáveis antes da validação estrita
+    // (safety net para modelos que ignoram responseSchema)
+    if (Array.isArray(calendarData)) {
+        const { repaired, warnings } = repairCalendarSchema(calendarData as any[]);
+        if (warnings.length > 0) {
+            console.warn(`⚠️ [Worker] Auto-repair (${warnings.length} post(s)):\n${warnings.join("\n")}`);
+        }
+        calendarData = repaired;
+    }
+
     const validation = validateCalendarSchema(calendarData);
     if (!validation.isValid) {
         // Loga no servidor (stdout) para debug / auditoria
