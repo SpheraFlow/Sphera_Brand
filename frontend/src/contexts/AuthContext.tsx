@@ -21,6 +21,22 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Verifica se o JWT está expirado sem fazer request ao backend
+const isTokenExpired = (token: string): boolean => {
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return typeof payload.exp === 'number' && payload.exp * 1000 < Date.now();
+    } catch {
+        return true;
+    }
+};
+
+const clearAuthStorage = () => {
+    localStorage.removeItem('@SpheraAuth:token');
+    localStorage.removeItem('@SpheraAuth:user');
+    delete api.defaults.headers.common['Authorization'];
+};
+
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [token, setToken] = useState<string | null>(null);
@@ -32,6 +48,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const storedUser = localStorage.getItem('@SpheraAuth:user');
 
         if (storedToken && storedUser) {
+            // Verificação imediata: se o token já está expirado, logout sem esperar API
+            if (isTokenExpired(storedToken)) {
+                clearAuthStorage();
+                setLoading(false);
+                window.location.href = '/login';
+                return;
+            }
+
             setToken(storedToken);
             setUser(JSON.parse(storedUser));
             api.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
@@ -56,9 +80,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
     }, []);
 
-    // Interceptor do Axios para deslogar em caso de 401
+    // Interceptor do Axios: deslogar em caso de 401 ou token expirado antes do request
     useEffect(() => {
-        const interceptor = api.interceptors.response.use(
+        const reqInterceptor = api.interceptors.request.use((config) => {
+            const t = localStorage.getItem('@SpheraAuth:token');
+            if (t && isTokenExpired(t)) {
+                clearAuthStorage();
+                window.location.href = '/login';
+                return Promise.reject(new Error('Token expirado')) as any;
+            }
+            return config;
+        });
+
+        const resInterceptor = api.interceptors.response.use(
             (response) => response,
             (error) => {
                 if (error.response?.status === 401 && error.config?.url !== '/auth/login') {
@@ -69,7 +103,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         );
 
         return () => {
-            api.interceptors.response.eject(interceptor);
+            api.interceptors.request.eject(reqInterceptor);
+            api.interceptors.response.eject(resInterceptor);
         };
     }, []);
 
