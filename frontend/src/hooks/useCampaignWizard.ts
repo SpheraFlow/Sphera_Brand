@@ -156,6 +156,11 @@ export function useCampaignWizard() {
     const validateStep = (step: number): boolean => {
         switch (step) {
             case 1:
+                if (data.monthlyMix !== null) {
+                    return data.selectedMonths.length > 0 && data.selectedMonths.some(m =>
+                        data.monthlyMix?.[m] && Object.values(data.monthlyMix[m]).some(v => v > 0)
+                    );
+                }
                 return data.selectedMonths.length > 0 && Object.values(data.mix).some(v => v > 0);
             case 2:
                 return !!data.briefing && data.briefing.length > 10;
