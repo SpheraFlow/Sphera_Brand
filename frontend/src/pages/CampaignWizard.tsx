@@ -709,9 +709,9 @@ ${datasInstrucao}
 
                 {/* Content */}
                 <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6 md:p-8 min-h-[400px]">
-                    {currentStep === 1 && <Step1 />}
-                    {currentStep === 2 && <Step2 />}
-                    {currentStep === 3 && <Step3 />}
+                    {currentStep === 1 && Step1()}
+                    {currentStep === 2 && Step2()}
+                    {currentStep === 3 && Step3()}
                 </div>
 
             </div>
