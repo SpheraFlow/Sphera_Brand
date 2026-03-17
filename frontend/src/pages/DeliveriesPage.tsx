@@ -10,8 +10,9 @@ import {
     Plus,
     Loader2
 } from 'lucide-react';
-import api, { presentationService, calendarService } from '../services/api';
+import api, { presentationService, calendarService, apiOrigin } from '../services/api';
 import PresentationGenerator from '../components/PresentationGenerator';
+import { useJobPolling } from '../hooks/useJobPolling';
 import toast from 'react-hot-toast';
 
 export default function DeliveriesPage() {
@@ -19,6 +20,7 @@ export default function DeliveriesPage() {
     const [deliveries, setDeliveries] = useState<any[]>([]); // Mock por enquanto ou History da presentation
     const [loading, setLoading] = useState(true);
     const [generatingExcel, setGeneratingExcel] = useState(false);
+    const [pendingExcelJobId, setPendingExcelJobId] = useState<string | null>(null);
     const [showPresentationEditor, setShowPresentationEditor] = useState(false);
 
     // Novas states de Exportação de Excel (múltiplos meses)
@@ -28,6 +30,31 @@ export default function DeliveriesPage() {
     const [clientName, setClientName] = useState('Cliente');
     const [latestCalendarId, setLatestCalendarId] = useState<string | null>(null);
     const [latestCalendarObj, setLatestCalendarObj] = useState<any>(null);
+
+    useJobPolling({
+        clientId: clientId || '',
+        jobId: pendingExcelJobId,
+        enabled: !!pendingExcelJobId && !!clientId,
+        onSuccess: (result) => {
+            setGeneratingExcel(false);
+            setPendingExcelJobId(null);
+            if (result?.downloadUrl) {
+                const link = document.createElement('a');
+                link.href = `${apiOrigin}${result.downloadUrl}`;
+                link.setAttribute('download', result.fileName || 'calendario.xlsx');
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                toast.success('Excel baixado com sucesso!');
+                setShowExportModal(false);
+            }
+        },
+        onError: () => {
+            setGeneratingExcel(false);
+            setPendingExcelJobId(null);
+            toast.error('Erro ao gerar Excel.');
+        },
+    });
 
     // Helpers para Exportação
     const getMonthName = (monthNum: number): string => {
@@ -119,37 +146,24 @@ export default function DeliveriesPage() {
 
     const handleExportExcel = async () => {
         if (!latestCalendarId) return;
-
         try {
             setGeneratingExcel(true);
             const response = await api.post('/calendars/export-excel', {
                 calendarId: latestCalendarId,
                 clientName: clientName || 'Cliente',
-                monthsSelected: exportMonthsSelected
-            }, { responseType: 'blob' });
-
-            const yearStr = latestCalendarObj?.mes?.match(/(\d{4})/)?.[1] || '';
-
-            const monthSuffix = exportMonthsSelected.length === 1 ? getMonthName(exportMonthsSelected[0]) :
-                exportMonthsSelected.length > 1 ? `${getMonthName(exportMonthsSelected[0])}-${getMonthName(exportMonthsSelected[exportMonthsSelected.length - 1])}` : 'meses';
-
-            const safeSuffix = `${monthSuffix}${yearStr ? `_${yearStr}` : ''}`.replace(/\s+/g, '_');
-
-            const url = window.URL.createObjectURL(new Blob([response.data]));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `${clientName || 'Cliente'}_${safeSuffix}.xlsx`);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-
-            toast.success("Excel baixado com sucesso!");
-            setShowExportModal(false);
+                monthsSelected: exportMonthsSelected,
+            });
+            const jobId = response.data?.jobId;
+            if (jobId) {
+                setPendingExcelJobId(jobId);
+            } else {
+                setGeneratingExcel(false);
+                toast.error('Erro ao iniciar geração do Excel.');
+            }
         } catch (error) {
             console.error(error);
-            alert('Erro ao gerar Excel.');
-        } finally {
             setGeneratingExcel(false);
+            toast.error('Erro ao gerar Excel.');
         }
     };
 
