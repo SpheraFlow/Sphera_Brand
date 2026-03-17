@@ -251,21 +251,6 @@ ${datasInstrucao}
         return (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
 
-                {/* Objetivo (opcional) */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">
-                        Objetivo principal <span className="text-gray-600 font-normal">(opcional — a IA vai perguntar no chat)</span>
-                    </label>
-                    <input
-                        type="text"
-                        className="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Ex: Aumentar vendas de Black Friday, Lançamento de nova coleção..."
-                        value={data.goal}
-                        onChange={e => updateData({ goal: e.target.value })}
-                        autoFocus
-                    />
-                </div>
-
                 {/* Seleção de Meses */}
                 <div>
                     <label className="block text-sm font-medium text-gray-400 mb-3">
@@ -276,6 +261,7 @@ ${datasInstrucao}
                             const isSelected = data.selectedMonths.includes(month);
                             return (
                                 <button
+                                    type="button"
                                     key={month}
                                     onClick={() => toggleMonth(month)}
                                     className={`p-3 rounded-xl border text-left transition-all relative ${isSelected ? 'border-blue-500 bg-blue-900/20' : 'border-gray-700 bg-gray-800 hover:bg-gray-750'}`}
@@ -305,6 +291,7 @@ ${datasInstrucao}
                                     </span>
                                 )}
                                 <button
+                                    type="button"
                                     onClick={() => setShowAllDates(!showAllDates)}
                                     className={`text-[10px] uppercase font-bold px-2 py-1 rounded transition-all ${showAllDates ? 'bg-blue-500 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
                                 >
