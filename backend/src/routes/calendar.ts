@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { randomUUID } from "crypto";
 import db from "../config/database";
 import { updateTokenUsage } from "../utils/tokenTracker";
 import { getGeminiModelCandidates } from "../utils/googleModels";
@@ -853,10 +854,11 @@ router.post("/calendars/export-excel", async (req: Request, res: Response): Prom
     }
     const clienteId = calResult.rows[0].cliente_id;
 
+    const newJobId = randomUUID();
     const jobResult = await db.query(
       `INSERT INTO calendar_generation_jobs (id, cliente_id, status, progress, payload, created_at)
-       VALUES (gen_random_uuid(), $1, 'pending', 0, $2, NOW()) RETURNING id`,
-      [clienteId, JSON.stringify({ jobType: 'excel', calendarId, clientName, monthsSelected })]
+       VALUES ($1, $2, 'pending', 0, $3, NOW()) RETURNING id`,
+      [newJobId, clienteId, JSON.stringify({ jobType: 'excel', calendarId, clientName, monthsSelected })]
     );
 
     res.status(202).json({ jobId: jobResult.rows[0].id });
