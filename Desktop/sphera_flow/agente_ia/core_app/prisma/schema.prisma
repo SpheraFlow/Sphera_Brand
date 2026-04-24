@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TenantVertical {
+  clinica
+  restaurante
+  pousada
+  varejo_tecnico
+  outro
+}
+
+enum ChannelType {
+  whatsapp_cloud
+  whatsapp_evo
+  instagram_dm
+  chatwoot
+  telegram
+  email
+  outro
+}
+
+enum HandoffReason {
+  label_humano
+  solicitacao_usuario
+  escalacao_agente
+  timeout_bot
+  campanha
+  outro
+}
+
+model Tenant {
+  id          Int             @id @default(autoincrement())
+  slug        String          @unique
+  name        String
+  vertical    TenantVertical  @default(outro)
+  plan        String          @default("starter")
+  isActive    Boolean         @default(true) @map("is_active")
+  trialEndsAt DateTime?       @map("trial_ends_at")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  configs     TenantConfig[]
+  channels    TenantChannel[]
+  apiKeys     TenantApiKey[]
+  persons     Person[]
+  identities  PersonIdentity[]
+  handoffs    HumanHandoff[]
+  promptPacks PromptPack[]
+  events      EventLog[]
+
+  @@map("tenants")
+}
+
+model TenantConfig {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int      @map("tenant_id")
+  key         String
+  value       String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@map("tenant_configs")
+}
+
+model TenantChannel {
+  id          Int         @id @default(autoincrement())
+  tenantId    Int         @map("tenant_id")
+  channelType ChannelType  @map("channel_type")
+  label       String
+  externalId  String?     @map("external_id")
+  credentials Json        @default("{}")
+  isActive    Boolean     @default(true) @map("is_active")
+  meta        Json        @default("{}")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, channelType, externalId])
+  @@index([tenantId, channelType])
+  @@map("tenant_channels")
+}
+
+model TenantApiKey {
+  id         Int       @id @default(autoincrement())
+  tenantId   Int       @map("tenant_id")
+  label      String
+  keyHash    String    @map("key_hash")
+  lastUsedAt DateTime? @map("last_used_at")
+  revokedAt  DateTime? @map("revoked_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  tenant     Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, label])
+  @@unique([tenantId, keyHash])
+  @@index([tenantId])
+  @@map("tenant_api_keys")
+}
+
+model Person {
+  id          Int       @id @default(autoincrement())
+  tenantId    Int       @map("tenant_id")
+  name        String?
+  phone       String?
+  email       String?
+  tags        String[]  @default([])
+  custom      Json      @default("{}")
+  firstSeenAt DateTime  @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime  @default(now()) @map("last_seen_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  identities  PersonIdentity[]
+  handoffs    HumanHandoff[]
+  events      EventLog[]
+
+  @@index([tenantId, phone])
+  @@index([tenantId, email])
+  @@map("persons")
+}
+
+model PersonIdentity {
+  id          Int         @id @default(autoincrement())
+  tenantId    Int         @map("tenant_id")
+  personId    Int         @map("person_id")
+  channelType ChannelType  @map("channel_type")
+  externalId  String      @map("external_id")
+  displayName String?     @map("display_name")
+  verifiedAt  DateTime?   @map("verified_at")
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person      Person      @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, channelType, externalId])
+  @@index([tenantId, personId])
+  @@map("person_identities")
+}
+
+model HumanHandoff {
+  id                     Int           @id @default(autoincrement())
+  tenantId               Int           @map("tenant_id")
+  personId               Int           @map("person_id")
+  conversationExternalId String?       @map("conversation_external_id")
+  reason                 HandoffReason
+  reasonDetail           String?       @map("reason_detail")
+  agentId                String?       @map("agent_id")
+  agentName              String?       @map("agent_name")
+  chatwootConversationId String?       @map("chatwoot_conversation_id")
+  chatwootLabel          String        @default("humano") @map("chatwoot_label")
+  startedAt              DateTime      @default(now()) @map("started_at")
+  resolvedAt             DateTime?     @map("resolved_at")
+  botReactivatedAt       DateTime?     @map("bot_reactivated_at")
+  waitSeconds            Int?          @map("wait_seconds")
+  handleSeconds          Int?          @map("handle_seconds")
+  meta                   Json          @default("{}")
+  createdAt              DateTime      @default(now()) @map("created_at")
+  updatedAt              DateTime      @updatedAt @map("updated_at")
+
+  tenant                 Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person                 Person        @relation(fields: [personId], references: [id], onDelete: Restrict)
+
+  @@index([tenantId, startedAt(sort: Desc)])
+  @@index([tenantId, personId, startedAt(sort: Desc)])
+  @@map("human_handoffs")
+}
+
+model PromptPack {
+  id                  Int          @id @default(autoincrement())
+  tenantId            Int          @map("tenant_id")
+  name                String
+  channelType         ChannelType? @map("channel_type")
+  version             Int          @default(1)
+  systemPrompt        String       @map("system_prompt")
+  contextTemplate     String?      @map("context_template")
+  modelName           String       @default("gemini-pro") @map("model_name")
+  temperature         Float        @default(0.7)
+  maxTokens           Int?         @map("max_tokens")
+  contextWindowSize   Int          @default(50) @map("context_window_size")
+  isActive            Boolean      @default(true) @map("is_active")
+  createdAt           DateTime     @default(now()) @map("created_at")
+  updatedAt           DateTime     @updatedAt @map("updated_at")
+
+  tenant              Tenant       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+
+  @@unique([tenantId, name, version])
+  @@index([tenantId, channelType, isActive])
+  @@map("prompt_packs")
+}
+
+model EventLog {
+  id          Int       @id @default(autoincrement())
+  tenantId    Int       @map("tenant_id")
+  eventType   String    @map("event_type")
+  personId    Int?      @map("person_id")
+  channelType ChannelType? @map("channel_type")
+  source      String?
+  payload     Json      @default("{}")
+  latencyMs   Int?      @map("latency_ms")
+  errorCode   String?   @map("error_code")
+  occurredAt  DateTime  @default(now()) @map("occurred_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  person      Person?   @relation(fields: [personId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, eventType, occurredAt(sort: Desc)])
+  @@index([tenantId, occurredAt(sort: Desc)])
+  @@index([personId, occurredAt(sort: Desc)])
+  @@map("event_log")
+}
