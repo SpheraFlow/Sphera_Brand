@@ -1,6 +1,7 @@
 ﻿import { Router, Response } from "express";
 import db from "../config/database";
 import { requireAuth, requirePermission, AuthRequest } from "../middlewares/requireAuth";
+import logger from "../utils/logger";
 
 const router = Router();
 
@@ -9,6 +10,64 @@ function normalizeCategoriasNicho(input: unknown): string[] {
   if (Array.isArray(input)) return input.map((c) => String(c).trim()).filter((c) => c.length > 0);
   if (typeof input === "string") return input.split(",").map((c) => c.trim()).filter((c) => c.length > 0);
   return [];
+}
+
+// ─── STORY-010 — Completude do DNA da Marca ──────────────────────────────────
+// Os 5 campos obrigatórios para o cálculo de completude (AC6/AC8):
+//   1. nome do cliente            (clientes.nome)
+//   2. segmento/nicho             (clientes.categorias_nicho OU branding.niche)
+//   3. tom de voz                 (branding.tone_of_voice)
+//   4. audiência principal        (branding.audience)
+//   5. posicionamento             (branding.usp)
+// Cada campo preenchido vale 20%. Total: 0–100%.
+const DNA_REQUIRED_FIELDS = [
+  "nome",
+  "segmento",
+  "tom_de_voz",
+  "audiencia",
+  "posicionamento",
+] as const;
+
+type DnaFieldKey = (typeof DNA_REQUIRED_FIELDS)[number];
+
+/** Verifica se um valor (texto, array ou objeto JSONB) tem conteúdo significativo. */
+function hasContent(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === "object") {
+    // Objetos JSONB (tone_of_voice, audience): considera preenchido se algum
+    // valor interno não-vazio existe.
+    return Object.values(value as Record<string, unknown>).some((v) => hasContent(v));
+  }
+  return Boolean(value);
+}
+
+/**
+ * Calcula a completude do DNA a partir das linhas de clientes + branding.
+ * Retorna o percentual (0–100) e a lista de campos que ainda faltam.
+ */
+function computeDnaCompleteness(opts: {
+  nome: unknown;
+  categorias_nicho: unknown;
+  niche: unknown;
+  tone_of_voice: unknown;
+  audience: unknown;
+  usp: unknown;
+}): { percentual: number; campos_faltando: DnaFieldKey[] } {
+  const filled: Record<DnaFieldKey, boolean> = {
+    nome: hasContent(opts.nome),
+    segmento: hasContent(opts.categorias_nicho) || hasContent(opts.niche),
+    tom_de_voz: hasContent(opts.tone_of_voice),
+    audiencia: hasContent(opts.audience),
+    posicionamento: hasContent(opts.usp),
+  };
+
+  const campos_faltando = DNA_REQUIRED_FIELDS.filter((f) => !filled[f]);
+  const filledCount = DNA_REQUIRED_FIELDS.length - campos_faltando.length;
+  const percentual = Math.round((filledCount / DNA_REQUIRED_FIELDS.length) * 100);
+
+  return { percentual, campos_faltando: [...campos_faltando] };
 }
 
 // Requer autenticaÃ§Ã£o para todas as rotas neste router
@@ -29,6 +88,110 @@ router.post("/", requirePermission("clients_manage"), async (req: AuthRequest, r
     return res.status(201).json({ success: true, cliente: result.rows[0] });
   } catch (error: any) {
     return res.status(500).json({ success: false, error: "Erro ao criar cliente: " + error.message });
+  }
+});
+
+// GET /api/clients/completeness - STORY-010 AC8
+// Retorna a completude do DNA de TODOS os clientes visíveis ao usuário.
+// Deve vir ANTES de /:id para não ser capturado pela rota dinâmica.
+router.get("/completeness", async (req: AuthRequest, res: Response) => {
+  try {
+    const userRole = req.user?.role;
+    const canManageClients = req.user?.permissions?.clients_manage;
+    const userId = req.user?.id;
+
+    const baseSelect = `
+      SELECT
+        c.id            AS client_id,
+        c.nome          AS nome,
+        c.categorias_nicho AS categorias_nicho,
+        b.niche         AS niche,
+        b.tone_of_voice AS tone_of_voice,
+        b.audience      AS audience,
+        b.usp           AS usp
+      FROM clientes c
+      LEFT JOIN branding b ON b.cliente_id = c.id
+    `;
+
+    let result;
+    if (userRole === "admin" || canManageClients) {
+      result = await db.query(baseSelect);
+    } else {
+      result = await db.query(
+        `${baseSelect}
+         JOIN user_clientes uc ON c.id = uc.cliente_id
+         WHERE uc.user_id = $1`,
+        [userId]
+      );
+    }
+
+    const items = result.rows.map((row: any) => {
+      const { percentual, campos_faltando } = computeDnaCompleteness({
+        nome: row.nome,
+        categorias_nicho: row.categorias_nicho,
+        niche: row.niche,
+        tone_of_voice: row.tone_of_voice,
+        audience: row.audience,
+        usp: row.usp,
+      });
+      return { client_id: row.client_id, percentual, campos_faltando };
+    });
+
+    return res.json({ success: true, items });
+  } catch (error: any) {
+    logger.error({ event: "dna_completeness_bulk_failed", err: error?.message }, "Falha ao calcular completude do DNA (bulk)");
+    return res.status(500).json({ success: false, error: "Erro ao calcular completude do DNA." });
+  }
+});
+
+// GET /api/clients/:id/branding/completude - STORY-010 AC6
+// Retorna a completude do DNA de um cliente específico.
+// Deve vir ANTES de /:id para não ser capturado pela rota dinâmica.
+router.get("/:id/branding/completude", async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const userRole = req.user?.role;
+    const canManageClients = req.user?.permissions?.clients_manage;
+    const userId = req.user?.id;
+
+    if (userRole !== "admin" && !canManageClients) {
+      const vinculo = await db.query("SELECT 1 FROM user_clientes WHERE user_id = $1 AND cliente_id = $2", [userId, id]);
+      if (vinculo.rows.length === 0) return res.status(403).json({ success: false, error: "Acesso negado a este cliente." });
+    }
+
+    const result = await db.query(
+      `SELECT
+         c.id            AS client_id,
+         c.nome          AS nome,
+         c.categorias_nicho AS categorias_nicho,
+         b.niche         AS niche,
+         b.tone_of_voice AS tone_of_voice,
+         b.audience      AS audience,
+         b.usp           AS usp
+       FROM clientes c
+       LEFT JOIN branding b ON b.cliente_id = c.id
+       WHERE c.id = $1`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: "Cliente não encontrado." });
+    }
+
+    const row = result.rows[0];
+    const { percentual, campos_faltando } = computeDnaCompleteness({
+      nome: row.nome,
+      categorias_nicho: row.categorias_nicho,
+      niche: row.niche,
+      tone_of_voice: row.tone_of_voice,
+      audience: row.audience,
+      usp: row.usp,
+    });
+
+    return res.json({ success: true, percentual, campos_faltando });
+  } catch (error: any) {
+    logger.error({ event: "dna_completeness_failed", err: error?.message }, "Falha ao calcular completude do DNA");
+    return res.status(500).json({ success: false, error: "Erro ao calcular completude do DNA." });
   }
 });
 

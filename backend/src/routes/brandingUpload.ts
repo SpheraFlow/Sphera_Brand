@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "../utils/genai-compat";
 import db from "../config/database";
 
 const router = Router();
@@ -202,13 +202,13 @@ Retorne APENAS um JSON válido (sem markdown, sem explicações extras):
 `;
 
       // Chamar Gemini
-      const apiKey = process.env.GOOGLE_API_KEY;
-      if (!apiKey) {
+      const _vertexProject = process.env.GOOGLE_CLOUD_PROJECT;
+      if (!_vertexProject) {
         console.error("❌ GOOGLE_API_KEY não configurada");
         return res.status(500).json({ success: false, error: "API Key do Gemini não configurada" });
       }
 
-      const genAI = new GoogleGenerativeAI(apiKey);
+      const genAI = new GoogleGenerativeAI();
       
       // Tentar primeiro com 2.0-flash-exp, depois fallback para 1.5-flash
       let model;

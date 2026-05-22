@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "../utils/genai-compat";
 import { updateTokenUsage } from "../utils/tokenTracker";
 import { getGeminiModelCandidates } from "../utils/googleModels";
 import { groundedSuggestDatas } from "./groundedSearchService";

@@ -4,20 +4,24 @@ import { generatePresentationContentPipeline, renderPresentationDeck } from "../
 import { spawn } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
+import logger from "../utils/logger";
+import { isTransientError, getBackoffMs, MAX_JOB_ATTEMPTS, sleep } from "../utils/errorClassifier";
+
+const workerLog = logger.child({ component: "calendarGenerationWorker" });
 
 // ConfiguraÃ§Ãµes
-const POLLING_INTERVAL_MS = 5000; // 5 segundos
+const POLLING_INTERVAL_MS = 5000; // 5 segundos / 5 seconds
 // const MAX_CONCURRENT_JOBS = 1; // Por instÃ¢ncia (simples por enquanto)
 
-export const startCalendarGenerationWorker = () => {
-    console.log("ðŸ‘· [WORKER] Iniciando Calendar Generation Worker...");
+export const startCalendarGenerationWorker = (): void => {
+    workerLog.info({ event: "worker_starting" }, "Iniciando Calendar Generation Worker");
 
     // Loop infinito de polling
     const loop = async () => {
         try {
             await processNextJob();
-        } catch (e) {
-            console.error("âŒ [WORKER] Erro no loop de processamento:", e);
+        } catch (e: any) {
+            workerLog.error({ event: "worker_loop_error", error_message: e?.message, error_code: e?.code }, "Erro no loop de processamento");
         } finally {
             setTimeout(loop, POLLING_INTERVAL_MS);
         }
@@ -39,10 +43,10 @@ export const startCalendarGenerationWorker = () => {
             `);
             const count = result.rowCount ?? 0;
             if (count > 0) {
-                console.warn(`âš ï¸ [WORKER] ${count} job(s) Ã³rfÃ£o(s) em 'running' marcados como 'failed'.`);
+                workerLog.warn({ event: "orphan_jobs_cleaned", count }, "Jobs orfaos marcados como failed");
             }
-        } catch (err) {
-            console.error("âŒ [WORKER] Erro ao limpar jobs Ã³rfÃ£os:", err);
+        } catch (err: any) {
+            workerLog.error({ event: "orphan_cleanup_error", error_message: err?.message }, "Erro ao limpar jobs orfaos");
         }
     };
 
@@ -84,11 +88,16 @@ const updateJobProgress = async (jobId: string, progress: number, currentStep: s
 const processNextJob = async () => {
     const client = await db.connect();
 
+    let claimedJobId: string | null = null;
+    let claimedClienteId: string | null = null;
+    let claimedPayload: any = null;
+    let claimedAttemptCount = 0;
+
     try {
         await client.query("BEGIN");
 
         const claimResult = await client.query(`
-      SELECT id, cliente_id, payload 
+      SELECT id, cliente_id, payload, COALESCE(attempt_count, 0) AS attempt_count
       FROM calendar_generation_jobs
       WHERE status = 'pending'
       ORDER BY created_at ASC
@@ -102,23 +111,33 @@ const processNextJob = async () => {
         }
 
         const job = claimResult.rows[0];
-        const jobId = job.id;
-        const payload = job.payload && typeof job.payload === 'object' ? job.payload : {};
-        const jobType = String(payload.jobType || 'calendar');
+        claimedJobId = job.id;
+        claimedClienteId = job.cliente_id;
+        claimedPayload = job.payload && typeof job.payload === 'object' ? job.payload : {};
+        claimedAttemptCount = Number(job.attempt_count) || 0;
+        const jobType = String(claimedPayload.jobType || 'calendar');
         const startStep = jobType === 'presentation' ? 'Iniciando apresentacao...' : 'Iniciando...';
-
-        console.log(`👷 [WORKER] Processando Job ${jobId} (${jobType})...`);
 
         await client.query(`
       UPDATE calendar_generation_jobs
       SET status = 'running', started_at = NOW(), updated_at = NOW(), progress = 0, current_step = $2
       WHERE id = $1
-    `, [jobId, startStep]);
+    `, [claimedJobId, startStep]);
 
         await client.query("COMMIT");
 
+        const currentAttempt = claimedAttemptCount + 1;
+        const jobLog = workerLog.child({
+            job_id: claimedJobId,
+            job_type: jobType,
+            client_id: claimedClienteId,
+            attempt: currentAttempt,
+        });
+        const startedAt = Date.now();
+        jobLog.info({ event: "job_started" }, "Processando job");
+
         try {
-            const jobResult = await runJobLogic(jobId, job.cliente_id, payload);
+            const jobResult = await runJobLogic(claimedJobId as string, claimedClienteId as string, claimedPayload);
 
             if (jobResult !== undefined) {
                 await db.query(`
@@ -130,41 +149,92 @@ const processNextJob = async () => {
             updated_at = NOW(),
             payload = jsonb_set(COALESCE(payload, '{}'::jsonb), '{result}', $2::jsonb, true)
         WHERE id = $1
-      `, [jobId, JSON.stringify(jobResult)]);
+      `, [claimedJobId, JSON.stringify(jobResult)]);
             } else {
                 await db.query(`
         UPDATE calendar_generation_jobs
         SET status = 'succeeded', progress = 100, current_step = 'Concluido', finished_at = NOW(), updated_at = NOW()
         WHERE id = $1
-      `, [jobId]);
+      `, [claimedJobId]);
             }
 
-            console.log(`✅ [WORKER] Job ${jobId} concluido com sucesso.`);
+            jobLog.info(
+                { event: "job_completed", duration_ms: Date.now() - startedAt },
+                "Job concluido com sucesso"
+            );
         } catch (jobError: any) {
-            if (jobError.message === 'JOB_CANCELED') {
-                console.log(`🛑 [WORKER] Job ${jobId} interrompido pois foi cancelado.`);
+            if (jobError?.message === 'JOB_CANCELED') {
+                jobLog.warn({ event: "job_canceled" }, "Job interrompido pois foi cancelado");
                 return;
             }
 
-            console.error(`❌ [WORKER] Falha no Job ${jobId}:`, jobError);
+            const errorMessage = String(jobError?.message || "Unknown error");
+            const errorCode = jobError?.code || jobError?.status || jobError?.response?.status || null;
+            const transient = isTransientError(jobError);
+            const canRetry = transient && currentAttempt < MAX_JOB_ATTEMPTS;
 
-            let errorData: any = { message: jobError.message, stack: jobError.stack };
-            if (jobError.type === 'INVALID_CALENDAR_OUTPUT') {
+            jobLog.error(
+                {
+                    event: "job_failed",
+                    error_message: errorMessage,
+                    error_code: errorCode,
+                    transient,
+                    will_retry: canRetry,
+                },
+                "Falha no job"
+            );
+
+            // Persist attempt + last_error regardless of retry decision.
+            await db.query(`
+        UPDATE calendar_generation_jobs
+        SET attempt_count = $2,
+            last_error = $3,
+            last_error_at = NOW(),
+            updated_at = NOW()
+        WHERE id = $1
+      `, [claimedJobId, currentAttempt, errorMessage]);
+
+            let errorData: any = { message: errorMessage, stack: jobError?.stack };
+            if (jobError?.type === 'INVALID_CALENDAR_OUTPUT') {
                 errorData = {
                     error: jobError.type,
                     details: jobError.details,
-                    correlationId: jobError.correlationId
+                    correlationId: jobError.correlationId,
                 };
+            }
+
+            if (canRetry) {
+                const backoffMs = getBackoffMs(currentAttempt);
+                jobLog.info(
+                    { event: "job_retry_scheduled", attempt: currentAttempt, backoff_ms: backoffMs },
+                    "Reagendando job apos erro transitorio"
+                );
+                // Re-queue as 'pending' so the worker picks it up after backoff.
+                await db.query(`
+        UPDATE calendar_generation_jobs
+        SET status = 'pending',
+            progress = 0,
+            current_step = 'Aguardando nova tentativa...',
+            started_at = NULL,
+            updated_at = NOW()
+        WHERE id = $1
+      `, [claimedJobId]);
+                await sleep(backoffMs);
+                return;
             }
 
             await db.query(`
         UPDATE calendar_generation_jobs
         SET status = 'failed', error = $2, finished_at = NOW(), updated_at = NOW()
         WHERE id = $1
-      `, [jobId, JSON.stringify(errorData)]);
+      `, [claimedJobId, JSON.stringify(errorData)]);
         }
-    } catch (err) {
+    } catch (err: any) {
         await client.query("ROLLBACK");
+        workerLog.error(
+            { event: "process_next_job_error", error_message: err?.message, error_code: err?.code, job_id: claimedJobId },
+            "Erro na transacao de claim do job"
+        );
         throw err;
     } finally {
         client.release();
@@ -423,8 +493,11 @@ const runExcelJobLogic = async (jobId: string, _clienteId: string, payload: any)
             [clienteId, `Excel: ${outputFileName}`, JSON.stringify([downloadUrl]), JSON.stringify(posts), 'excel',
              JSON.stringify({ months: monthsToExport, year: baseYearNum, generatedAt: new Date().toISOString() })]
         );
-    } catch (histErr) {
-        console.error("⚠️ [Worker] Falha ao registrar entrega no histórico:", histErr);
+    } catch (histErr: any) {
+        workerLog.warn(
+            { event: "delivery_history_error", error_message: histErr?.message, job_id: jobId },
+            "Falha ao registrar entrega no historico"
+        );
     }
 
     return { downloadUrl, fileName: outputFileName };
@@ -572,7 +645,10 @@ const runCalendarJobLogic = async (jobId: string, clienteId: string, payload: an
                 resultCalendarIds.push(r.value.calendarId);
             } else {
                 if ((r.reason as any)?.message === "JOB_CANCELED") throw r.reason;
-                console.error(`❌ [Worker] Mês paralelo falhou:`, r.reason);
+                workerLog.error(
+                    { event: "parallel_month_failed", error_message: (r.reason as any)?.message, job_id: jobId },
+                    "Mes paralelo falhou"
+                );
             }
         }
     }

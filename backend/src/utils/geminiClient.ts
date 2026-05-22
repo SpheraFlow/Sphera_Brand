@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "./genai-compat";
 import { readFileSync } from "fs";
 import { getGeminiModelCandidates, getPrimaryGeminiModel } from "./googleModels";
 
@@ -10,17 +10,16 @@ class GeminiClient {
   private model;
 
   constructor() {
-    const apiKey = process.env.GOOGLE_API_KEY;
+    const project = process.env.GOOGLE_CLOUD_PROJECT || process.env.VERTEX_PROJECT_ID;
 
-    if (!apiKey || apiKey === "your_google_api_key_here") {
-      console.warn("⚠️  GOOGLE_API_KEY não configurada. A rota /process-post não funcionará.");
-      // Não quebrar o servidor, apenas avisar
+    if (!project) {
+      console.warn("⚠️  GOOGLE_CLOUD_PROJECT não configurado. A rota /process-post não funcionará.");
       this.genAI = null as any;
       this.model = null as any;
       return;
     }
 
-    this.genAI = new GoogleGenerativeAI(apiKey);
+    this.genAI = new GoogleGenerativeAI();
     this.model = this.genAI.getGenerativeModel({ model: getPrimaryGeminiModel("fast") });
   }
 
@@ -33,7 +32,7 @@ class GeminiClient {
   async analyzeImage(filePath: string, prompt?: string): Promise<string> {
     // Verificar se a API Key está configurada
     if (!this.model) {
-      throw new Error("GOOGLE_API_KEY não configurada. Configure no .env para usar esta funcionalidade.");
+      throw new Error("GOOGLE_CLOUD_PROJECT não configurado. Configure no .env para usar esta funcionalidade.");
     }
 
     try {
@@ -99,7 +98,7 @@ class GeminiClient {
   async generateTextContent(prompt: string): Promise<string> {
     // Verificar se a API Key está configurada
     if (!this.model) {
-      throw new Error("GOOGLE_API_KEY não configurada. Configure no .env para usar esta funcionalidade.");
+      throw new Error("GOOGLE_CLOUD_PROJECT não configurado. Configure no .env para usar esta funcionalidade.");
     }
 
     try {

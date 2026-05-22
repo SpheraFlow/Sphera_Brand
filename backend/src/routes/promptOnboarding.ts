@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "../utils/genai-compat";
 import db from "../config/database";
 import { updateTokenUsage } from "../utils/tokenTracker";
 import { SUPPORTED_VARIABLES } from "../services/promptVariables";
@@ -87,7 +87,7 @@ router.post("/prompt-templates/onboarding/chat/:clientId", async (req: Request, 
             userMessage?: string;
         };
 
-        if (!process.env.GOOGLE_API_KEY) {
+        if (!process.env.GOOGLE_CLOUD_PROJECT) {
             return res.status(500).json({ success: false, message: "Configuração de IA ausente." });
         }
 
@@ -98,7 +98,7 @@ router.post("/prompt-templates/onboarding/chat/:clientId", async (req: Request, 
         }
         const clientName = clientResult.rows[0].nome as string;
 
-        const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
+        const genAI = new GoogleGenerativeAI();
         const INIT_TRIGGER = "SISTEMA: Inicie o onboarding para conversação sobre arquitetura de calendário/prompt editorial. Apresente-se guiando o cliente.";
 
         let rawHistory = (messages || []).map((m) => ({

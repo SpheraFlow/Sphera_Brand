@@ -11,6 +11,9 @@ import GeneralCalendarPage from './pages/GeneralCalendarPage';
 import KnowledgeBase from './pages/KnowledgeBase';
 import BrandProfile from './pages/BrandProfile';
 import ReferencesPage from './pages/ReferencesPage';
+import VisualRecipesPage from './pages/VisualRecipesPage';
+import TemplateStudioPage from './pages/TemplateStudioPage';
+import ArtCreatorPage from './pages/ArtCreatorPage';
 
 // New Pages
 import AgencyHome from './pages/AgencyHome';
@@ -19,6 +22,7 @@ import PromptOnboardingPage from './pages/PromptOnboardingPage';
 import PromptTemplateEditorPage from './pages/PromptTemplateEditorPage';
 import BrandingOnboardingPage from './pages/BrandingOnboardingPage';
 import ClientHub from './pages/ClientHub';
+import ClientOnboardingPage from './pages/ClientOnboardingPage';
 import CampaignsList from './pages/CampaignsList';
 import CampaignWizard from './pages/CampaignWizard';
 import CampaignReview from './pages/CampaignReview';
@@ -34,6 +38,9 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
 
           <Route element={<PrivateRoute />}>
+            {/* STORY-010 — Wizard de onboarding em tela cheia (fora do RootLayout) */}
+            <Route path="/clients/new" element={<ClientOnboardingPage />} />
+
             <Route element={<RootLayout />}>
               {/* 1) Global Routes */}
               <Route path="/" element={<AgencyHome />} />
@@ -54,7 +61,10 @@ function App() {
                 <Route path="dashboard" element={<Dashboard />} />
                 <Route path="branding" element={<BrandProfile />} />
                 <Route path="calendar" element={<CalendarPage />} />
+                <Route path="artes" element={<ArtCreatorPage />} />
                 <Route path="references" element={<ReferencesPage />} />
+                <Route path="visual-recipes" element={<VisualRecipesPage />} />
+                <Route path="template-studio" element={<TemplateStudioPage />} />
                 <Route path="knowledge" element={<KnowledgeBase />} />
 
                 {/* New Routes */}

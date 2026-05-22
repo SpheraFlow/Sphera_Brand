@@ -15,9 +15,12 @@ console.log(`📂 [STARTUP] Node version: ${process.version}`);
 console.log(`📂 [STARTUP] Timestamp: ${new Date().toISOString()}`);
 console.log(`🔴 ============================================\n`);
 
-import express, { Request, Response } from "express";
+import express, { Request, Response, NextFunction } from "express";
 import cors from "cors";
 import path from "path";
+import pinoHttp from "pino-http";
+import { randomUUID } from "crypto";
+import logger from "./utils/logger";
 import postsRouter from "./routes/posts";
 import brandingRouter from "./routes/branding";
 import calendarRouter from "./routes/calendar";
@@ -41,10 +44,15 @@ import authRouter from "./routes/auth";
 import usersRouter from "./routes/users";
 import produtosRouter from "./routes/produtos";
 import briefingAgentRouter from "./routes/briefingAgent";
+import creativeRouter from "./routes/creative";
+import visualDesignRouter from "./routes/visualDesign";
+import agencyDashboardRouter from "./routes/agencyDashboard";
 import { requireAuth } from "./middlewares/requireAuth";
 import db from "./config/database";
 import http from "http";
 import { startCalendarGenerationWorker } from "./jobs/calendarGenerationWorker";
+import { startCreativeProductionWorker } from "./jobs/creativeProductionWorker";
+import { startImageGenerationWorker } from "./jobs/imageGenerationWorker";
 
 // Inicialização do Express
 const app = express();
@@ -58,10 +66,51 @@ const setNoCacheHeaders = (res: Response) => {
 };
 
 // ============================================
-// 📞 GRAMPO TELEFÔNICO - PRIMEIRA LINHA
+// 🔎 STORY-012 — pino-http: structured logging + requestId
+// ============================================
+// Every request gets a unique X-Request-ID (UUID v4) propagated through:
+//   - the response header (so the user can quote it when reporting a bug),
+//   - every log line emitted during the request (via req.log),
+//   - any error payload returned to the client (see errorHandler at bottom).
+app.use(
+  pinoHttp({
+    logger,
+    genReqId: (req: any, res: any) => {
+      const incoming = req.headers["x-request-id"];
+      const id =
+        typeof incoming === "string" && incoming.length > 0
+          ? incoming
+          : randomUUID();
+      res.setHeader("X-Request-ID", id);
+      return id;
+    },
+    customLogLevel: (_req: any, res: any, err: any) => {
+      if (err || res.statusCode >= 500) return "error";
+      if (res.statusCode >= 400) return "warn";
+      return "info";
+    },
+    customSuccessMessage: (req: any, res: any) =>
+      `${req.method} ${req.url} → ${res.statusCode}`,
+    customErrorMessage: (req: any, res: any, err: any) =>
+      `${req.method} ${req.url} → ${res.statusCode}: ${err?.message || "error"}`,
+    serializers: {
+      req: (req: any) => ({
+        id: req.id,
+        method: req.method,
+        url: req.url,
+      }),
+      res: (res: any) => ({ statusCode: res.statusCode }),
+    },
+  })
+);
+
+// ============================================
+// 📞 GRAMPO TELEFÔNICO - PRIMEIRA LINHA (legacy console, mantido para debug local)
 // ============================================
 app.use((req: Request, _res: Response, next) => {
-  console.log(`📞 [GRAMPO] ${req.method} ${req.url} - Timestamp: ${Date.now()}`);
+  if (process.env.LEGACY_REQUEST_LOG === "true") {
+    console.log(`📞 [GRAMPO] ${req.method} ${req.url} - Timestamp: ${Date.now()}`);
+  }
   next();
 });
 
@@ -77,7 +126,7 @@ const ALLOWED_ORIGIN: string | string[] = _rawOrigin.includes(',')
 
 app.use(cors({
   origin: ALLOWED_ORIGIN,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
   // credentials: true — omitido (sem cookies/sessão no sistema atual)
 }));
@@ -113,13 +162,35 @@ app.use(
 const brandingAssetsPath = path.resolve(__dirname, "../storage/branding");
 app.use("/storage/branding", express.static(brandingAssetsPath));
 
+// Expor uploads de visual design (logos, referências, artes geradas)
+const uploadsPath = path.resolve(process.cwd(), "uploads");
+app.use("/uploads", express.static(uploadsPath));
+
+const creativeAssetsPath = path.resolve(__dirname, "../storage/creative-assets");
+app.use(
+  "/storage/creative-assets",
+  express.static(creativeAssetsPath, {
+    setHeaders: (res) => setNoCacheHeaders(res as unknown as Response)
+  })
+);
+app.use(
+  "/api/storage/creative-assets",
+  express.static(creativeAssetsPath, {
+    setHeaders: (res) => setNoCacheHeaders(res as unknown as Response)
+  })
+);
+
 // Middleware de Log GLOBAL (SEGUNDA LINHA - DEBUG DETALHADO)
+// Mantido como console (não-crítico) gateado por env LEGACY_REQUEST_LOG=true.
+// O log estruturado oficial é o pino-http acima.
 app.use((req: Request, _res: Response, next) => {
-  console.log(`🔔 [BACKEND RECEBEU] ${req.method} ${req.url}`);
-  console.log(`📍 Origin: ${req.headers.origin || 'N/A'}`);
-  console.log(`📍 Content-Type: ${req.headers['content-type'] || 'N/A'}`);
-  if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
-    console.log(`📦 Body:`, req.body);
+  if (process.env.LEGACY_REQUEST_LOG === "true") {
+    console.log(`🔔 [BACKEND RECEBEU] ${req.method} ${req.url}`);
+    console.log(`📍 Origin: ${req.headers.origin || 'N/A'}`);
+    console.log(`📍 Content-Type: ${req.headers['content-type'] || 'N/A'}`);
+    if (req.body && typeof req.body === 'object' && Object.keys(req.body).length > 0) {
+      console.log(`📦 Body:`, req.body);
+    }
   }
   next();
 });
@@ -200,9 +271,12 @@ app.use("/api", promptTemplatesRouter);
 app.use("/api", promptOnboardingRouter);
 app.use("/api", onboardingRouter);
 app.use("/api", calendarItemsRouter);
+app.use("/api", creativeRouter);
 app.use("/api/clickup", clickupRouter);
 app.use("/api", produtosRouter);
 app.use("/api/briefing-agent", briefingAgentRouter);
+app.use("/api", visualDesignRouter);
+app.use("/api/agency", agencyDashboardRouter); // STORY-011 — dashboard operacional da agência
 
 // Servir arquivos gerados pelo Python (Temporários)
 const presentationOutputPath = path.resolve(__dirname, "../python_gen/output");
@@ -216,6 +290,32 @@ app.use(
 // Servir fontes usadas pelo gerador (para o editor do frontend)
 const presentationFontsPath = path.resolve(__dirname, "../python_gen/fonts");
 app.use("/presentation-fonts", express.static(presentationFontsPath));
+
+// ============================================
+// 🛡️ STORY-012 — Final error handler with requestId
+// ============================================
+// Express picks up handlers with arity 4 as error middleware. Any error that
+// bubbles up via next(err) or unhandled in async routes ends up here, gets
+// logged with the request's requestId, and returns a JSON payload that
+// includes the requestId so users can report it (AC1c).
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
+  const requestId = (req as any).id || res.getHeader("X-Request-ID") || "unknown";
+  const reqLogger = (req as any).log || logger;
+  reqLogger.error(
+    {
+      event: "request_failed",
+      requestId,
+      err: { message: err?.message, code: err?.code, stack: err?.stack },
+    },
+    "Request failed"
+  );
+  if (res.headersSent) return;
+  res.status(err?.status || 500).json({
+    success: false,
+    error: err?.publicMessage || "Erro interno do servidor",
+    requestId,
+  });
+});
 
 // Servir apresentações salvas (Permanentes)
 const presentationsStoragePath = path.resolve(__dirname, "../storage/presentations");
@@ -248,12 +348,12 @@ const checkEnvironment = async () => {
     const result = await db.query("SELECT NOW()");
     console.log(`✅ DB conectado: ${result.rows[0]?.now}`);
 
-    // 2. Check Google API Key
-    const apiKey = process.env.GOOGLE_API_KEY;
-    if (apiKey) {
-      console.log(`✅ GOOGLE_API_KEY carregada: ${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}`);
+    // 2. Check Vertex AI config
+    const gcpProject = process.env.GOOGLE_CLOUD_PROJECT || process.env.VERTEX_PROJECT_ID;
+    if (gcpProject) {
+      console.log(`✅ Vertex AI configurado: projeto=${gcpProject}`);
     } else {
-      console.error("❌ GOOGLE_API_KEY NÃO DEFINIDA no .env");
+      console.error("❌ GOOGLE_CLOUD_PROJECT NÃO DEFINIDA no .env — Vertex AI não funcionará");
     }
 
   } catch (error) {
@@ -305,6 +405,8 @@ server.listen(PORT, () => {
 
   // Iniciar Worker de Geração de Calendário
   startCalendarGenerationWorker();
+  startCreativeProductionWorker();
+  startImageGenerationWorker();
 });
 
 export default app;

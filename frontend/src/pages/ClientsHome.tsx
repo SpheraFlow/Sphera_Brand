@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText, Calendar } from 'lucide-react';
-import api from '../services/api';
+import api, { dnaCompletenessService } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import ImagePreview from '../components/ImagePreview';
+import DnaCompletenessBar from '../components/Onboarding/DnaCompletenessBar';
 import { resolveAssetUrl, withCacheBust, stripCacheBust } from '../utils/assetHelpers';
 import { getArchetypeInfo } from '../utils/jungArchetypes';
 
@@ -42,6 +43,7 @@ export default function ClientsHome() {
   const [savingNicho, setSavingNicho] = useState(false);
   const [nichoClickupListId, setNichoClickupListId] = useState<string>('');
   const [calendarsOverview, setCalendarsOverview] = useState<Record<string, ClientCalendarOverview>>({});
+  const [completenessMap, setCompletenessMap] = useState<Record<string, number>>({});
   const [brokenLogoClients, setBrokenLogoClients] = useState<Set<string>>(() => new Set());
   const [logoOverrides, setLogoOverrides] = useState<Record<string, string>>(() => {
     try {
@@ -138,6 +140,16 @@ export default function ClientsHome() {
 
       // Carregar overview de calendário para cada cliente
       await loadCalendarsOverview(lista);
+
+      // STORY-010 AC8 — completude do DNA de todos os clientes (bulk)
+      try {
+        const items = await dnaCompletenessService.getAll();
+        const map: Record<string, number> = {};
+        items.forEach((it) => { map[it.client_id] = it.percentual; });
+        setCompletenessMap(map);
+      } catch (e) {
+        console.error('Erro ao carregar completude do DNA dos clientes:', e);
+      }
     } catch (error) {
       console.error('Erro ao carregar clientes:', error);
     } finally {
@@ -358,7 +370,7 @@ export default function ClientsHome() {
               </button>
               {canManageClients && (
                 <button
-                  onClick={() => setShowNewClientModal(true)}
+                  onClick={() => navigate('/clients/new')}
                   className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-colors"
                 >
                   + Novo Cliente
@@ -377,7 +389,7 @@ export default function ClientsHome() {
             </div>
             {canManageClients && (
               <button
-                onClick={() => setShowNewClientModal(true)}
+                onClick={() => navigate('/clients/new')}
                 className="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg font-semibold transition-colors"
               >
                 Criar Primeiro Cliente
@@ -524,6 +536,11 @@ export default function ClientsHome() {
                         </span>
                       </div>
                     )}
+                  </div>
+
+                  {/* Completude do DNA (STORY-010 AC8) */}
+                  <div className="mb-4">
+                    <DnaCompletenessBar percentual={completenessMap[cliente.id] ?? 0} compact />
                   </div>
 
                   {/* Botões de Ação Rápida */}

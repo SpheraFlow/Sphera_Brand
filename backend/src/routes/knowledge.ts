@@ -3,7 +3,7 @@ import db from "../config/database";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "../utils/genai-compat";
 
 const router = Router();
 
@@ -374,9 +374,9 @@ router.post("/branding/extract", (req: Request, res: Response, next: NextFunctio
 
     console.log(`📁 [DEBUG] Arquivo recebido: ${file.filename}`);
 
-    // Verificar se tem GOOGLE_API_KEY
-    if (!process.env.GOOGLE_API_KEY) {
-      console.error("❌ GOOGLE_API_KEY não configurada");
+    // Verificar se Vertex AI está configurado
+    if (!process.env.GOOGLE_CLOUD_PROJECT) {
+      console.error("❌ GOOGLE_CLOUD_PROJECT não configurado");
       res.status(500).json({ error: "Configuração de IA não disponível." });
       return;
     }
@@ -384,7 +384,7 @@ router.post("/branding/extract", (req: Request, res: Response, next: NextFunctio
     // Usar Gemini para extrair dados ricos de branding (Brand DNA 2.0)
     console.log("🤖 [IA] Iniciando extração com Gemini (fallback robusto)...");
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+    const genAI = new GoogleGenerativeAI();
     let result;
     let responseText = "";
 
@@ -479,12 +479,12 @@ router.post("/test-ai", async (_req: Request, res: Response): Promise<void> => {
   console.log("🤖 [TEST AI] Testando IA diretamente...");
 
   try {
-    if (!process.env.GOOGLE_API_KEY) {
-      res.status(500).json({ error: "GOOGLE_API_KEY não configurada" });
+    if (!process.env.GOOGLE_CLOUD_PROJECT) {
+      res.status(500).json({ error: "GOOGLE_CLOUD_PROJECT não configurado" });
       return;
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+    const genAI = new GoogleGenerativeAI();
     const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
 
     const prompt = `Analise estas imagens visualmente. Aja como um especialista de branding.

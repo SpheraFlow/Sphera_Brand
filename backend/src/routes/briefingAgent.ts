@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import db from "../config/database";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "../utils/genai-compat";
 import { getGeminiModelCandidates } from "../utils/googleModels";
 import { updateTokenUsage } from "../utils/tokenTracker";
 
@@ -185,12 +185,12 @@ router.post("/chat", async (req: Request, res: Response) => {
     }
 
     // 4. Call Gemini with full conversation history
-    const apiKey = process.env.GOOGLE_API_KEY;
-    if (!apiKey) {
+    const _vertexProject = process.env.GOOGLE_CLOUD_PROJECT;
+    if (!_vertexProject) {
       return res.status(500).json({ error: "GOOGLE_API_KEY não configurada." });
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const genAI = new GoogleGenerativeAI();
     const modelsToTry = getGeminiModelCandidates("fast");
     let reply = "";
 

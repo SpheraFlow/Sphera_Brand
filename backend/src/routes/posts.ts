@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import multer from "multer";
 import fs from "fs";
 import path from "path";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "../utils/genai-compat";
 
 
 
@@ -114,10 +114,10 @@ router.post("/process-post", (req: Request, res: Response, next: NextFunction) =
 
 
         // IA (Gemini)
-        if (process.env.GOOGLE_API_KEY) {
+        if (process.env.GOOGLE_CLOUD_PROJECT) {
             console.log("🤖 [IA] Enviando para Gemini...");
 
-            const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+            const genAI = new GoogleGenerativeAI();
 
             const fileBuffer = fs.readFileSync(file.path);
 

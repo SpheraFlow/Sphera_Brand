@@ -16,7 +16,8 @@ import {
     DollarSign,
     ThumbsUp
 } from 'lucide-react';
-import api, { brandingService, jobsService, presentationService, dashboardMetricsService, calendarItemsService, DashboardMetrics } from '../services/api';
+import api, { brandingService, jobsService, presentationService, dashboardMetricsService, calendarItemsService, dnaCompletenessService, DashboardMetrics, DnaCompleteness } from '../services/api';
+import DnaCompletenessBar from '../components/Onboarding/DnaCompletenessBar';
 
 interface CalendarPost {
     data: string;
@@ -49,6 +50,7 @@ export default function ClientHub() {
     const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
     const [metricsError, setMetricsError] = useState<string | null>(null);
     const [calendarOverview, setCalendarOverview] = useState<CalendarOverview | null>(null);
+    const [dnaCompleteness, setDnaCompleteness] = useState<DnaCompleteness | null>(null);
 
     useEffect(() => {
         if (clientId) {
@@ -76,6 +78,14 @@ export default function ClientHub() {
             } catch (e: any) {
                 // Se 404, score é 0
                 calculateReadiness(null);
+            }
+
+            // 2b. Completude do DNA (STORY-010 AC8) — endpoint dedicado com os 5 campos obrigatórios
+            try {
+                const c = await dnaCompletenessService.getForClient(clientId);
+                setDnaCompleteness(c);
+            } catch (e) {
+                console.error('Erro ao carregar completude do DNA', e);
             }
 
             // 3. Campanhas (Presentation History)
@@ -334,6 +344,32 @@ export default function ClientHub() {
                             Revisar Branding
                         </button>
                     )}
+                </div>
+
+                {/* 1b. Completude do DNA (STORY-010 AC8) */}
+                <div className="bg-gray-800 rounded-xl p-6 border border-gray-700 flex flex-col justify-between">
+                    <div>
+                        <h3 className="text-lg font-bold flex items-center gap-2 mb-4">
+                            <FileText className="w-5 h-5 text-violet-400" /> DNA da Marca
+                        </h3>
+                        <DnaCompletenessBar percentual={dnaCompleteness?.percentual ?? 0} />
+                        {dnaCompleteness && dnaCompleteness.campos_faltando.length > 0 ? (
+                            <p className="text-xs text-gray-500 mt-3">
+                                Faltando: {dnaCompleteness.campos_faltando.join(', ')}
+                            </p>
+                        ) : dnaCompleteness ? (
+                            <p className="text-xs text-green-400 mt-3">DNA completo!</p>
+                        ) : (
+                            <p className="text-xs text-gray-500 mt-3">Carregando completude...</p>
+                        )}
+                    </div>
+
+                    <button
+                        onClick={() => navigate(`/clients/new?clientId=${clientId}&step=2`)}
+                        className="w-full py-2 bg-violet-700 hover:bg-violet-600 rounded-lg text-sm font-bold transition-colors mt-4"
+                    >
+                        {(dnaCompleteness?.percentual ?? 0) >= 80 ? 'Revisar DNA' : 'Completar DNA'}
+                    </button>
                 </div>
 
                 {/* 2. Jobs Recentes */}

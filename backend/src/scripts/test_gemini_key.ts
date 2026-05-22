@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "../utils/genai-compat";
 import * as dotenv from "dotenv";
 import path from "path";
 import { getGeminiModelCandidates } from "../utils/googleModels";

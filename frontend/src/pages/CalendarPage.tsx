@@ -4,6 +4,10 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import ContentMixSelector from '../components/ContentMixSelector';
 import PhotoIdeasModal from '../components/PhotoIdeasModal';
 import JobProgressPanel from '../components/Jobs/JobProgressPanel';
+import CreativeArtModal from '../components/CreativeArtModal';
+import PipelineBoard, { type PipelinePost } from '../components/Calendar/PipelineBoard';
+import PostDetailPanel from '../components/Calendar/PostDetailPanel';
+import ImagePreviewModal from '../components/Calendar/ImagePreviewModal';
 
 import api, { jobsService, calendarItemsService, CalendarItem, CalendarItemStatus } from '../services/api';
 import { useJobPolling } from '../hooks/useJobPolling';
@@ -171,6 +175,9 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [currentMonth, setCurrentMonth] = useState(initMonth);
   const [selectedPost, setSelectedPost] = useState<{ post: Post; index: number } | null>(null);
+  // STORY-009 — Kanban Pipeline view
+  const [viewMode, setViewMode] = useState<'calendar' | 'pipeline'>('calendar');
+  const [pipelineSelectedPost, setPipelineSelectedPost] = useState<PipelinePost | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   const [periodoDias, setPeriodoDias] = useState<number>(30);
@@ -180,6 +187,13 @@ export default function CalendarPage() {
   const [isDeletingPost, setIsDeletingPost] = useState(false);
   const [isRegeneratingPost, setIsRegeneratingPost] = useState(false);
   const [showPhotoIdeasModal, setShowPhotoIdeasModal] = useState(false);
+  const [creativeModalPost, setCreativeModalPost] = useState<{ post: Post; item: CalendarItem | null } | null>(null);
+
+  // STORY-008 — Geração de imagem AI inline
+  // Map itemId → status local do job em andamento ('pending' | 'processing').
+  const [imageJobStatusMap, setImageJobStatusMap] = useState<Map<string, 'pending' | 'processing'>>(new Map());
+  // Modal de preview da imagem gerada.
+  const [imagePreview, setImagePreview] = useState<{ itemId: string; imageUrl: string } | null>(null);
 
   const [showExportModal, setShowExportModal] = useState(false);
   const [exportMonthsSelected, setExportMonthsSelected] = useState<number[]>([]);
@@ -815,6 +829,15 @@ export default function CalendarPage() {
     );
   };
 
+  const openCreativeModal = (post: Post) => {
+    const item = getItemForPost(post);
+    if (!item) {
+      alert('Este post ainda nao tem um item de calendario sincronizado. Atualize a pagina ou salve o calendario antes de gerar arte.');
+      return;
+    }
+    setCreativeModalPost({ post, item });
+  };
+
   const closeEditModal = () => {
     setSelectedPost(null);
   };
@@ -968,6 +991,116 @@ export default function CalendarPage() {
     return calendarItemsMap.get(key) ?? null;
   };
 
+  // ─── STORY-008 — Geração de imagem AI inline ──────────────────────────────
+  // Faz polling do job de imagem a cada 3s até completed/failed.
+  // Atualiza o calendarItemsMap (image_url/image_status) quando concluído.
+  const pollImageJob = useCallback((itemId: string) => {
+    const interval = setInterval(async () => {
+      try {
+        const job = await calendarItemsService.getImageJob(itemId);
+
+        if (job.status === 'completed') {
+          clearInterval(interval);
+          setImageJobStatusMap((prev) => {
+            const next = new Map(prev);
+            next.delete(itemId);
+            return next;
+          });
+          // Atualiza o item no map para refletir a imagem gerada.
+          setCalendarItemsMap((prev) => {
+            const next = new Map(prev);
+            for (const [key, item] of next) {
+              if (item.id === itemId) {
+                next.set(key, { ...item, image_url: job.imageUrl, image_status: 'generated' });
+                break;
+              }
+            }
+            return next;
+          });
+          if (job.imageUrl) {
+            setImagePreview({ itemId, imageUrl: job.imageUrl });
+          }
+        } else if (job.status === 'failed') {
+          clearInterval(interval);
+          setImageJobStatusMap((prev) => {
+            const next = new Map(prev);
+            next.delete(itemId);
+            return next;
+          });
+          setCalendarItemsMap((prev) => {
+            const next = new Map(prev);
+            for (const [key, item] of next) {
+              if (item.id === itemId) {
+                next.set(key, { ...item, image_status: 'failed' });
+                break;
+              }
+            }
+            return next;
+          });
+          alert('Não foi possível gerar a imagem. Tente novamente em alguns instantes.');
+        } else {
+          // pending | processing — mantém o estado de loading.
+          setImageJobStatusMap((prev) => {
+            const next = new Map(prev);
+            next.set(itemId, job.status as 'pending' | 'processing');
+            return next;
+          });
+        }
+      } catch (err) {
+        // Erro de polling não para o loop imediatamente; loga e continua até resolver.
+        console.error('Erro no polling do job de imagem:', err);
+      }
+    }, 3000);
+  }, []);
+
+  // Clica "Gerar Arte": cria o job e inicia o polling.
+  const handleGenerateImage = useCallback(async (post: Post) => {
+    const item = getItemForPost(post);
+    if (!item) {
+      alert('Salve/aprove o post antes de gerar a arte.');
+      return;
+    }
+    try {
+      setImageJobStatusMap((prev) => new Map(prev).set(item.id, 'pending'));
+      await calendarItemsService.generateImage(item.id);
+      pollImageJob(item.id);
+    } catch (err: any) {
+      // 409: já existe job em andamento — apenas retoma o polling.
+      if (err?.response?.status === 409) {
+        pollImageJob(item.id);
+        return;
+      }
+      setImageJobStatusMap((prev) => {
+        const next = new Map(prev);
+        next.delete(item.id);
+        return next;
+      });
+      alert('Não foi possível iniciar a geração da imagem. Tente novamente.');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarItemsMap, pollImageJob]);
+
+  // Retoma o polling de jobs de imagem que ficaram 'pending' (ex.: carregou a
+  // página com um job já em andamento de uma sessão anterior).
+  useEffect(() => {
+    for (const item of calendarItemsMap.values()) {
+      if (item.image_status === 'pending' && !imageJobStatusMap.has(item.id)) {
+        setImageJobStatusMap((prev) => new Map(prev).set(item.id, 'pending'));
+        pollImageJob(item.id);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarItemsMap]);
+
+  // Clica "Ver Arte": abre o modal com a imagem já gerada (sem novo job).
+  const handleViewImage = useCallback((post: Post) => {
+    const item = getItemForPost(post);
+    if (item?.image_url) {
+      setImagePreview({ itemId: item.id, imageUrl: item.image_url });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarItemsMap]);
+
   // Status efetivo para cor do card: prefere item.status quando já foi revisado,
   // senão usa post.status (atualizado imediatamente no click, persistido no JSON)
   const getCardStatus = (post: Post): string => {
@@ -990,6 +1123,40 @@ export default function CalendarPage() {
     return counts;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [calendar, calendarItemsMap]);
+
+  // STORY-009 — Constrói a lista de PipelinePost a partir dos posts do calendário,
+  // hidratando cada um com seu CalendarItem do DB (que carrega approval_status).
+  // Posts sem item no DB são ignorados na Pipeline (Kanban opera sobre items persistidos).
+  const pipelinePosts = useMemo<PipelinePost[]>(() => {
+    if (!calendar) return [];
+    const list: PipelinePost[] = [];
+    for (const post of calendar.posts) {
+      const item = getItemForPost(post);
+      if (!item) continue;
+      list.push({
+        item,
+        copy_inicial: post.copy_inicial || post.legenda || post.copy_sugestao || '',
+        instrucoes_visuais: post.ideia_visual || '',
+      });
+    }
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendar, calendarItemsMap]);
+
+  // STORY-009 — Aplica a atualização de um CalendarItem retornado pela API
+  // (drag-drop, transição via painel, ou salvar nota) ao map de tracking.
+  const handlePipelineItemUpdated = useCallback((updated: CalendarItem) => {
+    const key = `${updated.dia}|${(updated.tema ?? '').trim()}|${(updated.formato ?? '').trim()}`;
+    setCalendarItemsMap((prev) => {
+      const next = new Map(prev);
+      next.set(key, updated);
+      return next;
+    });
+    // Mantém o painel sincronizado se o item atualizado for o aberto
+    setPipelineSelectedPost((prev) =>
+      prev && prev.item.id === updated.id ? { ...prev, item: updated } : prev
+    );
+  }, []);
 
   // Atualiza status via PATCH (com fallback para update no JSON)
   const quickUpdateStatus = async (post: Post, postIndex: number, newStatus: CalendarItemStatus) => {
@@ -1278,6 +1445,27 @@ export default function CalendarPage() {
             {isDeleting && (
               <span className="text-red-400 text-sm animate-pulse">🗑️ Excluindo...</span>
             )}
+            {/* STORY-009 — Alternador de modo Calendário / Pipeline */}
+            <div className="flex items-center bg-gray-800 rounded-lg p-0.5 border border-gray-700">
+              <button
+                onClick={() => setViewMode('calendar')}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'calendar'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-400 hover:text-white'
+                  }`}
+              >
+                📅 Calendário
+              </button>
+              <button
+                onClick={() => setViewMode('pipeline')}
+                className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${viewMode === 'pipeline'
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-400 hover:text-white'
+                  }`}
+              >
+                🗂️ Pipeline
+              </button>
+            </div>
             <button
               onClick={openExportModal}
               className="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg font-semibold transition-colors text-sm"
@@ -1402,6 +1590,9 @@ export default function CalendarPage() {
           </div>
         )}
 
+        {/* STORY-009 — Conteúdo condicional: Calendário tradicional vs Pipeline (Kanban) */}
+        {viewMode === 'calendar' && (
+        <>
         {/* Legenda */}
         <div className="mb-4 flex flex-wrap gap-4 text-xs md:text-sm no-print">
           <div className="flex items-center gap-2">
@@ -1530,7 +1721,64 @@ export default function CalendarPage() {
                                           </button>
                                         );
                                       })}
+                                      <button
+                                        type="button"
+                                        title="Gerar arte"
+                                        onClick={() => openCreativeModal(post)}
+                                        className="text-[9px] px-1.5 py-0.5 rounded bg-yellow-500/10 text-yellow-300 hover:bg-yellow-500/20 transition-colors"
+                                      >
+                                        Arte
+                                      </button>
+                                      {/* STORY-008 — Geração de imagem AI inline */}
+                                      {(() => {
+                                        const imgItem = getItemForPost(post);
+                                        const itemId = imgItem?.id;
+                                        const jobStatus = itemId ? imageJobStatusMap.get(itemId) : undefined;
+                                        const isBusy = jobStatus === 'pending' || jobStatus === 'processing';
+                                        const hasImage = imgItem?.image_status === 'generated' && !!imgItem?.image_url;
+
+                                        if (isBusy) {
+                                          return (
+                                            <button
+                                              type="button"
+                                              disabled
+                                              title="Gerando imagem..."
+                                              className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 cursor-not-allowed"
+                                            >
+                                              <span className="h-2.5 w-2.5 animate-spin rounded-full border-2 border-purple-300 border-t-transparent" />
+                                              Gerando
+                                            </button>
+                                          );
+                                        }
+                                        if (hasImage) {
+                                          return (
+                                            <button
+                                              type="button"
+                                              title="Ver arte gerada"
+                                              onClick={() => handleViewImage(post)}
+                                              className="text-[9px] px-1.5 py-0.5 rounded bg-green-500/10 text-green-300 hover:bg-green-500/20 transition-colors"
+                                            >
+                                              Ver Arte
+                                            </button>
+                                          );
+                                        }
+                                        return (
+                                          <button
+                                            type="button"
+                                            title="Gerar imagem com IA"
+                                            onClick={() => handleGenerateImage(post)}
+                                            className="text-[9px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 transition-colors"
+                                          >
+                                            Gerar Arte
+                                          </button>
+                                        );
+                                      })()}
                                     </div>
+                                    {getItemForPost(post)?.creative_status && getItemForPost(post)?.creative_status !== 'not_started' && (
+                                      <div className="mt-1 text-[9px] uppercase tracking-wide text-yellow-300">
+                                        Arte: {getItemForPost(post)?.creative_status}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </Draggable>
@@ -1546,6 +1794,44 @@ export default function CalendarPage() {
             </div>
           </div>
         </DragDropContext>
+        </>
+        )}
+
+        {/* STORY-009 — Pipeline (Kanban) */}
+        {viewMode === 'pipeline' && (
+          <div className="no-print">
+            {pipelinePosts.length === 0 ? (
+              <div className="text-center py-16 text-gray-500">
+                <p className="text-sm">
+                  Nenhum post disponível no pipeline para este mês.
+                </p>
+              </div>
+            ) : (
+              <PipelineBoard
+                posts={pipelinePosts}
+                onItemUpdated={handlePipelineItemUpdated}
+                onCardClick={setPipelineSelectedPost}
+              />
+            )}
+          </div>
+        )}
+
+        {/* STORY-009 — Painel de detalhes do post (drawer) */}
+        {pipelineSelectedPost && (
+          <PostDetailPanel
+            post={pipelineSelectedPost}
+            onClose={() => setPipelineSelectedPost(null)}
+            onItemUpdated={handlePipelineItemUpdated}
+          />
+        )}
+
+        {/* STORY-008 — Modal de preview da imagem gerada por IA */}
+        <ImagePreviewModal
+          isOpen={!!imagePreview}
+          onClose={() => setImagePreview(null)}
+          imageUrl={imagePreview?.imageUrl ?? null}
+          calendarItemId={imagePreview?.itemId ?? null}
+        />
 
         {/* Modal de Geração — branch com calendário */}
         {showGenerateModal && (
@@ -1900,6 +2186,13 @@ export default function CalendarPage() {
           </div>
         )}
         {/* Job progress is now handled by JobProgressPanel at the top of the page */}
+        <CreativeArtModal
+          isOpen={!!creativeModalPost}
+          onClose={() => setCreativeModalPost(null)}
+          calendarItemId={creativeModalPost?.item?.id || null}
+          post={creativeModalPost?.post || null}
+          onChanged={loadCalendar}
+        />
       </div>
     </div>
   );
@@ -2642,8 +2935,6 @@ function GenerateModal({
     </div>
   );
 }
-
-
 
 
 

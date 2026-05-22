@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "../utils/genai-compat";
 import db from "../config/database";
 import { updateTokenUsage } from "../utils/tokenTracker";
 
@@ -167,7 +167,7 @@ router.post("/prompt-chains/execute/:chainId", async (req: Request, res: Respons
       return res.status(400).json({ success: false, message: "clientId é obrigatório para execução da chain." });
     }
 
-    if (!process.env.GOOGLE_API_KEY) {
+    if (!process.env.GOOGLE_CLOUD_PROJECT) {
       return res.status(500).json({ success: false, message: "Configuração de IA ausente (GOOGLE_API_KEY)." });
     }
 
@@ -183,7 +183,7 @@ router.post("/prompt-chains/execute/:chainId", async (req: Request, res: Respons
     const brandingResult = await db.query("SELECT * FROM branding WHERE cliente_id = $1", [clientId]);
     const branding = brandingResult.rows[0] || null;
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
+    const genAI = new GoogleGenerativeAI();
 
     const contextVars: Record<string, any> = {
       branding,

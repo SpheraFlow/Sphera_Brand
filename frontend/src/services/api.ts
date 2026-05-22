@@ -287,7 +287,77 @@ export const clientService = {
   async createClient(nome: string): Promise<Client> {
     const response = await api.post('/clients', { nome });
     return response.data.cliente;
+  },
+
+  // STORY-010 — cria cliente com nicho/categorias no onboarding wizard
+  async createClientFull(payload: { nome: string; categorias_nicho?: string[] }): Promise<any> {
+    const response = await api.post('/clients', payload);
+    return response.data.cliente;
   }
+};
+
+// --- DNA Completeness Service (STORY-010) ---
+export interface DnaCompleteness {
+  percentual: number;
+  campos_faltando: string[];
+}
+
+export interface DnaCompletenessItem extends DnaCompleteness {
+  client_id: string;
+}
+
+export const dnaCompletenessService = {
+  // AC6 — completude de um cliente específico
+  async getForClient(clientId: string): Promise<DnaCompleteness> {
+    const response = await api.get(`/clients/${clientId}/branding/completude`);
+    return { percentual: response.data.percentual, campos_faltando: response.data.campos_faltando || [] };
+  },
+
+  // AC8 — completude de todos os clientes (para listas)
+  async getAll(): Promise<DnaCompletenessItem[]> {
+    const response = await api.get('/clients/completeness');
+    return response.data.items || [];
+  },
+};
+
+// --- Onboarding ARIA Service (STORY-010 / reuso do BrandingOnboardingPage) ---
+export interface OnboardingChatMessage {
+  role: 'user' | 'model';
+  content: string;
+}
+
+export interface OnboardingExtractedBranding {
+  visual_style?: { colors?: string[]; fonts?: string[]; archeType?: string };
+  tone_of_voice?: { description?: string; keywords?: string[] };
+  audience?: { persona?: string; demographics?: string };
+  keywords?: string[];
+  archetype?: string;
+  usp?: string;
+  anti_keywords?: string[];
+  niche?: string;
+}
+
+export interface OnboardingChatResponse {
+  success: boolean;
+  reply: string;
+  isComplete: boolean;
+  extractedData?: OnboardingExtractedBranding | null;
+}
+
+export const onboardingAriaService = {
+  async chat(
+    clientId: string,
+    messages: OnboardingChatMessage[],
+    userMessage: string,
+    signal?: AbortSignal,
+  ): Promise<OnboardingChatResponse> {
+    const response = await api.post(
+      `/onboarding/chat/${clientId}`,
+      { messages, userMessage },
+      signal ? { signal } : undefined,
+    );
+    return response.data;
+  },
 };
 
 // --- Branding Service ---
@@ -354,6 +424,29 @@ export const jobsService = {
 
   async deleteJob(clientId: string, jobId: string): Promise<any> {
     const response = await api.delete(`/jobs/${clientId}/${jobId}`);
+    return response.data;
+  },
+
+  // STORY-012 AC6 — fetch global error rate to drive AgencyHome alert banner.
+  async getErrorRate(hours: number = 2): Promise<{
+    success: boolean;
+    hours: number;
+    failed: number;
+    total: number;
+    ratio: number;
+    threshold: number;
+    should_alert: boolean;
+    recent_failures: Array<{
+      job_id: string;
+      job_type: string;
+      cliente_id: string;
+      client_name: string | null;
+      last_error: string | null;
+      attempt_count: number;
+      created_at: string;
+    }>;
+  }> {
+    const response = await api.get(`/jobs/health/error-rate`, { params: { hours } });
     return response.data;
   }
 };
@@ -496,6 +589,25 @@ export const promptTemplateService = {
 // --- Calendar Items Service ---
 export type CalendarItemStatus = 'draft' | 'approved' | 'needs_edit' | 'redo' | 'published';
 
+// STORY-009 — Kanban approval workflow
+export type ApprovalStatus = 'draft' | 'in_review' | 'approved' | 'published';
+export const APPROVAL_STATUSES: readonly ApprovalStatus[] = [
+  'draft',
+  'in_review',
+  'approved',
+  'published',
+] as const;
+
+export interface PostComment {
+  id: string;
+  calendar_item_id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  user_name: string | null;
+  user_email: string | null;
+}
+
 export interface CalendarItem {
   id: string;
   calendario_id: string;
@@ -510,7 +622,29 @@ export interface CalendarItem {
   published_at: string | null;
   last_updated_at: string;
   notes: string | null;
+  creative_status?: 'not_started' | 'queued' | 'generating' | 'ready_for_review' | 'approved' | 'needs_edit' | 'failed';
+  selected_creative_asset_id?: string | null;
+  latest_creative_job_id?: string | null;
+  // STORY-009
+  approval_status?: ApprovalStatus;
+  reviewer_notes?: string | null;
+  // STORY-008 — geração de imagem AI inline
+  image_url?: string | null;
+  image_status?: 'none' | 'pending' | 'generated' | 'failed';
 }
+
+// STORY-008 — status do job de geração de imagem (polling)
+export type ImageJobStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface ImageGenerationJobStatus {
+  jobId: string;
+  status: ImageJobStatus;
+  imageUrl: string | null;
+  error: string | null;
+  attemptCount: number;
+}
+
+export type ImageAspectRatio = '1:1' | '9:16' | '4:5';
 
 export const calendarItemsService = {
   async getItems(calendarioId: string): Promise<CalendarItem[]> {
@@ -543,6 +677,403 @@ export const calendarItemsService = {
       dia, tema, formato, status,
     });
     return response.data.item;
+  },
+
+  // ─── STORY-009 — Kanban approval workflow ────────────────────────────────
+  async patchApprovalStatus(
+    itemId: string,
+    payload: { approval_status?: ApprovalStatus; reviewer_notes?: string | null },
+  ): Promise<CalendarItem> {
+    const response = await api.patch(`/calendar-items/${itemId}/status`, payload);
+    return response.data.item;
+  },
+
+  async addComment(itemId: string, content: string): Promise<PostComment> {
+    const response = await api.post(`/calendar-items/${itemId}/comment`, { content });
+    return response.data.comment;
+  },
+
+  async getComments(itemId: string): Promise<PostComment[]> {
+    const response = await api.get(`/calendar-items/${itemId}/comments`);
+    return response.data.comments || [];
+  },
+
+  // ─── STORY-008 — Geração de Imagem AI Inline ─────────────────────────────
+  // Cria um job de geração. Retorna 409 se já houver job em andamento.
+  async generateImage(
+    itemId: string,
+    aspectRatio?: ImageAspectRatio,
+  ): Promise<{ jobId: string; status: ImageJobStatus }> {
+    const response = await api.post(`/calendar-items/${itemId}/generate-image`, { aspectRatio });
+    return { jobId: response.data.jobId, status: response.data.status };
+  },
+
+  // Busca o status do job de imagem mais recente do item (para polling).
+  async getImageJob(itemId: string): Promise<ImageGenerationJobStatus> {
+    const response = await api.get(`/calendar-items/${itemId}/image-job`);
+    return {
+      jobId: response.data.jobId,
+      status: response.data.status,
+      imageUrl: response.data.imageUrl ?? null,
+      error: response.data.error ?? null,
+      attemptCount: response.data.attemptCount ?? 0,
+    };
+  },
+};
+
+// --- Creative Production Service ---
+export type CreativeJobStatus =
+  | 'queued'
+  | 'hydrating_context'
+  | 'briefing'
+  | 'selecting_template'
+  | 'prompting'
+  | 'rendering'
+  | 'quality_check'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+export type CreativeAssetStatus =
+  | 'generated'
+  | 'approved'
+  | 'needs_edit'
+  | 'rejected'
+  | 'archived';
+
+export interface CreativeDimensions {
+  width: number;
+  height: number;
+  aspectRatio: string;
+}
+
+export interface GenerateArtPayload {
+  mode: 'template_svg' | 'ai_visual' | 'design_recipe' | 'template_master';
+  platform: 'instagram' | 'facebook' | 'linkedin' | 'tiktok' | 'site';
+  format?: string;
+  templateId?: string;
+  recipeId?: string;
+  decisionMode?: 'auto_generate' | 'suggest_first';
+  postType?: string;
+  instructions?: string;
+  postTypeSource?: 'ai_classified' | 'user_selected';
+  backgroundSource?: 'ai_generated' | 'client_upload' | 'asset_library' | 'recipe_default';
+  suggestionsCount?: number;
+  dimensions: CreativeDimensions;
+  generationOptions: {
+    variationsCount: number;
+    generateImage: boolean;
+    generateEditableLayout: boolean;
+    includeTextInImage: boolean;
+    qualityLevel: 'basic' | 'standard' | 'premium';
+  };
+  overrides?: Record<string, unknown>;
+  references?: Array<{
+    type: 'image' | 'brandbook' | 'palette' | 'post_reference';
+    source: 'uploaded_asset' | 'url' | 'brand_asset';
+    assetId?: string;
+    url?: string;
+    usage: 'style_reference' | 'palette_reference' | 'composition_reference' | 'negative_reference';
+    weight?: number;
+  }>;
+  idempotencyKey?: string;
+}
+
+export interface CreativeJob {
+  id: string;
+  cliente_id: string;
+  calendario_id: string | null;
+  calendar_item_id: string;
+  status: CreativeJobStatus;
+  progress: number;
+  current_step: string | null;
+  visual_brief: any;
+  image_prompt: any;
+  layout_spec: any;
+  output: any;
+  error: any;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export interface CreativeAsset {
+  id: string;
+  creative_job_id: string;
+  cliente_id: string;
+  calendario_id: string | null;
+  calendar_item_id: string;
+  asset_type: string;
+  status: CreativeAssetStatus;
+  title: string | null;
+  description: string | null;
+  file_url: string | null;
+  preview_url: string | null;
+  thumbnail_url?: string | null;
+  editable_svg_url?: string | null;
+  editable_layout_url?: string | null;
+  width: number | null;
+  height: number | null;
+  mime_type: string | null;
+  file_size: number | null;
+  prompt: any;
+  metadata: any;
+  quality_report: any;
+  selected: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VisualRecipe {
+  id: string;
+  clientId: string | null;
+  scope: 'client' | 'global';
+  name: string;
+  postType: string;
+  platform: string;
+  format: string;
+  dimensions: { width: number; height: number; aspectRatio: string };
+  tags: string[];
+  mood: string[];
+  requiredSlots: string[];
+  optionalSlots: string[];
+  layoutRules: Record<string, unknown>;
+  styleRules: Record<string, unknown>;
+  backgroundPolicy: Record<string, unknown>;
+  status: 'draft' | 'reviewed' | 'approved' | 'archived';
+  sourceAssetId: string | null;
+  sourceImageUrl: string | null;
+  qualityScore: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TemplateMasterSlot {
+  type: 'text' | 'image' | 'icon' | 'logo';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  maxWords?: number;
+  maxLines?: number;
+  fontRole?: string;
+  colorRole?: string;
+  lockedPosition: boolean;
+  fitStrategy?: 'reduce_font_then_line_break' | 'reject_on_overflow';
+}
+
+export interface TemplateMasterConfig {
+  templateId: string;
+  version: string;
+  format: string;
+  canvas: { width: number; height: number; aspectRatio: string };
+  contentCapacity: 'low' | 'medium' | 'high';
+  layoutLock: boolean;
+  bestFor: string[];
+  avoidFor: string[];
+  slots: Record<string, TemplateMasterSlot>;
+  colorMapping: Record<string, string>;
+  imageRules: Record<string, unknown>;
+  qualityRules: {
+    minTextContrast: number;
+    safeMargin: number;
+    doNotMoveElements: boolean;
+    rejectIfTextOverflow: boolean;
+  };
+}
+
+export interface CreativeTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  format: string;
+  platform: string;
+  width: number;
+  height: number;
+  aspect_ratio: string | null;
+  preview_url: string | null;
+  thumbnail_url: string | null;
+  tags: string[];
+  status: string;
+  template_type?: string | null;
+  content_capacity?: string | null;
+  best_for?: string[];
+  avoid_for?: string[];
+  design_md?: string | null;
+  config_json?: TemplateMasterConfig | null;
+  layout_lock?: boolean;
+  base_asset_url?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TemplateRenderResult {
+  asset: {
+    previewUrl: string;
+    fileUrl: string;
+    editableSvgUrl: string;
+    width: number;
+    height: number;
+  };
+  qualityReport: {
+    passed: boolean;
+    warnings: string[];
+    slots?: Record<string, unknown>;
+  };
+  warnings: string[];
+}
+
+export interface TemplateMasterSuggestion {
+  templateId: string;
+  id: string;
+  name: string;
+  description: string | null;
+  previewUrl: string | null;
+  baseAssetUrl: string | null;
+  score: number;
+  reasons: string[];
+  contentCapacity: string | null;
+  visualStyle: string[];
+  bestFor: string[];
+  avoidFor: string[];
+  status: string;
+  format: string;
+  platform: string;
+  width: number;
+  height: number;
+  aspectRatio: string | null;
+  configJson: TemplateMasterConfig | Record<string, unknown>;
+}
+
+export const creativeService = {
+  async generateArt(calendarItemId: string, payload: GenerateArtPayload): Promise<{ jobId: string; status: CreativeJobStatus; calendarItemId: string; job?: CreativeJob; assets?: CreativeAsset[] }> {
+    const response = await api.post(`/calendar-items/${calendarItemId}/generate-art`, payload);
+    return response.data;
+  },
+
+  async getJob(jobId: string): Promise<{ job: CreativeJob; assets: CreativeAsset[] }> {
+    const response = await api.get(`/creative-jobs/${jobId}`);
+    return { job: response.data.job, assets: response.data.assets || [] };
+  },
+
+  async getAssets(calendarItemId: string): Promise<CreativeAsset[]> {
+    const response = await api.get(`/calendar-items/${calendarItemId}/creative-assets`);
+    return response.data.assets || [];
+  },
+
+  async getTemplateMasterSuggestions(calendarItemId: string, params?: { platform?: string; format?: string; postType?: string; limit?: number }): Promise<TemplateMasterSuggestion[]> {
+    const search = new URLSearchParams();
+    search.set('platform', params?.platform || 'instagram');
+    search.set('format', params?.format || 'Arte');
+    if (params?.postType) search.set('postType', params.postType);
+    if (params?.limit) search.set('limit', String(params.limit));
+    const response = await api.get(`/calendar-items/${calendarItemId}/template-master-suggestions?${search.toString()}`);
+    return response.data.suggestions || [];
+  },
+
+  async updateAssetStatus(
+    assetId: string,
+    status: CreativeAssetStatus,
+    selected: boolean,
+    notes?: string,
+    feedback?: string,
+    reason?: string,
+    scores?: Record<string, unknown>
+  ): Promise<CreativeAsset> {
+    const response = await api.patch(`/creative-assets/${assetId}/status`, {
+      status,
+      selected,
+      notes,
+      feedback,
+      reason,
+      scores,
+    });
+    return response.data.asset;
+  },
+
+  async listVisualRecipes(clientId: string, params?: { postType?: string; platform?: string; format?: string; includeDrafts?: boolean }): Promise<VisualRecipe[]> {
+    const search = new URLSearchParams();
+    if (params?.postType) search.set('postType', params.postType);
+    if (params?.platform) search.set('platform', params.platform);
+    if (params?.format) search.set('format', params.format);
+    if (params?.includeDrafts) search.set('includeDrafts', 'true');
+    const query = search.toString();
+    const response = await api.get(`/clients/${clientId}/visual-recipes${query ? `?${query}` : ''}`);
+    return response.data.recipes || [];
+  },
+
+  async updateVisualRecipeStatus(recipeId: string, status: VisualRecipe['status']): Promise<VisualRecipe> {
+    const response = await api.patch(`/visual-recipes/${recipeId}/status`, { status });
+    return response.data.recipe;
+  },
+
+  async extractVisualRecipe(clientId: string, file: File, payload: { scope: 'client' | 'global'; postType?: string; platform?: string; format?: string; width?: number; height?: number; aspectRatio?: string }): Promise<{ recipe: VisualRecipe; analysis: Record<string, unknown>; warnings: string[]; referenceImageUrl: string }> {
+    const form = new FormData();
+    form.append('image', file);
+    form.append('scope', payload.scope);
+    if (payload.postType) form.append('postType', payload.postType);
+    form.append('platform', payload.platform || 'instagram');
+    form.append('format', payload.format || 'Arte');
+    form.append('width', String(payload.width || 1080));
+    form.append('height', String(payload.height || 1350));
+    form.append('aspectRatio', payload.aspectRatio || '4:5');
+    const response = await api.post(`/clients/${clientId}/visual-recipes/extract`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  async listCreativeTemplates(params?: { platform?: string; format?: string }): Promise<CreativeTemplate[]> {
+    const search = new URLSearchParams();
+    search.set('platform', params?.platform || 'instagram');
+    search.set('format', params?.format || 'Arte');
+    const response = await api.get(`/creative-templates?${search.toString()}`);
+    return response.data.templates || [];
+  },
+
+  async createTemplate(payload: {
+    name: string;
+    description?: string;
+    format: string;
+    platform: string;
+    width: number;
+    height: number;
+    aspectRatio: string;
+    designMd: string;
+    configJson: TemplateMasterConfig;
+    baseAssetUrl?: string;
+    previewUrl?: string;
+    tags?: string[];
+    status?: string;
+  }): Promise<CreativeTemplate> {
+    const response = await api.post('/creative-templates', payload);
+    return response.data.template;
+  },
+
+  async updateTemplateConfig(templateId: string, payload: {
+    designMd: string;
+    configJson: TemplateMasterConfig;
+    baseAssetUrl?: string;
+    status?: string;
+  }): Promise<CreativeTemplate> {
+    const response = await api.patch(`/creative-templates/${templateId}/config`, payload);
+    return response.data.template;
+  },
+
+  async testTemplateRender(templateId: string, payload: {
+    configJson: TemplateMasterConfig;
+    baseAssetUrl?: string;
+    copy?: Record<string, string>;
+    images?: Record<string, string>;
+    brandPalette?: Record<string, string>;
+  }): Promise<TemplateRenderResult> {
+    const response = await api.post(`/creative-templates/${templateId}/test-render`, payload);
+    return response.data;
+  },
+
+  async listTemplateVersions(templateId: string): Promise<any[]> {
+    const response = await api.get(`/creative-templates/${templateId}/versions`);
+    return response.data.versions || [];
   },
 };
 
@@ -715,6 +1246,45 @@ export const briefingAgentService = {
       clientId,
       messages,
       campaignContext,
+    });
+    return response.data;
+  },
+};
+
+// --- Agency Dashboard Service (STORY-011) ---
+export interface AgencyClientSummary {
+  client_id: string;
+  client_name: string;
+  posts_approved_month: number;
+  posts_published_month: number;
+}
+
+export interface AgencyClientAtRisk {
+  client_id: string;
+  client_name: string;
+  days_since_last_approved: number | null;
+}
+
+export interface AgencyTokenUsageSummary {
+  client_id: string;
+  client_name: string;
+  tokens_used_month: number;
+  cost_cents_month: number;
+}
+
+export interface AgencyDashboardResponse {
+  success: boolean;
+  app_cam_current: number;
+  clients_summary: AgencyClientSummary[];
+  clients_at_risk: AgencyClientAtRisk[];
+  token_usage_summary: AgencyTokenUsageSummary[];
+}
+
+export const agencyService = {
+  async getDashboard(): Promise<AgencyDashboardResponse> {
+    // AC6 — timeout de 5s para o dashboard: se exceder, cai no error state com retry.
+    const response = await api.get<AgencyDashboardResponse>('/agency/dashboard', {
+      timeout: 5000,
     });
     return response.data;
   },

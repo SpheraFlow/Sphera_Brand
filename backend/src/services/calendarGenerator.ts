@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
+import { GoogleGenerativeAI, SchemaType } from "../utils/genai-compat";
 import db from "../config/database";
 import { updateTokenUsage } from "../utils/tokenTracker";
 import { validateCalendarSchema, repairCalendarSchema, InvalidCalendarOutputError } from "../utils/calendarValidator";
@@ -185,9 +185,9 @@ const tryParseJsonCandidates = (text: string) => {
     throw error;
 };
 
-const attemptJsonRepair = async (rawText: string, apiKey: string, clienteId: string) => {
+const attemptJsonRepair = async (rawText: string, _apiKey: string, clienteId: string) => {
     const modelsToTry = getGeminiModelCandidates("fast");
-    const genAI = new GoogleGenerativeAI(apiKey);
+    const genAI = new GoogleGenerativeAI();
 
     const repairPrompt = [
         "Voc? ? um reparador de JSON estrito.",
@@ -446,7 +446,7 @@ export const generateCalendarForMonth = async (opts: GenerateMonthOptions) => {
         (mixForThisMonth.photos || 0);
 
     // Validar API Key
-    if (!process.env.GOOGLE_API_KEY) {
+    if (!process.env.GOOGLE_CLOUD_PROJECT) {
         throw new Error("API Key do Google não encontrada.");
     }
 
@@ -512,7 +512,7 @@ export const generateCalendarForMonth = async (opts: GenerateMonthOptions) => {
     try {
         const planning = await planMonthlyCalendar({
             clienteId,
-            apiKey: process.env.GOOGLE_API_KEY!,
+            apiKey: "",
             mes: mesToGenerate,
             mix: mixForThisMonth,
             brandingSummary,
@@ -670,7 +670,7 @@ REGRAS FINAIS DE EXECUCAO:
 - Para Carrossel: "copy_inicial" = TODOS os slides com [Slide N] notation, "instrucoes_visuais" = visual de cada slide com [Slide N] notation, "legenda" = caption final sem notacao de slides.
 - Em Carrossel, NUNCA coloque apenas o texto do primeiro slide em "copy_inicial" — inclua todos os slides numerados.`;
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
+    const genAI = new GoogleGenerativeAI();
     const modelsToTry = getGeminiModelCandidates("fast");
 
     let responseText = "";
@@ -723,7 +723,7 @@ REGRAS FINAIS DE EXECUCAO:
         throw new Error(`Falha na geração IA: ${lastError?.message || 'Sem resposta'}`);
     }
 
-    let calendarData = await cleanAndParseJSON(responseText, process.env.GOOGLE_API_KEY, clienteId);
+    let calendarData = await cleanAndParseJSON(responseText, "", clienteId);
     calendarData = ensureCarouselLegendas(calendarData);
 
     if (Array.isArray(calendarData)) {
@@ -731,7 +731,7 @@ REGRAS FINAIS DE EXECUCAO:
         try {
             const critique = await critiqueCalendarDraft({
                 clienteId,
-                apiKey: process.env.GOOGLE_API_KEY!,
+                apiKey: "",
                 mes: mesToGenerate,
                 historyContext,
                 monthlyPlan,

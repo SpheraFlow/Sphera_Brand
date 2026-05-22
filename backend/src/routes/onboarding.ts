@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "../utils/genai-compat";
 import db from "../config/database";
 import { updateTokenUsage } from "../utils/tokenTracker";
 
@@ -59,7 +59,7 @@ router.post("/onboarding/chat/:clientId", async (req: Request, res: Response) =>
       userMessage?: string;
     };
 
-    if (!process.env.GOOGLE_API_KEY) {
+    if (!process.env.GOOGLE_CLOUD_PROJECT) {
       return res.status(500).json({ success: false, message: "Configuração de IA ausente." });
     }
 
@@ -70,7 +70,7 @@ router.post("/onboarding/chat/:clientId", async (req: Request, res: Response) =>
     }
     const clientName = clientResult.rows[0].nome as string;
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
+    const genAI = new GoogleGenerativeAI();
 
     // Construir histórico para o chat
     // Mensagem de gatilho usada na chamada inicial (quando não havia userMessage)

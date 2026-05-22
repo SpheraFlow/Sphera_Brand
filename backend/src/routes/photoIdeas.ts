@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "../utils/genai-compat";
 import db from "../config/database";
 import { updateTokenUsage } from "../utils/tokenTracker";
 
@@ -89,11 +89,11 @@ Retorne APENAS um JSON válido neste formato:
 
     console.log("🤖 [DEBUG] Enviando para Gemini...");
 
-    if (!process.env.GOOGLE_API_KEY) {
+    if (!process.env.GOOGLE_CLOUD_PROJECT) {
       throw new Error("GOOGLE_API_KEY não configurada");
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+    const genAI = new GoogleGenerativeAI();
 
     let result;
     let responseText = "";

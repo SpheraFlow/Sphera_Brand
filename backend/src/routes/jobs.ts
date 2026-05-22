@@ -1,7 +1,67 @@
 ﻿import { Router, Request, Response } from "express";
 import db from "../config/database";
+import logger from "../utils/logger";
 
 const router = Router();
+const routeLog = logger.child({ component: "jobsRoute" });
+
+// ============================================
+// STORY-012 AC6 — Error rate endpoint
+// GET /api/jobs/health/error-rate?hours=2
+// Returns { failed, total, ratio, recentFailures: [...] }
+// Used by AgencyHome.tsx to decide whether to show the alert banner (> 5%).
+// ============================================
+router.get("/health/error-rate", async (req: Request, res: Response) => {
+    try {
+        const hours = Math.min(Math.max(parseInt(String(req.query.hours || "2"), 10) || 2, 1), 24);
+        const interval = `${hours} hours`;
+
+        const result = await db.query(
+            `SELECT
+                COUNT(*) FILTER (WHERE status = 'failed' AND created_at > NOW() - $1::interval) AS failed,
+                COUNT(*) FILTER (WHERE created_at > NOW() - $1::interval) AS total
+             FROM calendar_generation_jobs`,
+            [interval]
+        );
+        const failed = Number(result.rows[0]?.failed || 0);
+        const total = Number(result.rows[0]?.total || 0);
+        const ratio = total > 0 ? failed / total : 0;
+
+        // Fetch top 10 recent failures for the drill-down list.
+        const failuresRes = await db.query(
+            `SELECT j.id AS job_id,
+                    COALESCE(j.payload->>'jobType', 'calendar') AS job_type,
+                    j.cliente_id,
+                    c.nome AS client_name,
+                    LEFT(COALESCE(j.last_error, j.error->>'message', ''), 200) AS last_error,
+                    j.attempt_count,
+                    j.created_at
+             FROM calendar_generation_jobs j
+             LEFT JOIN clientes c ON c.id = j.cliente_id
+             WHERE j.status = 'failed' AND j.created_at > NOW() - $1::interval
+             ORDER BY j.created_at DESC
+             LIMIT 10`,
+            [interval]
+        );
+
+        return res.json({
+            success: true,
+            hours,
+            failed,
+            total,
+            ratio,
+            threshold: 0.05,
+            should_alert: ratio > 0.05 && failed > 0,
+            recent_failures: failuresRes.rows,
+        });
+    } catch (error: any) {
+        routeLog.error(
+            { event: "error_rate_query_failed", error_message: error?.message },
+            "Falha ao calcular taxa de erro"
+        );
+        return res.status(500).json({ success: false, error: "Erro ao calcular taxa de erro" });
+    }
+});
 
 // GET /api/jobs/:clientId/:jobId
 router.get("/:clientId/:jobId", async (req: Request, res: Response) => {
@@ -15,8 +75,9 @@ router.get("/:clientId/:jobId", async (req: Request, res: Response) => {
 
         // Query bÃ¡sica
         let selectFields = `
-      id, cliente_id, status, progress, current_step, 
+      id, cliente_id, status, progress, current_step,
       result_calendar_ids, error, created_at, started_at, finished_at, updated_at,
+      attempt_count, last_error, last_error_at,
       payload->'result' AS result,
       COALESCE(payload->>'jobType', 'calendar') AS job_type,
       payload->>'operation' AS operation
@@ -206,11 +267,12 @@ router.get("/:clientId", async (req: Request, res: Response) => {
         }
 
         const result = await db.query(
-            `SELECT 
-        id, status, progress, current_step, error, created_at, finished_at 
-        FROM calendar_generation_jobs 
-        WHERE cliente_id = $1 
-        ORDER BY created_at DESC 
+            `SELECT
+        id, status, progress, current_step, error, created_at, finished_at,
+        attempt_count, last_error, last_error_at
+        FROM calendar_generation_jobs
+        WHERE cliente_id = $1
+        ORDER BY created_at DESC
         LIMIT 20`,
             [clientId]
         );

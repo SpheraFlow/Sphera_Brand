@@ -12,6 +12,26 @@ import {
 import { jobsService } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
 
+/**
+ * STORY-012 AC5 — Humaniza a mensagem de erro do job para o usuário final.
+ * Nunca expõe stack trace ou texto técnico cru — apenas três buckets:
+ *   - rede/timeout → "Serviço de IA temporariamente indisponível..."
+ *   - quota (429)  → "Limite de uso da IA atingido..."
+ *   - genérico     → "Ocorreu um erro inesperado..."
+ */
+function humanizeJobError(lastError: string | null | undefined): string {
+    if (!lastError || typeof lastError !== 'string' || lastError.trim() === '' || lastError === 'undefined') {
+        return 'Ocorreu um erro inesperado. Se persistir, contate o suporte.';
+    }
+    if (/ECONNRESET|ETIMEDOUT|ECONNREFUSED|timeout|timed out|network|unavailable|503|504/i.test(lastError)) {
+        return 'Serviço de IA temporariamente indisponível. Tente novamente em alguns minutos.';
+    }
+    if (/429|quota|rate.?limit|limite/i.test(lastError)) {
+        return 'Limite de uso da IA atingido. Tente novamente mais tarde ou contate o suporte.';
+    }
+    return 'Ocorreu um erro inesperado. Se persistir, contate o suporte.';
+}
+
 interface JobProgressModalProps {
     clientId: string;
     jobId: string;
@@ -177,8 +197,15 @@ export default function JobProgressModal({
                     </h2>
 
                     <p className="text-gray-400 mb-8">
-                        {status?.result?.message || status?.current_step || 'Aguardando atualizações da IA...'}
+                        {status?.status === 'failed'
+                            ? humanizeJobError(status?.last_error || status?.error?.message)
+                            : (status?.result?.message || status?.current_step || 'Aguardando atualizações da IA...')}
                     </p>
+                    {status?.status === 'failed' && (status?.last_error || status?.error?.message) && (
+                        <p className="text-[10px] text-gray-600 -mt-6 mb-6 italic">
+                            ID do erro: {(status as any)?.id || 'desconhecido'}
+                        </p>
+                    )}
 
                     {/* Progress Bar */}
                     {status?.status !== 'completed' && status?.status !== 'succeeded' && status?.status !== 'failed' && (

@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import db from '../config/database';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from '../utils/genai-compat';
 import { updateTokenUsage } from '../utils/tokenTracker';
 import { getGeminiModelCandidates } from '../utils/googleModels';
 
@@ -511,11 +511,11 @@ const runGeminiJsonPrompt = async (
     usageScope: string,
     tier: 'fast' | 'quality' = 'quality'
 ) => {
-    if (!process.env.GOOGLE_API_KEY) {
+    if (!process.env.GOOGLE_CLOUD_PROJECT) {
         throw new Error('GOOGLE_API_KEY nao configurada');
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+    const genAI = new GoogleGenerativeAI();
     const modelsToTry = getGeminiModelCandidates(tier);
     let lastError: any = null;
 
@@ -1345,10 +1345,10 @@ router.post('/chat-agent', async (req: Request, res: Response) => {
             });
         }
 
-        const apiKey = process.env.GOOGLE_API_KEY;
-        if (!apiKey) return res.status(500).json({ error: 'GOOGLE_API_KEY nao configurada.' });
+        const _vertexProject = process.env.GOOGLE_CLOUD_PROJECT;
+        if (!_vertexProject) return res.status(500).json({ error: 'GOOGLE_CLOUD_PROJECT nao configurado.' });
 
-        const genAI = new GoogleGenerativeAI(apiKey);
+        const genAI = new GoogleGenerativeAI();
         const modelsToTry = getGeminiModelCandidates('fast');
         let reply = '';
 

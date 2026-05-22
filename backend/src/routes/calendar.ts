@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI } from "../utils/genai-compat";
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
@@ -323,7 +323,7 @@ router.put("/calendars/regenerate-post", async (req: Request, res: Response) => 
       Nao inclua explicacoes adicionais, apenas o JSON puro do objeto.
     `;
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY!);
+    const genAI = new GoogleGenerativeAI();
 
     let result;
     let responseText = "";
