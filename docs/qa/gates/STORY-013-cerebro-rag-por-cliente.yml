@@ -1,0 +1,56 @@
+schema: 1
+story: 'STORY-013'
+title: 'Cérebro RAG por Cliente (Memória Persistente)'
+gate: CONCERNS
+status_reason: 'AC1-AC7 implementados com isolamento por cliente_id robusto e graceful degradation correta; AC8 (buildDynamicContext em brandingMerger) não implementado e documentado como trabalho futuro — não bloqueante.'
+reviewer: 'Quinn'
+updated: '2026-05-28T00:00:00Z'
+
+top_issues:
+  - id: 'REQ-001'
+    severity: medium
+    finding: 'AC8 (refactor de brandingMerger.ts com buildDynamicContext) não implementado. brandingMerger.ts permanece intocado.'
+    suggested_action: 'Endereçar em sessão dedicada. Não bloqueia o valor central da story (RAG na geração de calendário já funciona via calendarGenerator e geminiCalendar).'
+  - id: 'REL-001'
+    severity: low
+    finding: 'INSERT em embedding_jobs (calendarItems) não tem ON CONFLICT — re-aprovações podem enfileirar jobs duplicados.'
+    suggested_action: 'Aceitável: ragService.ingest deduplica por content_hash; pior caso é um ciclo de worker desperdiçado, sem corrupção. Documentado pelo @dev.'
+  - id: 'TEST-001'
+    severity: medium
+    finding: 'Nenhum teste automatizado adicionado para os fluxos críticos de RAG (retrieve com isolamento, ingest dedup, graceful degradation, worker retry).'
+    suggested_action: 'Adicionar testes de integração cobrindo isolamento cross-cliente e fallback de geração sem RAG antes do hardening de H2.'
+  - id: 'DOC-001'
+    severity: low
+    finding: 'Variável RAG_HNSW_EF_SEARCH (usada no ragService) não está documentada na story; apenas RAG_SIMILARITY_THRESHOLD foi prevista.'
+    suggested_action: 'Documentar RAG_HNSW_EF_SEARCH (default 40) no .env.example/docs junto com RAG_SIMILARITY_THRESHOLD.'
+
+waiver: { active: false }
+
+evidence:
+  files_reviewed:
+    - backend/db/migrate_rag_knowledge.ts
+    - backend/src/types/rag.ts
+    - backend/src/services/embeddingService.ts
+    - backend/src/services/ragService.ts
+    - backend/src/jobs/embeddingWorker.ts
+    - backend/src/routes/rag.ts
+    - backend/src/routes/calendarItems.ts
+    - backend/src/services/calendarGenerator.ts
+    - backend/src/utils/geminiCalendar.ts
+    - backend/src/index.ts
+  ac_coverage:
+    AC1: 'PASS — pgvector + knowledge_chunks + índices (HNSW prevalece sobre ivfflat por decisão @data-engineer/PO) + UNIQUE(cliente_id, content_hash).'
+    AC2: 'PASS — Vertex text-embedding-004 (768d), cache LRU por hash, retry transiente via errorClassifier, token_usage via tokenTracker (PO note #2).'
+    AC3: 'PASS — chunking, dedup intra-batch + contra DB, embed em batch, INSERT ON CONFLICT DO NOTHING, retorna {inserted, skipped}.'
+    AC4: 'PASS — embedQuery, busca <=> cosseno, filtro source_type opcional, threshold minSimilarity (env RAG_SIMILARITY_THRESHOLD default 0.6).'
+    AC5: 'PASS — trigger no PATCH /calendar-items/:id/status (fonte de verdade, PO note #3), enfileira embedding_jobs assíncrono, try/catch não bloqueia resposta, log rag_ingest_triggered.'
+    AC6: 'PASS — retrieve antes do prompt, bloco de contexto injetado, graceful degradation (sem chunks/erro → gera sem bloco), log rag_context_injected.'
+    AC7: 'PASS — POST /api/rag/:clienteId/reindex com requireAuth + hasClientAccess + verificação de cliente; DELETE + re-ingest docs/rules/posts; retorna {reindexed, chunks_created, duration_ms}.'
+    AC8: 'NOT IMPLEMENTED — buildDynamicContext em brandingMerger.ts fora do escopo da sessão. Documentado no Change Log.'
+  security:
+    isolamento_cliente: 'VERIFIED — retrieve(), ingest(), reindexCliente() e todas as branches de resolveSourceTexts filtram por cliente_id ANTES da busca vetorial. Endpoint protegido por JWT + hasClientAccess.'
+    sql_injection: 'VERIFIED — todas as queries usam parameter binding. SET LOCAL hnsw.ef_search interpola apenas inteiro validado de env (não input do usuário).'
+  performance: 'HNSW ef_search=40 confinado por transação (SET LOCAL), embeddings em batch (até 250), cache LRU 500 entradas, dedup evita embeddings redundantes.'
+  graceful_degradation: 'VERIFIED — calendarGenerator e geminiCalendar envolvem o retrieve em try/catch; falha de RAG → log warn + geração normal sem o bloco.'
+  worker_retry: 'VERIFIED — isTransientError classifica; erros não-transientes (4xx/validação) vão direto para failed sem retry infinito; backoff 1s/4s/16s, max 3 tentativas.'
+  typescript: 'Não executável neste ambiente QA (Bash bloqueado). @dev reportou `tsc --noEmit` limpo; revisão estática confirmou que todos os imports (errorClassifier, tokenTracker, ragService, requireAuth) resolvem e as assinaturas batem.'

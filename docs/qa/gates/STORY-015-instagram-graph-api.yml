@@ -1,0 +1,94 @@
+schema: 1
+story: 'STORY-015'
+story_title: 'Instagram Graph API — Métricas de Performance'
+gate: CONCERNS
+status_reason: 'Backend (OAuth, criptografia AES-256-GCM, workers, LGPD, graceful degradation) está sólido e seguro, mas a integração frontend do botão "Conectar Instagram" está quebrada por dois desalinhamentos de contrato com o backend (token OAuth ausente na URL de connect e shape da resposta de status divergente).'
+reviewer: 'Quinn (Test Architect)'
+updated: '2026-05-29T00:00:00Z'
+
+waiver: { active: false }
+
+# ─── Foci críticos de segurança/conformidade (todos verificados) ───
+security_review:
+  token_never_logged:
+    verdict: PASS
+    detail: 'Tokens nunca aparecem em console.log, logger ou respostas HTTP em plaintext/ciphertext. Verificado em routes/social.ts, instagramInsightsWorker.ts, tokenRefreshWorker.ts. Logs contêm apenas metadados (account_id, cliente_id, contagens, http_status, err.message). O callback explicitamente NÃO loga a resposta crua da Meta (social.ts:251).'
+  aes_256_gcm_correctness:
+    verdict: PASS
+    detail: 'IV de 12 bytes (96-bit) gerado por randomBytes a cada operação (nunca reutilizado). authTag de 16 bytes preservado via getAuthTag/setAuthTag. Formato serializado iv(12)+authTag(16)+ciphertext em base64. subarray de decrypt usa offsets corretos (0:12, 12:28, 28:). decrypt lança erro se authTag não casar.'
+  lgpd_hard_delete:
+    verdict: PASS
+    detail: 'AC6: DELETE /instagram/:id/disconnect executa DELETE FROM social_metrics real (hard delete, não soft) ANTES de marcar a conta como revoked. Retorna { disconnected: true, metrics_deleted: N }. A conta permanece como linha auditável com status=revoked.'
+  graceful_degradation_gemini:
+    verdict: PASS
+    detail: 'AC5: buildPerformanceHints retorna [] quando não há métricas ou avgGeral<=0. A injeção é envolvida em try/catch que apenas loga warn e prossegue sem hints. Sem exceção, sem fallback artificial. Hints injetados antes do bloco RAG/DNA conforme AC5c.'
+  http_190_handling:
+    verdict: PASS
+    detail: 'AC3e: isMetaTokenError detecta code=190 ou HTTP 401. Conta marcada status=expired sem propagar exceção. Promise.allSettled isola cada conta — falha de uma não quebra o loop nem derruba o cron.'
+  encryption_key_validation:
+    verdict: PASS
+    detail: 'socialTokenService.ts valida KEY.length !== 32 no carregamento do módulo (fail-fast no startup). Lança erro claro se a chave estiver ausente ou com tamanho inválido.'
+  meta_app_review_ac1:
+    verdict: PASS
+    detail: 'AC1 documentado no Change Log (v0.3.0) como responsabilidade de negócio (submissão em developers.facebook.com). Não é gap técnico — corretamente fora do escopo de implementação.'
+
+# ─── 7 Quality Checks ───
+quality_checks:
+  code_review: PASS          # Backend bem estruturado, comentado, padrões consistentes.
+  unit_tests: CONCERNS       # Nenhum teste automatizado adicionado; story não exigia, mas crypto/LGPD justificariam.
+  acceptance_criteria: CONCERNS  # AC1-AC6 backend OK; AC2 UI quebrada por contrato frontend.
+  no_regressions: PASS       # Mudanças aditivas; geminiCalendar mantém fluxo existente com degradação graciosa.
+  performance: PASS          # Índices criados (platform+status, expires_at parcial, account+date). Query de hints com HAVING COUNT>=3.
+  security: PASS             # OWASP basics OK; tokens criptografados, nunca logados, state JWT anti-CSRF no OAuth.
+  documentation: PASS        # .env.example completo, comentários explicativos, Change Log atualizado.
+
+top_issues:
+  - id: 'REQ-001'
+    severity: high
+    category: requirements
+    finding: 'socialService.getConnectUrl() gera /social/instagram/connect?clienteId=X SEM o parâmetro token. O backend (routes/social.ts:87-102) exige token na query (navegação direta via window.location.href não envia header Authorization) e retorna 401 "Token invalido ou ausente" quando ausente. Resultado: o fluxo OAuth nunca inicia a partir da UI — AC2 quebrado end-to-end.'
+    location: 'frontend/src/services/api.ts:1376-1378'
+    suggested_action: 'Incluir o JWT na URL: getConnectUrl(clienteId) deve anexar &token=${localStorage token de auth}. Ex.: `${baseURL}/social/instagram/connect?clienteId=${clienteId}&token=${authToken}`.'
+  - id: 'REQ-002'
+    severity: high
+    category: requirements
+    finding: 'socialService.getStatus() lê response.data.status, mas o backend (routes/social.ts:298-309) retorna os campos no nível raiz: { success, connected, account, metrics_count } — NÃO há chave "status". Logo igStatus fica undefined e o card sempre exibe "não conectado" mesmo após conexão bem-sucedida. Adicionalmente: backend usa account.username, o tipo InstagramStatus espera account_name; e InstagramStatus não expõe o id da conta necessário para socialService.disconnect().'
+    location: 'frontend/src/services/api.ts:1366-1393'
+    suggested_action: 'Alinhar o parser: ler connected/account do nível raiz da resposta. Mapear account.username -> account_name (ou ajustar backend para devolver account_name). Incluir account.id em InstagramStatus para alimentar disconnect(). Como o ClientHub usa igStatus.account_name, garantir consistência de nomes.'
+  - id: 'TEST-001'
+    severity: medium
+    category: tests
+    finding: 'Nenhum teste automatizado adicionado para criptografia AES-256-GCM (round-trip encrypt/decrypt, rejeição de authTag adulterado), detecção HTTP 190, ou hard delete LGPD. Funcionalidades de segurança/conformidade sem cobertura de regressão.'
+    location: 'backend/src/services/socialTokenService.ts, backend/src/jobs/*'
+    suggested_action: 'Adicionar teste de round-trip do socialTokenService (encrypt->decrypt === plaintext; decrypt com buffer adulterado lança). Opcionalmente, teste de isMetaTokenError. Não bloqueante para o gate, mas recomendado antes do push.'
+  - id: 'REL-001'
+    severity: low
+    category: reliability
+    finding: 'tokenRefreshWorker usa grant_type=ig_exchange_token (AC4) enquanto o connect/callback usa fb_exchange_token. São endpoints/fluxos distintos da Meta (Instagram Basic Display vs Facebook Login). A discrepância segue a especificação do AC, mas pode falhar em runtime dependendo do tipo de token emitido no OAuth. Validar com conta de desenvolvedor real.'
+    location: 'backend/src/jobs/tokenRefreshWorker.ts:116; backend/src/routes/social.ts:179'
+    suggested_action: 'Confirmar em ambiente de testes Meta que o token de longa duração emitido no callback é renovável via ig_exchange_token. Se não, ajustar para fb_exchange_token com client_id/client_secret. Documentado para validação no teste manual do OAuth.'
+
+notes: |
+  DECISÃO DO GATE: CONCERNS.
+
+  O backend desta story é de alta qualidade: a criptografia, o tratamento de
+  erros resiliente nos workers, a conformidade LGPD (hard delete) e a degradação
+  graciosa no geminiCalendar estão corretos e seguros. Nenhum foco crítico de
+  segurança falhou.
+
+  Os dois issues HIGH (REQ-001, REQ-002) são desalinhamentos de CONTRATO entre o
+  frontend e o backend que tornam a integração visível ao usuário (AC2: "agência
+  clica Conectar Instagram") não-funcional end-to-end. São correções pontuais e
+  isoladas no frontend (api.ts) — não exigem retrabalho do backend.
+
+  Conforme story-lifecycle.md, CONCERNS aprova com observações documentadas e
+  move a story para Done. Entretanto, os issues REQ-001/REQ-002 DEVEM ser
+  corrigidos pelo @dev antes que a feature seja considerada utilizável em produção
+  e antes do push pelo @devops. Recomenda-se follow-up imediato (ou QA loop) para
+  os dois HIGH antes do merge.
+
+  TSC: o Change Log do @dev (v0.3.0) declara `tsc --noEmit limpo em backend e
+  frontend`. A verificação via Bash foi negada pelo sandbox neste gate; a revisão
+  estática manual de todos os arquivos .ts não encontrou erros de tipo. Os issues
+  REQ-001/REQ-002 são desalinhamentos de runtime/contrato, não erros de compilação
+  (ambos os lados tipam, mas o shape em runtime diverge).

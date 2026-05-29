@@ -13,7 +13,7 @@ if (!_rawBaseURL) {
   }
 }
 
-const baseURL = _rawBaseURL || 'http://localhost:3001/api';
+export const baseURL = _rawBaseURL || 'http://localhost:3001/api';
 export const apiOrigin = baseURL.replace(/\/api$/, '');
 
 console.log('🔧 API Base URL configurada:', baseURL);
@@ -1287,6 +1287,213 @@ export const agencyService = {
       timeout: 5000,
     });
     return response.data;
+  },
+};
+
+// --- Agent Sessions Service (STORY-014) ---
+export type AgentType = 'briefing' | 'creative' | 'strategy';
+
+export interface AgentSession {
+  id: string;
+  cliente_id: string;
+  agent_type: AgentType;
+  title: string | null;
+  rolling_summary?: string | null;
+  created_at?: string;
+  last_message_at: string;
+  status: 'active' | 'archived';
+  has_memory: boolean;
+}
+
+export interface AgentMessage {
+  id: string;
+  session_id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  tokens_in: number;
+  tokens_out: number;
+  retrieved_chunk_ids: string[];
+  created_at: string;
+}
+
+export interface AgentRunResponse {
+  success: boolean;
+  userMessage: AgentMessage;
+  assistantMessage: AgentMessage;
+  summaryUpdated: boolean;
+}
+
+export const agentService = {
+  async listSessions(clienteId: string): Promise<AgentSession[]> {
+    const response = await api.get<{ success: boolean; sessions: AgentSession[] }>(
+      '/agents/sessions',
+      { params: { clienteId } }
+    );
+    return response.data.sessions;
+  },
+
+  async createSession(clienteId: string, agentType: AgentType, title?: string): Promise<AgentSession> {
+    const response = await api.post<{ success: boolean; session: AgentSession }>(
+      '/agents/sessions',
+      { clienteId, agentType, title }
+    );
+    return response.data.session;
+  },
+
+  async getMessages(sessionId: string, opts?: { limit?: number; before?: string }): Promise<AgentMessage[]> {
+    const response = await api.get<{ success: boolean; messages: AgentMessage[] }>(
+      `/agents/sessions/${sessionId}/messages`,
+      { params: opts }
+    );
+    return response.data.messages;
+  },
+
+  async sendMessage(sessionId: string, content: string): Promise<AgentRunResponse> {
+    const response = await api.post<AgentRunResponse>(
+      `/agents/sessions/${sessionId}/messages`,
+      { content }
+    );
+    return response.data;
+  },
+
+  async archiveSession(sessionId: string): Promise<void> {
+    await api.delete(`/agents/sessions/${sessionId}`);
+  },
+};
+
+// ─── STORY-015: Instagram Integration ────────────────────────────────────────
+
+/** Shape real retornado por GET /api/social/instagram/status */
+export interface InstagramStatusResponse {
+  success: boolean;
+  connected: boolean;
+  account: {
+    id: string;
+    username: string;
+    status: 'active' | 'expired' | 'revoked';
+    expires_at: string | null;
+    last_sync_at: string | null;
+  } | null;
+  metrics_count: number;
+}
+
+/** Shape normalizado usado pelo frontend */
+export interface InstagramStatus {
+  connected: boolean;
+  account_id?: string;
+  account_name?: string;
+  expires_at?: string | null;
+  last_sync_at?: string | null;
+  status?: 'active' | 'expired' | 'revoked';
+  metrics_count?: number;
+}
+
+export const socialService = {
+  /**
+   * Gera URL para iniciar fluxo OAuth.
+   * Inclui o JWT via query string porque navegação via window.location.href
+   * não envia o header Authorization — o backend valida `?token=` para este endpoint.
+   */
+  getConnectUrl(clienteId: string): string {
+    const token = localStorage.getItem('@SpheraAuth:token') ?? '';
+    return `${api.defaults.baseURL}/social/instagram/connect?clienteId=${encodeURIComponent(clienteId)}&token=${encodeURIComponent(token)}`;
+  },
+
+  async getStatus(clienteId: string): Promise<InstagramStatus> {
+    const response = await api.get<InstagramStatusResponse>(
+      `/social/instagram/status`,
+      { params: { clienteId } }
+    );
+    const { connected, account, metrics_count } = response.data;
+    return {
+      connected,
+      account_id: account?.id,
+      account_name: account?.username,
+      expires_at: account?.expires_at,
+      last_sync_at: account?.last_sync_at,
+      status: account?.status,
+      metrics_count,
+    };
+  },
+
+  async disconnect(socialAccountId: string): Promise<{ disconnected: boolean; metrics_deleted: number; publications_canceled?: number }> {
+    const response = await api.delete<{ disconnected: boolean; metrics_deleted: number; publications_canceled?: number }>(
+      `/social/instagram/${socialAccountId}/disconnect`
+    );
+    return response.data;
+  },
+};
+
+// ─── STORY-016: Publicação Direta (scheduling com aprovação humana) ───────────
+
+export type PublicationStatus =
+  | 'pending_approval'
+  | 'approved'
+  | 'queued'
+  | 'publishing'
+  | 'published'
+  | 'failed'
+  | 'canceled';
+
+export interface PublicationSchedule {
+  id: string;
+  calendar_item_id: string;
+  social_account_id: string;
+  platform: string;
+  scheduled_at: string;
+  status: PublicationStatus;
+  platform_post_id: string | null;
+  payload: { media_type?: string; media_url?: string; caption?: string } | Record<string, unknown>;
+  attempts: number;
+  last_error: string | null;
+  approved_by_user_id: string | null;
+  approved_at: string | null;
+  created_at: string;
+  updated_at: string;
+  // Enriquecido pelo GET /api/publications (JOIN calendar_items)
+  dia?: number;
+  tema?: string;
+  formato?: string;
+}
+
+export const publicationService = {
+  /** Agenda um post aprovado para publicação direta (AC1). */
+  async schedule(input: {
+    calendarItemId: string;
+    socialAccountId: string;
+    scheduledAt: string; // ISO 8601
+    platform?: string;
+  }): Promise<PublicationSchedule> {
+    const response = await api.post<{ success: boolean; schedule: PublicationSchedule }>(
+      `/publications/schedule`,
+      input
+    );
+    return response.data.schedule;
+  },
+
+  /** Aprova um agendamento pendente (AC2a). */
+  async approve(id: string): Promise<PublicationSchedule> {
+    const response = await api.patch<{ success: boolean; schedule: PublicationSchedule }>(
+      `/publications/${id}/approve`
+    );
+    return response.data.schedule;
+  },
+
+  /** Cancela um agendamento (sujeito à janela de 5 min — AC4). */
+  async cancel(id: string): Promise<PublicationSchedule> {
+    const response = await api.delete<{ success: boolean; schedule: PublicationSchedule }>(
+      `/publications/${id}/cancel`
+    );
+    return response.data.schedule;
+  },
+
+  /** Lista agendamentos de um cliente, opcionalmente filtrando por status. */
+  async list(clienteId: string, status?: PublicationStatus): Promise<PublicationSchedule[]> {
+    const response = await api.get<{ success: boolean; schedules: PublicationSchedule[] }>(
+      `/publications`,
+      { params: { clienteId, ...(status ? { status } : {}) } }
+    );
+    return response.data.schedules;
   },
 };
 

@@ -16,7 +16,7 @@ import {
     DollarSign,
     ThumbsUp
 } from 'lucide-react';
-import api, { brandingService, jobsService, presentationService, dashboardMetricsService, calendarItemsService, dnaCompletenessService, DashboardMetrics, DnaCompleteness } from '../services/api';
+import api, { brandingService, jobsService, presentationService, dashboardMetricsService, calendarItemsService, dnaCompletenessService, socialService, InstagramStatus, DashboardMetrics, DnaCompleteness } from '../services/api';
 import DnaCompletenessBar from '../components/Onboarding/DnaCompletenessBar';
 
 interface CalendarPost {
@@ -51,12 +51,25 @@ export default function ClientHub() {
     const [metricsError, setMetricsError] = useState<string | null>(null);
     const [calendarOverview, setCalendarOverview] = useState<CalendarOverview | null>(null);
     const [dnaCompleteness, setDnaCompleteness] = useState<DnaCompleteness | null>(null);
+    const [igStatus, setIgStatus] = useState<InstagramStatus | null>(null);
+    const [igLoading, setIgLoading] = useState(false);
 
     useEffect(() => {
         if (clientId) {
             loadDashboard();
+            loadIgStatus();
         }
     }, [clientId]);
+
+    const loadIgStatus = async () => {
+        if (!clientId) return;
+        try {
+            const s = await socialService.getStatus(clientId);
+            setIgStatus(s);
+        } catch {
+            // IG não configurado — silencioso
+        }
+    };
 
     const loadDashboard = async () => {
         if (!clientId) return;
@@ -728,6 +741,77 @@ export default function ClientHub() {
                     )}
                 </div>
             )}
+
+        {/* STORY-015 — Instagram Integration Card */}
+            <div className="bg-gray-800 rounded-2xl border border-gray-700 overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-white">📸 Integração Instagram</h2>
+                    {igStatus?.connected && (
+                        <span className="text-xs px-2 py-1 bg-green-900/50 text-green-300 rounded-full border border-green-700">
+                            ✓ Conectado
+                        </span>
+                    )}
+                </div>
+                <div className="px-6 py-5">
+                    {igStatus?.connected ? (
+                        <div className="space-y-3">
+                            <p className="text-sm text-gray-300">
+                                <span className="font-medium text-white">@{igStatus.account_name}</span>
+                                {igStatus.last_sync_at && (
+                                    <span className="text-gray-500 ml-2">
+                                        · última sync {new Date(igStatus.last_sync_at).toLocaleDateString('pt-BR')}
+                                    </span>
+                                )}
+                                {igStatus.metrics_count != null && igStatus.metrics_count > 0 && (
+                                    <span className="text-gray-500 ml-2">· {igStatus.metrics_count} posts com métricas</span>
+                                )}
+                            </p>
+                            {igStatus.status === 'expired' && (
+                                <p className="text-xs text-yellow-400">⚠️ Token expirado — reconecte para continuar coletando métricas.</p>
+                            )}
+                            <p className="text-xs text-gray-500">
+                                Métricas reais de performance são injetadas automaticamente na geração de calendários.
+                            </p>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => window.location.href = socialService.getConnectUrl(clientId!)}
+                                    className="text-xs text-blue-400 hover:text-blue-300 underline"
+                                >
+                                    Reconectar conta
+                                </button>
+                                {igStatus.account_id && (
+                                    <button
+                                        onClick={async () => {
+                                            if (!confirm('Desconectar e apagar todas as métricas coletadas?')) return;
+                                            await socialService.disconnect(igStatus.account_id!);
+                                            setIgStatus(null);
+                                        }}
+                                        className="text-xs text-red-400 hover:text-red-300 underline"
+                                    >
+                                        Desconectar
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center py-2">
+                            <p className="text-sm text-gray-400 mb-4">
+                                Conecte o Instagram do cliente para coletar métricas reais e melhorar os calendários com dados de performance.
+                            </p>
+                            <button
+                                disabled={igLoading}
+                                onClick={() => {
+                                    setIgLoading(true);
+                                    window.location.href = socialService.getConnectUrl(clientId!);
+                                }}
+                                className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-bold rounded-xl transition-all disabled:opacity-50"
+                            >
+                                {igLoading ? 'Redirecionando...' : '📷 Conectar Instagram'}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
 
         </div>
     );

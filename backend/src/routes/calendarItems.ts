@@ -261,6 +261,33 @@ router.patch("/calendar-items/:id/status", async (req: AuthRequest, res: Respons
             "approval_status updated"
         );
 
+        // STORY-013 — Trigger RAG: ao APROVAR um post, enfileira um job de embedding
+        // (fila embedding_jobs, processada pelo embeddingWorker). Assincrono e
+        // resiliente — nunca bloqueia nem falha a resposta de aprovacao.
+        if (nextStatus === "approved" && fromStatus !== "approved") {
+            try {
+                await db.query(
+                    `INSERT INTO embedding_jobs (cliente_id, source_type, source_id, status)
+                     SELECT ci.cliente_id, 'past_post_approved', ci.id, 'pending'
+                     FROM calendar_items ci WHERE ci.id = $1`,
+                    [id]
+                );
+                logger.info(
+                    {
+                        event: "rag_ingest_triggered",
+                        source_type: "past_post_approved",
+                        calendar_item_id: id,
+                    },
+                    "Embedding job enfileirado para post aprovado"
+                );
+            } catch (err: any) {
+                logger.warn(
+                    { event: "rag_ingest_enqueue_failed", calendar_item_id: id, err: err?.message },
+                    "Falha ao enfileirar embedding — nao bloqueia aprovacao"
+                );
+            }
+        }
+
         return res.json({ success: true, item: result.rows[0] });
     } catch (error: any) {
         logger.error(

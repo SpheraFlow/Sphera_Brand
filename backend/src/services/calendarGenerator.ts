@@ -4,6 +4,8 @@ import { updateTokenUsage } from "../utils/tokenTracker";
 import { validateCalendarSchema, repairCalendarSchema, InvalidCalendarOutputError } from "../utils/calendarValidator";
 import { buildSlotBlueprintFromMix, critiqueCalendarDraft, planMonthlyCalendar } from "./calendarIntelligence";
 import { getGeminiModelCandidates } from "../utils/googleModels";
+import { ragService } from "./ragService";
+import logger from "../utils/logger";
 
 // Camada 1: força o modelo a sempre retornar formato válido via API constraint
 const CALENDAR_RESPONSE_SCHEMA = {
@@ -670,6 +672,46 @@ REGRAS FINAIS DE EXECUCAO:
 - Para Carrossel: "copy_inicial" = TODOS os slides com [Slide N] notation, "instrucoes_visuais" = visual de cada slide com [Slide N] notation, "legenda" = caption final sem notacao de slides.
 - Em Carrossel, NUNCA coloque apenas o texto do primeiro slide em "copy_inicial" — inclua todos os slides numerados.`;
 
+    // STORY-013 — Injecao de contexto RAG (cerebro por cliente). Antes de chamar o
+    // LLM, recupera os chunks mais relevantes (regras, docs e posts aprovados) e
+    // injeta como bloco adicional no prompt. Graceful degradation: se o RAG falhar
+    // ou nao retornar nada (cliente novo), gera o calendario sem o bloco — sem erro.
+    let ragPrompt = prompt;
+    try {
+        const ragQuery = [briefing, mesToGenerate, keywordsText, arquetipoText]
+            .map((s) => String(s || "").trim())
+            .filter(Boolean)
+            .join(" ") || `calendario editorial conteudo estrategia marca ${mesToGenerate}`;
+
+        const ragChunks = await ragService.retrieve(clienteId, ragQuery, {
+            k: 8,
+            sourceTypes: ["brand_doc", "brand_rule", "past_post_approved"],
+        });
+
+        if (ragChunks.length > 0) {
+            const similarityAvg =
+                ragChunks.reduce((sum, c) => sum + (Number(c.similarity) || 0), 0) / ragChunks.length;
+            const ragBlock =
+                "\n\n### Contexto da marca (baseado em historico aprovado e regras):\n" +
+                ragChunks.map((c) => c.content).join("\n\n");
+            ragPrompt = `${prompt}${ragBlock}`;
+            logger.info(
+                {
+                    event: "rag_context_injected",
+                    cliente_id: clienteId,
+                    chunks_count: ragChunks.length,
+                    similarity_avg: Number(similarityAvg.toFixed(4)),
+                },
+                "Contexto RAG injetado no prompt de geracao de calendario"
+            );
+        }
+    } catch (ragErr: any) {
+        logger.warn(
+            { event: "rag_context_unavailable", cliente_id: clienteId, err: ragErr?.message },
+            "RAG indisponivel — gerando calendario sem contexto historico"
+        );
+    }
+
     const genAI = new GoogleGenerativeAI();
     const modelsToTry = getGeminiModelCandidates("fast");
 
@@ -695,7 +737,7 @@ REGRAS FINAIS DE EXECUCAO:
             if (onProgress) await onProgress(45, `Processando no cérebro da IA (${modelName})...`);
 
             const result = await Promise.race([
-                model.generateContent(prompt),
+                model.generateContent(ragPrompt),
                 new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Timeout na geração")), timeoutMs))
             ]);
 

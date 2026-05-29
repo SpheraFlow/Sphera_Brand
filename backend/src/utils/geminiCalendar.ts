@@ -1,4 +1,57 @@
 import { geminiClient } from "./geminiClient";
+import { ragService } from "../services/ragService";
+import db from "../config/database";
+import logger from "./logger";
+
+/**
+ * STORY-015 (AC5) — Constroi hints de performance a partir das metricas reais
+ * coletadas do Instagram (ultimos 60 dias), agrupadas por formato Sphera
+ * (Reels=VIDEO, Carrossel=CAROUSEL_ALBUM, Arte/Foto=IMAGE e demais).
+ *
+ * Um hint e gerado para cada formato cujo engagement_rate medio seja pelo menos
+ * 50% maior que a media geral. Retorna [] quando nao ha dados suficientes —
+ * graceful degradation (sem erro, sem fallback artificial).
+ */
+async function buildPerformanceHints(clienteId: string): Promise<string[]> {
+  const { rows: metrics } = await db.query<{
+    formato: string;
+    avg_engagement: number;
+    post_count: number;
+  }>(
+    `
+      SELECT
+        CASE
+          WHEN m.metadata->>'media_type' = 'VIDEO' THEN 'Reels'
+          WHEN m.metadata->>'media_type' = 'CAROUSEL_ALBUM' THEN 'Carrossel'
+          ELSE 'Arte/Foto'
+        END AS formato,
+        AVG(m.engagement_rate) AS avg_engagement,
+        COUNT(*) AS post_count
+      FROM social_metrics m
+      JOIN social_accounts sa ON sa.id = m.social_account_id
+      WHERE sa.cliente_id = $1
+        AND m.metric_date >= NOW() - INTERVAL '60 days'
+      GROUP BY formato
+      HAVING COUNT(*) >= 3
+    `,
+    [clienteId]
+  );
+
+  if (metrics.length === 0) return [];
+
+  const avgGeral =
+    metrics.reduce((s, r) => s + (Number(r.avg_engagement) || 0), 0) / metrics.length;
+  if (avgGeral <= 0) return [];
+
+  return metrics
+    .filter((r) => (Number(r.avg_engagement) || 0) > avgGeral * 1.5)
+    .map(
+      (r) =>
+        `[DADOS REAIS] ${r.formato} performam ${((Number(r.avg_engagement) || 0) / avgGeral).toFixed(
+          1
+        )}x melhor em engajamento nos ultimos 60 dias para este cliente`
+    );
+}
 
 /**
  * Tipos para o calendário editorial
@@ -187,14 +240,78 @@ export async function generateCalendarWithGemini(
   postsHistory: PostsHistory,
   periodo: number,
   briefing?: string,
-  brandRules: string[] = []
+  brandRules: string[] = [],
+  clienteId?: string
 ): Promise<CalendarDay[]> {
   try {
     // Construir prompt
     const prompt = buildCalendarPrompt(brandingData, postsHistory, periodo, briefing, brandRules);
 
+    // STORY-013 — Injecao de contexto RAG (cerebro por cliente). So executa quando
+    // clienteId e informado. Graceful degradation: falha ou ausencia de chunks nao
+    // interrompe a geracao — o calendario e gerado sem o bloco de contexto.
+    let finalPrompt = prompt;
+
+    // STORY-015 (AC5) — Injecao de performance hints (dados reais do Instagram).
+    // Executa ANTES do bloco RAG, no mesmo padrao de graceful degradation:
+    // falha ou ausencia de metricas nao interrompe a geracao.
+    if (clienteId) {
+      try {
+        const hints = await buildPerformanceHints(clienteId);
+        if (hints.length > 0) {
+          finalPrompt =
+            `### Performance real da conta (Instagram):\n${hints.join("\n")}\n\n` + finalPrompt;
+          logger.info(
+            { event: "performance_hints_injected", cliente_id: clienteId, hints_count: hints.length },
+            "Performance hints injetados no prompt (geminiCalendar)"
+          );
+        }
+      } catch (err: any) {
+        logger.warn(
+          { event: "performance_hints_failed", cliente_id: clienteId, err: err?.message },
+          "Falha ao buscar hints de performance — gerando calendario sem hints"
+        );
+      }
+    }
+
+    if (clienteId) {
+      try {
+        const ragQuery = [briefing, brandingData.nicho, brandingData.archetype]
+          .map((s: any) => String(s || "").trim())
+          .filter(Boolean)
+          .join(" ") || "calendario editorial conteudo estrategia marca";
+
+        const ragChunks = await ragService.retrieve(clienteId, ragQuery, {
+          k: 8,
+          sourceTypes: ["brand_doc", "brand_rule", "past_post_approved"],
+        });
+
+        if (ragChunks.length > 0) {
+          const similarityAvg =
+            ragChunks.reduce((sum, c) => sum + (Number(c.similarity) || 0), 0) / ragChunks.length;
+          finalPrompt =
+            `${finalPrompt}\n\n### Contexto da marca (baseado em historico aprovado e regras):\n` +
+            ragChunks.map((c) => c.content).join("\n\n");
+          logger.info(
+            {
+              event: "rag_context_injected",
+              cliente_id: clienteId,
+              chunks_count: ragChunks.length,
+              similarity_avg: Number(similarityAvg.toFixed(4)),
+            },
+            "Contexto RAG injetado no prompt (geminiCalendar)"
+          );
+        }
+      } catch (ragErr: any) {
+        logger.warn(
+          { event: "rag_context_unavailable", cliente_id: clienteId, err: ragErr?.message },
+          "RAG indisponivel — gerando calendario sem contexto historico"
+        );
+      }
+    }
+
     // Chamar Gemini (usando modo texto, sem imagem)
-    const text = await geminiClient.generateTextContent(prompt);
+    const text = await geminiClient.generateTextContent(finalPrompt);
 
     // Tentar extrair JSON da resposta
     let calendarData;

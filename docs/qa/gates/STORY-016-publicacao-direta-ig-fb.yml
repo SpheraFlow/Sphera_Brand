@@ -1,0 +1,88 @@
+schema: 1
+story: 'STORY-016'
+story_title: 'Publicação Direta IG + Facebook (Scheduling com Aprovação Humana)'
+gate: CONCERNS
+status_reason: 'Os 5 ACs estão implementados e os 7 focos críticos verificados (append-only, janela 5 min, token nunca logado, FOR UPDATE SKIP LOCKED, backoff em minutos, isolamento por cliente). Persistem limitações HIGH documentadas e ambientais (URL pública de mídia exige produção; Reels é image-only), não-bloqueantes para o escopo.'
+reviewer: 'Quinn (Test Architect)'
+updated: '2026-05-29T00:00:00Z'
+
+review_date: '2026-05-29'
+verification_method: 'Revisão estática de código (Bash/typecheck indisponível neste ambiente — não foi possível re-executar tsc independentemente; @dev reporta tsc --noEmit limpo em backend e frontend)'
+
+acceptance_criteria:
+  - id: AC1
+    status: PASS
+    note: 'POST /schedule cria publication_schedules com status=pending_approval, payload JSONB montado de buildPayloadFromCalendarItem, HTTP 201, log event=scheduled. Valida posse, approval_status=approved e conta social ativa do mesmo cliente.'
+  - id: AC2
+    status: PASS
+    note: 'PATCH /approve seta approved/approved_by_user_id/approved_at. Worker claim approved + scheduled_at<=NOW FOR UPDATE SKIP LOCKED LIMIT 5; publishImage 2-step; published + platform_post_id + log event=published.'
+  - id: AC3
+    status: PASS
+    note: 'handleFailure incrementa attempts, grava last_error, log publish_failed_attempt. attempts<3 volta a approved com backoff 1/4/16 min; attempts>=3 -> failed + publish_failed_final. Logs append-only.'
+  - id: AC4
+    status: PASS
+    note: 'DELETE /cancel seta canceled + log event=canceled; 409 quando scheduled_at<=NOW+5min ou status terminal/publishing. UNIQUE/EXCLUDE parcial impede re-agendamento ativo.'
+  - id: AC5
+    status: PASS
+    note: 'Disconnect em social.ts abre client dedicado com BEGIN/COMMIT: delete métricas + UPDATE cascade dos schedules pending_approval/approved/queued -> canceled + INSERT canceled_account_disconnected por linha + marca conta. Transacional (tudo ou nada).'
+
+quality_checks:
+  - check: code_review
+    status: PASS
+    note: 'Padrões consistentes com embeddingWorker (claim transacional), calendarItems (hasClientAccess), socialTokenService (decrypt nomeado). Código legível, documentado e defensivo (normalizePayload, orphan cleanup).'
+  - check: unit_tests
+    status: CONCERNS
+    note: 'Nenhum teste automatizado adicionado para o worker, retry/backoff, janela de cancelamento ou cascade. Verificação manual declarada na DoD. Lacuna de cobertura para fluxo concorrente crítico.'
+  - check: acceptance_criteria
+    status: PASS
+    note: 'Todos os 5 ACs rastreados ao código e verificados estaticamente.'
+  - check: no_regressions
+    status: PASS
+    note: 'Disconnect (STORY-015) estendido de forma aditiva e transacional. calendar_items.approval_status CHECK já inclui published; published_at/last_updated_at existem.'
+  - check: performance
+    status: PASS
+    note: 'Worker limita 5/ciclo, índice parcial idx_pub_schedules_status_scheduled cobre a varredura, Promise.allSettled isola o polling de Reels. Cascade indexada por idx_pub_schedules_account_status.'
+  - check: security
+    status: PASS
+    note: 'Token decriptado só em memória, nunca logado; metaErrorMessage não ecoa corpo bruto (evita token refletido na query). Isolamento por cliente em todos os endpoints. publication_logs imutável por convenção (somente INSERT).'
+  - check: documentation
+    status: PASS
+    note: 'Story com Dev Notes completas, limitações HIGH documentadas, comentários inline ricos no código e na migration.'
+
+critical_focus_verification:
+  append_only_logs: 'PASS — zero UPDATE/DELETE em publication_logs em todo o backend; apenas INSERT via appendPublicationLog e cascade no disconnect.'
+  five_minute_window: 'PASS — schedule força >= NOW+5min; cancel 409 quando <= NOW+5min. Approve NÃO re-valida a janela (apenas exige pending_approval) — aceitável: o worker independentemente exige scheduled_at<=NOW, então aprovar dentro da janela é inócuo.'
+  token_never_logged: 'PASS — nenhuma chamada de logger referencia token/access_token_encrypted; metaErrorMessage extrai só error.message.'
+  approval_status_published: 'PASS — best-effort pós-publicação; CHECK constraint de calendar_items aceita published.'
+  for_update_skip_locked: 'PASS — claim transacional SELECT FOR UPDATE OF ps SKIP LOCKED + marcação publishing no mesmo BEGIN/COMMIT; orphan cleanup >15min.'
+  backoff_minutes: 'PASS — Math.pow(4, attempts-1) => 1/4/16 min; divergência deliberada de getBackoffMs documentada.'
+  client_isolation: 'PASS — hasClientAccess (admin/clients_manage/user_clientes) em schedule/approve/cancel/list; schedule valida conta social do mesmo cliente.'
+
+top_issues:
+  - id: 'REL-001'
+    severity: high
+    finding: 'Publicação na Meta exige image_url/video_url publicamente acessível. media_url do calendar_item é relativo; toPublicMediaUrl depende de PUBLIC_ASSET_BASE_URL. Em localhost a Meta não baixa a mídia.'
+    suggested_action: 'Configurar PUBLIC_ASSET_BASE_URL (host público) no .env de produção no deploy. Limitação ambiental documentada — não-bloqueante para o escopo desta story.'
+  - id: 'REQ-001'
+    severity: medium
+    finding: 'Fluxo 3-step de Reels (video_url) implementado, mas o asset gerado atual é imagem; Reels reais exigem vídeo (fora de escopo). Worker enviaria image_url como video_url para formato Reels.'
+    suggested_action: 'Vídeo real está OUT of scope. Considerar bloquear/avisar no agendamento de posts formato Reels até haver pipeline de vídeo.'
+  - id: 'TEST-001'
+    severity: medium
+    finding: 'Sem testes automatizados para worker (claim concorrente, retry/backoff), janela de cancelamento e cascade transacional.'
+    suggested_action: 'Adicionar testes de integração para publishingWorker e endpoints em sprint futura, priorizando o caminho de retry e o cascade de disconnect.'
+  - id: 'REL-002'
+    severity: medium
+    finding: 'HTTP 190 (token expirado) durante publicação cai no retry/falha genérico; não marca a conta como expired (sem AC explícito).'
+    suggested_action: 'Detectar code 190 em metaErrorMessage e marcar social_accounts.status=expired para parar tentativas e sinalizar reconexão. Melhoria futura.'
+  - id: 'MNT-001'
+    severity: low
+    finding: "Status 'queued' declarado no schema/cascade/frontend, mas nenhum caminho de código transiciona um registro para 'queued' (worker vai approved -> publishing direto)."
+    suggested_action: 'Remover o estado morto ou implementar a transição queued; sem impacto funcional atual.'
+
+non_blocking_limitations:
+  - 'PUBLIC_ASSET_BASE_URL necessário em produção (Meta exige URL pública).'
+  - 'Reels 3-step implementado mas asset é imagem (vídeo real OUT of scope).'
+  - 'HTTP 190 não marca conta como expired (sem AC).'
+
+waiver: { active: false }

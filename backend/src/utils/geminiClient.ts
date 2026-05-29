@@ -137,6 +137,58 @@ class GeminiClient {
   }
 
   /**
+   * Conversa multi-turn com system instruction e histórico (STORY-014).
+   * Diferente de generateTextContent (prompt único), expõe usageMetadata para
+   * tracking de tokens e usa o modo chat do Vertex AI via genai-compat.startChat().
+   *
+   * @param options.systemInstruction Instrução de sistema (persona + contexto/DNA + RAG)
+   * @param options.history Histórico de turnos anteriores (role user|model)
+   * @param options.userMessage Nova mensagem do usuário
+   * @returns Texto da resposta + usageMetadata (prompt/candidates/total token counts)
+   */
+  async generateChatContent(options: {
+    systemInstruction: string;
+    history: Array<{ role: "user" | "model"; content: string }>;
+    userMessage: string;
+  }): Promise<{
+    text: string;
+    usageMetadata: {
+      promptTokenCount: number;
+      candidatesTokenCount: number;
+      totalTokenCount: number;
+    };
+  }> {
+    if (!this.genAI) {
+      throw new Error("GOOGLE_CLOUD_PROJECT não configurado. Configure no .env para usar esta funcionalidade.");
+    }
+
+    const model = this.genAI.getGenerativeModel({
+      model: getPrimaryGeminiModel("quality"),
+      systemInstruction: options.systemInstruction,
+    });
+
+    // genai-compat.ts implementa startChat({ history }) → WrappedChatSession.
+    const chat = model.startChat({
+      history: options.history.map((m) => ({
+        role: m.role,
+        parts: [{ text: m.content }],
+      })),
+    });
+
+    const result = await chat.sendMessage(options.userMessage);
+    const meta = result.response?.usageMetadata ?? {};
+
+    return {
+      text: result.response.text(),
+      usageMetadata: {
+        promptTokenCount: meta.promptTokenCount ?? 0,
+        candidatesTokenCount: meta.candidatesTokenCount ?? 0,
+        totalTokenCount: meta.totalTokenCount ?? 0,
+      },
+    };
+  }
+
+  /**
    * Detecta o tipo MIME baseado na extensão do arquivo
    * @param filePath Caminho do arquivo
    * @returns MIME type

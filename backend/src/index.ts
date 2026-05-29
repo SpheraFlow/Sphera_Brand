@@ -38,6 +38,10 @@ import jobsRouter from "./routes/jobs";
 import promptTemplatesRouter from "./routes/promptTemplates";
 import promptOnboardingRouter from "./routes/promptOnboarding";
 import calendarItemsRouter from "./routes/calendarItems";
+import ragRouter from "./routes/rag";
+import agentsRouter from "./routes/agents";
+import socialRouter from "./routes/social";
+import publicationsRouter from "./routes/publications";
 import onboardingRouter from "./routes/onboarding";
 import clickupRouter from "./routes/clickup";
 import authRouter from "./routes/auth";
@@ -53,6 +57,10 @@ import http from "http";
 import { startCalendarGenerationWorker } from "./jobs/calendarGenerationWorker";
 import { startCreativeProductionWorker } from "./jobs/creativeProductionWorker";
 import { startImageGenerationWorker } from "./jobs/imageGenerationWorker";
+import { startEmbeddingWorker } from "./jobs/embeddingWorker";
+import { startInstagramInsightsWorker } from "./jobs/instagramInsightsWorker";
+import { startTokenRefreshWorker } from "./jobs/tokenRefreshWorker";
+import { startPublishingWorker } from "./jobs/publishingWorker";
 
 // Inicialização do Express
 const app = express();
@@ -248,6 +256,11 @@ app.get("/api/debug/tables", async (_req: Request, res: Response) => {
 // Rotas públicas (não passam pelo requireAuth)
 app.use("/api/auth", authRouter);
 app.use("/api/webhooks", webhooksRouter);
+// STORY-015 — OAuth Instagram: connect/callback são navegação direta do browser
+// (sem header Authorization), por isso o router fica ANTES do requireAuth global.
+// O próprio social.ts aplica requireAuth nas rotas sensíveis (status/disconnect)
+// e autentica connect via token assinado na query + state JWT.
+app.use("/api/social", socialRouter);
 
 // Middlewares e Rotas Protegidas API baseadas no header Autorization
 app.use("/api", requireAuth);
@@ -277,6 +290,9 @@ app.use("/api", produtosRouter);
 app.use("/api/briefing-agent", briefingAgentRouter);
 app.use("/api", visualDesignRouter);
 app.use("/api/agency", agencyDashboardRouter); // STORY-011 — dashboard operacional da agência
+app.use("/api/rag", ragRouter); // STORY-013 — Cerebro RAG por cliente (reindex)
+app.use("/api/agents", agentsRouter); // STORY-014 — Agente por cliente (sessões persistentes)
+app.use("/api", publicationsRouter); // STORY-016 — Publicação direta IG (scheduling com aprovação)
 
 // Servir arquivos gerados pelo Python (Temporários)
 const presentationOutputPath = path.resolve(__dirname, "../python_gen/output");
@@ -407,6 +423,10 @@ server.listen(PORT, () => {
   startCalendarGenerationWorker();
   startCreativeProductionWorker();
   startImageGenerationWorker();
+  startEmbeddingWorker(); // STORY-013 — fila de embeddings RAG
+  startTokenRefreshWorker(); // STORY-015 — refresh diário de tokens IG (05:00)
+  startInstagramInsightsWorker(); // STORY-015 — coleta diária de insights IG (06:00)
+  startPublishingWorker(); // STORY-016 — publicação direta IG (cron 1 min, FOR UPDATE SKIP LOCKED)
 });
 
 export default app;

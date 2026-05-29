@@ -1,0 +1,121 @@
+schema: 1
+story: 'STORY-014'
+title: 'Agente por Cliente (IA Especializada e Persistente)'
+gate: CONCERNS
+status_reason: >-
+  Implementação completa e bem isolada por cliente em todos os 5 endpoints; ACs
+  cobertos em código e todas as assinaturas de API verificadas estaticamente
+  contra o código real. CONCERNS por ausência de testes automatizados e
+  não-transacionalidade do runMessage; tsc e smoke test de runtime delegados ao
+  pre-push.
+reviewer: 'Quinn'
+updated: '2026-05-28T00:00:00Z'
+
+# ─────────────────────────────────────────────────────────────────────
+# 7 Quality Checks (story-lifecycle.md Phase 4)
+# ─────────────────────────────────────────────────────────────────────
+quality_checks:
+  code_review:        PASS    # padrões consistentes com rag.ts/calendarItems; código limpo e comentado
+  unit_tests:         CONCERNS # nenhum teste automatizado para os 5 endpoints / agentRunner / systemPromptBuilder
+  acceptance_criteria: PASS   # AC1-AC6 implementados (AC6 frontend não re-verificado em runtime)
+  no_regressions:     PASS    # BriefingAgentChat preserva fluxo legado via prop opt-in persistentMode
+  performance:        PASS    # paginação sem O(N); histórico limitado a 10; índices compostos criados
+  security:           PASS    # requireAuth global + hasClientAccess/loadAccessibleSession em todo endpoint
+  documentation:      PASS    # story File List, Dev Notes e Change Log atualizados
+
+# ─────────────────────────────────────────────────────────────────────
+# Isolamento de dados por cliente (foco crítico nº1) — VERIFICADO
+# ─────────────────────────────────────────────────────────────────────
+data_isolation:
+  verdict: PASS
+  evidence:
+    - 'router.use(requireAuth) aplica JWT a todos os endpoints (agents.ts:22)'
+    - 'POST /sessions: valida existência do cliente + hasClientAccess antes do INSERT (agents.ts:82-89)'
+    - 'GET /sessions: hasClientAccess(clienteId) + WHERE cliente_id=$1 AND status=active (agents.ts:131-142)'
+    - 'loadAccessibleSession resolve cliente_id da própria sessão e checa acesso antes de qualquer leitura/escrita (agents.ts:47-66) — usado em messages POST/GET e DELETE'
+    - 'agentRunner recebe session.cliente_id resolvido do banco (não do body) e propaga a systemPromptBuilder + ragService + updateTokenUsage (agents.ts:177-182, agentRunner.ts:130-160)'
+    - 'Nenhum caminho cross-cliente identificado: todas as queries de sessão filtram por id e a autorização é por cliente_id da linha persistida'
+
+top_issues:
+  - id: 'TEST-001'
+    severity: medium
+    finding: >-
+      Nenhum teste automatizado para os endpoints de agente, agentRunner
+      (rolling summary aos 20, isolamento) ou systemPromptBuilder (3 camadas,
+      graceful degradation). Mesma lacuna observada em STORY-013.
+    suggested_action: >-
+      Adicionar testes de integração em backend/tests/ cobrindo: criação de
+      sessão, envio de mensagem, trigger de rolling summary em messageCount % 20,
+      e bloqueio cross-cliente (403). Pode ser feito em story de hardening.
+  - id: 'REL-001'
+    severity: medium
+    finding: >-
+      runMessage não é transacional: insere a mensagem do usuário e só depois
+      chama o Gemini. Se a chamada ao LLM falhar, a mensagem do usuário fica
+      persistida sem resposta do assistente (estado parcial recuperável, mas
+      inconsistente para o histórico).
+    suggested_action: >-
+      Avaliar envolver insert do user + resposta do assistant numa transação,
+      ou marcar/limpar mensagens órfãs. Não bloqueante para MVP.
+  - id: 'REQ-001'
+    severity: low
+    finding: >-
+      AC3 especifica trigger "quando a sessão acumula 20 ou mais mensagens".
+      A implementação dispara apenas em múltiplos exatos de 20 (20, 40, 60).
+      Comportamento consistente com o pseudo-código das Technical Notes
+      (messageCount % 20 === 0), mas a contagem inclui mensagens de assistant,
+      então o resumo ocorre a cada ~10 turnos de usuário. Comportamento aceitável.
+    suggested_action: >-
+      Confirmar com @po se a granularidade (a cada 20 mensagens totais, incluindo
+      assistant) atende ao intent do AC3. Documentado, não bloqueante.
+  - id: 'TEST-002'
+    severity: low
+    finding: >-
+      Smoke test de runtime ao vivo (Gemini + DB com migration aplicada) e o
+      `npx tsc --noEmit` final não foram executados neste ambiente de QA
+      (Bash/tsc restritos). As assinaturas de TODAS as APIs consumidas foram
+      verificadas estaticamente contra o código real e casam.
+    suggested_action: >-
+      @devops confirma tsc limpo (backend + frontend) e smoke test do fluxo
+      criar→mensagem→summary no pre-push, conforme protocolo do ambiente.
+
+# ─────────────────────────────────────────────────────────────────────
+# Notas de verificação dos focos críticos
+# ─────────────────────────────────────────────────────────────────────
+critical_focus_notes:
+  generateChatContent: >-
+    CONFIRMADO — geminiClient.generateChatContent({systemInstruction, history,
+    userMessage}) existe (geminiClient.ts:149-189), usa
+    getGenerativeModel({systemInstruction}) + startChat({history}) e expõe
+    usageMetadata.{promptTokenCount, candidatesTokenCount, totalTokenCount}.
+    genai-compat confirma WrappedGenerativeModel.startChat({history}),
+    getGenerativeModel aceita systemInstruction, e WrappedChatSession.sendMessage
+    retorna response.text() + response.usageMetadata. Assinatura casa com o
+    call site em agentRunner.ts:175-179.
+  rolling_summary: >-
+    CONFIRMADO — maybeUpdateRollingSummary usa generateTextContent (prompt único),
+    NÃO generateChatContent; trigger messageCount % 20 === 0; envolto em try/catch
+    (falha não derruba a resposta). agentRunner.ts:80-119.
+  token_tracker: >-
+    CONFIRMADO — updateTokenUsage(clienteId: string, usageMetadata: {promptTokenCount,
+    candidatesTokenCount, totalTokenCount}, action: string, model: string,
+    systemInstruction?: string) (tokenTracker.ts:40-46) bate com o call site
+    (agentRunner.ts:197-207).
+  rag_retrieve: >-
+    CONFIRMADO — ragService.retrieve(clienteId, query, options: RetrieveOptions={})
+    retorna RetrievedChunk[] com .id e .content (ragService.ts:304-397); usado
+    como {k: 6} no systemPromptBuilder. retrieve filtra cliente_id ANTES da busca
+    vetorial — isolamento mantido na camada RAG.
+  imports: >-
+    CONFIRMADO — ../config/database e ../middlewares/requireAuth (agents.ts:15-16);
+    AuthRequest expõe req.user.{id, role, permissions} (requireAuth.ts:4-5,46,65).
+    Registro CONFIRMADO: index.ts:42 importa agentsRouter e index.ts:284 monta
+    app.use("/api/agents", agentsRouter).
+
+waiver: { active: false }
+
+recommendation: >-
+  CONCERNS — aprovar com observações. Implementação sólida com isolamento de
+  cliente verificado endpoint a endpoint. Lacunas (testes automatizados,
+  transacionalidade do runMessage) são não-bloqueantes para MVP e devem ser
+  rastreadas. @devops confirma tsc + runtime no pre-push.

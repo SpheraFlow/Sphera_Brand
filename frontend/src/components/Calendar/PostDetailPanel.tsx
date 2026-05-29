@@ -19,6 +19,7 @@ import {
     type PostComment,
 } from '../../services/api';
 import type { PipelinePost } from './PipelineBoard';
+import PublicationScheduler from './PublicationScheduler';
 
 interface PostDetailPanelProps {
     post: PipelinePost | null;
@@ -268,6 +269,15 @@ export default function PostDetailPanel({
                             </button>
                         </div>
                     </section>
+
+                    {/* STORY-016 — Publicação direta (somente para posts aprovados) */}
+                    {currentStatus === 'approved' && item.cliente_id && (
+                        <PublicationScheduler
+                            calendarItemId={item.id}
+                            clienteId={item.cliente_id}
+                            imageUrl={item.image_url}
+                        />
+                    )}
 
                     {/* Reviewer notes */}
                     <section>
